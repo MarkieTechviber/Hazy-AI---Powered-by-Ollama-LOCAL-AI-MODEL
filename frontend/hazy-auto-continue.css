@@ -1,0 +1,316 @@
+/**
+ * HAZY AUTO-CONTINUE SYSTEM STYLES
+ * Long-form content generation UI
+ */
+
+/* Auto-Continue Button Indicator */
+.auto-continue-indicator-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: all 0.3s ease;
+}
+
+.auto-continue-indicator-dot.active {
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+  animation: continue-pulse 2s infinite;
+}
+
+@keyframes continue-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* In-Message Continuation Indicator */
+.auto-continue-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-top: 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  animation: slide-in 0.3s ease-out;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auto-continue-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--bg-tertiary);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.auto-continue-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auto-continue-info strong {
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.auto-continue-info span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Completion Notice */
+.auto-continue-complete {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--success);
+  border-radius: var(--radius-sm);
+}
+
+.auto-continue-notice strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--success);
+  margin-bottom: 8px;
+}
+
+.auto-continue-notice p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 0;
+}
+
+/* Error Display */
+.auto-continue-error {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+}
+
+.auto-continue-error strong {
+  display: block;
+  color: var(--danger);
+  margin-bottom: 8px;
+}
+
+.auto-continue-error p {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Modal Settings */
+.setting-section {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.setting-section:last-child {
+  border-bottom: none;
+}
+
+.setting-section h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: var(--text-primary);
+}
+
+.setting-section label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.setting-section input[type="number"] {
+  width: 100px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.setting-section input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.help-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+/* How It Works List */
+.how-it-works {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.how-it-works li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.how-it-works li::before {
+  content: counter(list-item);
+  counter-increment: list-item;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  color: white;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Examples List */
+.setting-section.examples ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.setting-section.examples li {
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.setting-section.examples li:hover {
+  background: var(--bg-tertiary);
+  transform: translateX(4px);
+}
+
+/* Progress Bar (Optional) */
+.auto-continue-progress {
+  margin-top: 12px;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.auto-continue-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent) 0%, #8b5cf6 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  animation: progress-shimmer 2s infinite;
+}
+
+@keyframes progress-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+
+/* Word Count Display */
+.auto-continue-stats {
+  display: flex;
+  gap: 16px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  margin-top: 12px;
+}
+
+.auto-continue-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auto-continue-stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.auto-continue-stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .auto-continue-indicator {
+    padding: 10px 12px;
+  }
+
+  .auto-continue-info strong {
+    font-size: 13px;
+  }
+
+  .auto-continue-info span {
+    font-size: 12px;
+  }
+
+  .how-it-works li {
+    font-size: 13px;
+  }
+}
+
+/* Animation for new content appearing */
+@keyframes content-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.auto-continued-content {
+  animation: content-appear 0.5s ease-out;
+}

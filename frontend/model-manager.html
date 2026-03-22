@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hazy Model Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700&family=Crimson+Pro:wght@0,300;0,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1a1208;--paper:#f5efe6;--paper-dark:#ede4d5;--gold:#c9973a;--gold-light:#e8c07a;--red:#8b2020;--muted:#7a6a55;--border:#d4c4a8;--success:#2d6a4f;--purple:#5a3a8a;--blue:#1a4a7a;--shadow:0 4px 24px rgba(26,18,8,0.12)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);font-family:'Crimson Pro',Georgia,serif;color:var(--ink);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.01) 2px,rgba(255,255,255,0.01) 4px),radial-gradient(ellipse at 20% 50%,#2a1a08 0%,transparent 60%),#0f0a04;pointer-events:none;z-index:0}
+.app{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:0 20px 60px}
+header{text-align:center;padding:32px 0 24px}
+.orn{color:var(--gold);font-size:.9rem;letter-spacing:6px;opacity:.6;margin-bottom:8px}
+header h1{font-family:'Playfair Display',serif;font-size:clamp(1.6rem,4vw,2.2rem);color:var(--paper);font-weight:400}
+header h1 span{color:var(--gold);font-style:italic}
+header p{color:#9a8a6a;font-size:.88rem;font-style:italic;margin-top:4px}
+.vtag{display:inline-block;margin-top:6px;background:rgba(201,151,58,.2);color:var(--gold-light);border:1px solid rgba(201,151,58,.3);border-radius:20px;padding:2px 12px;font-family:'JetBrains Mono',monospace;font-size:.58rem;letter-spacing:1px}
+.nav-strip{display:flex;gap:6px;align-items:center;padding:0 0 20px;flex-wrap:wrap}
+.nav-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#9a8a6a;border-radius:3px;padding:6px 14px;font-family:'JetBrains Mono',monospace;font-size:.7rem;cursor:pointer;text-decoration:none;transition:all .15s}
+.nav-btn:hover{background:rgba(255,255,255,.12);color:var(--gold-light)}
+.layout{display:grid;grid-template-columns:220px 1fr;gap:16px}
+.sidebar{display:flex;flex-direction:column;gap:12px}
+.main{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--paper);border-radius:4px;box-shadow:var(--shadow);overflow:hidden}
+.ch{background:var(--paper-dark);border-bottom:1px solid var(--border);padding:10px 15px;display:flex;align-items:center;gap:8px}
+.ch h2{font-family:'Playfair Display',serif;font-size:.9rem;font-weight:700;color:var(--ink);flex:1}
+.badge{font-family:'JetBrains Mono',monospace;font-size:.57rem;padding:2px 7px;border-radius:10px}
+.b-ok{background:#e8f5e9;color:var(--success);border:1px solid #b0d8b8}
+.b-no{background:#fdecea;color:var(--red);border:1px solid #f0a0a0}
+.b-free{background:#e8f4fd;color:var(--blue);border:1px solid #b0d0f0}
+.b-api{background:#ede8fc;color:var(--purple);border:1px solid #c8b8f0}
+.b-local{background:#e8f5e9;color:var(--success);border:1px solid #b0d8b8}
+.b-cloud{background:#fff3e0;color:#c07010;border:1px solid #f0c070}
+.cb{padding:14px}
+label{display:block;font-size:.68rem;font-family:'JetBrains Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+input[type=text],input[type=password],select{width:100%;background:white;border:1px solid var(--border);border-radius:3px;padding:7px 10px;font-family:'Crimson Pro',serif;font-size:.9rem;color:var(--ink);outline:none;transition:border-color .15s}
+input:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,151,58,.15)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:.72rem;cursor:pointer;border:none;transition:all .18s;letter-spacing:.5px}
+.btn-p{background:var(--gold);color:white}
+.btn-p:hover{background:#b8862e}
+.btn-p:disabled{background:#c4b49a;cursor:not-allowed}
+.btn-s{background:var(--paper-dark);color:var(--ink);border:1px solid var(--border)}
+.btn-s:hover{background:var(--border)}
+.btn-d{background:#f0d0d0;color:var(--red);border:1px solid #e0b0b0}
+.btn-d:hover{background:#e0b0b0}
+.btn-sm{padding:4px 9px;font-size:.65rem}
+
+/* Filter bar */
+.filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.filter-btn{background:var(--paper-dark);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-family:'JetBrains Mono',monospace;font-size:.65rem;cursor:pointer;color:var(--muted);transition:all .15s}
+.filter-btn.active{background:var(--gold);color:white;border-color:var(--gold)}
+.filter-btn:hover:not(.active){border-color:var(--gold);color:var(--gold)}
+
+/* Model grid */
+.model-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.model-card{background:var(--paper);border:1px solid var(--border);border-radius:4px;overflow:hidden;transition:box-shadow .15s}
+.model-card:hover{box-shadow:0 2px 12px rgba(26,18,8,.15)}
+.mc-head{padding:10px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.mc-icon{width:28px;height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+.ic-text{background:#e8f4fd;color:var(--blue)}
+.ic-img{background:#FFF0E8;color:#A84000}
+.ic-aud{background:#E8F8EE;color:#1A6A30}
+.ic-mus{background:#F0E8FF;color:#5030A0}
+.ic-vid{background:#FFF0F0;color:#A02020}
+.mc-info{flex:1;min-width:0}
+.mc-name{font-family:'Playfair Display',serif;font-size:.88rem;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc-provider{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);margin-top:1px}
+.mc-body{padding:10px 13px}
+.mc-desc{font-size:.82rem;color:var(--muted);line-height:1.5;margin-bottom:8px}
+.mc-meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.mc-tag{font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:2px 6px;border-radius:10px;background:var(--paper-dark);color:var(--muted);border:1px solid var(--border)}
+.quality-bar{display:flex;gap:2px;margin-bottom:8px;align-items:center}
+.quality-label{font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);margin-right:4px}
+.qd{width:12px;height:6px;border-radius:2px;background:var(--border)}
+.qd.fill{background:var(--gold)}
+.mc-foot{padding:8px 13px;background:var(--paper-dark);border-top:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.dl-progress{flex:1;background:var(--border);border-radius:2px;height:4px;overflow:hidden;display:none}
+.dl-bar{height:100%;background:var(--gold);border-radius:2px;transition:width .3s;width:0%}
+.dl-status{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);flex:1;display:none}
+.installed-badge{font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:10px;background:#e8f5e9;color:var(--success);border:1px solid #b0d8b8}
+.needs-key-badge{font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:10px;background:#fdecea;color:var(--red);border:1px solid #f0a0a0}
+
+/* Provider key cards */
+.provider-item{padding:12px 14px;border-bottom:1px solid var(--border)}
+.provider-item:last-child{border-bottom:none}
+.prov-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.prov-name{font-family:'Playfair Display',serif;font-size:.9rem;font-weight:700;color:var(--ink)}
+.prov-status{font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:10px}
+.prov-note{font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.5}
+.key-row{display:flex;gap:6px}
+.key-row input{flex:1;font-family:'JetBrains Mono',monospace;font-size:.75rem;letter-spacing:.5px}
+
+/* Alert */
+.alert{padding:9px 13px;border-radius:3px;font-size:.82rem;margin-bottom:10px;display:flex;align-items:flex-start;gap:7px}
+.al-ok{background:#e8f5e9;border-left:3px solid var(--success);color:#1a4a2a}
+.al-err{background:#fdecea;border-left:3px solid var(--red);color:#6a1010}
+.al-warn{background:#fff8e1;border-left:3px solid var(--gold);color:#6a4a00}
+.al-info{background:#e8f4fd;border-left:3px solid #5b9bd5;color:#1a4a6e}
+
+/* Sort */
+.sort-row{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.sort-row label{font-size:.68rem;font-family:'JetBrains Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:0}
+.sort-row select{width:auto;font-size:.75rem;padding:4px 22px 4px 8px}
+
+/* Installed models list */
+.installed-list{display:flex;flex-direction:column;gap:6px}
+.il-item{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--paper-dark);border:1px solid var(--border);border-radius:3px}
+.il-name{font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--ink);flex:1}
+.il-size{font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--muted)}
+
+@media(max-width:680px){.layout{grid-template-columns:1fr}.model-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="orn">&#10022; &#10022; &#10022;</div>
+  <h1>Hazy <span>Model Manager</span></h1>
+  <p>Browse, download, and manage all AI models — text, image, audio, music, video</p>
+  <span class="vtag">Universal AI Hub &middot; Ollama + Cloud APIs &middot; Auto-Download</span>
+</header>
+
+<div class="nav-strip">
+  <a href="/" class="nav-btn">&#8592; Back to Hazy</a>
+  <a href="/novel-writer.html" class="nav-btn">&#9998; Novel Writer</a>
+  <span style="color:#9a8a6a;font-family:'JetBrains Mono',monospace;font-size:.65rem;margin-left:auto">Edit keys directly: hazy-chatbot/config/hazy-config.json</span>
+</div>
+
+<div id="globalAlert" style="display:none"></div>
+
+<div class="layout">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+
+  <!-- Provider Status -->
+  <div class="card">
+    <div class="ch"><h2>Provider Status</h2></div>
+    <div id="providerStatus" style="padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--muted)">Loading...</div>
+  </div>
+
+  <!-- Installed Local Models -->
+  <div class="card">
+    <div class="ch">
+      <h2>Installed (Local)</h2>
+      <button class="btn btn-s btn-sm" onclick="refreshInstalled()">&#8635;</button>
+    </div>
+    <div class="cb" style="padding:12px 14px">
+      <div class="installed-list" id="installedList">
+        <span style="color:var(--muted);font-size:.8rem;font-style:italic">Loading...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Stats -->
+  <div class="card">
+    <div class="ch"><h2>Stats</h2></div>
+    <div class="cb" style="padding:12px 14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--paper-dark);border-radius:3px;padding:8px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:var(--ink)" id="statLocal">0</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted)">Local Models</div>
+        </div>
+        <div style="background:var(--paper-dark);border-radius:3px;padding:8px;text-align:center">
+          <div style="font-size:1.4rem;font-weight:700;color:var(--ink)" id="statCloud">0</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted)">Cloud Models</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- API Keys -->
+  <div class="card">
+    <div class="ch"><h2>API Keys</h2><span class="badge b-api" style="margin-left:auto">Stored in hazy-config.json</span></div>
+    <div id="apiKeySection">
+      <div style="padding:14px;color:var(--muted);font-style:italic;font-size:.88rem">Loading providers...</div>
+    </div>
+  </div>
+
+  <!-- Model Browser -->
+  <div class="card">
+    <div class="ch"><h2>Model Browser</h2></div>
+    <div class="cb">
+
+      <div class="filter-bar" id="filterBar">
+        <button class="filter-btn active" data-type="all" onclick="setFilter('all',this)">All</button>
+        <button class="filter-btn" data-type="text" onclick="setFilter('text',this)">&#128172; Text</button>
+        <button class="filter-btn" data-type="image" onclick="setFilter('image',this)">&#128247; Image</button>
+        <button class="filter-btn" data-type="audio" onclick="setFilter('audio',this)">&#127908; Audio</button>
+        <button class="filter-btn" data-type="music" onclick="setFilter('music',this)">&#127925; Music</button>
+        <button class="filter-btn" data-type="video" onclick="setFilter('video',this)">&#127916; Video</button>
+        <button class="filter-btn" data-local="true" onclick="setFilter('local',this)">&#128421; Local Only</button>
+        <button class="filter-btn" data-local="false" onclick="setFilter('cloud',this)">&#9729; Cloud Only</button>
+      </div>
+
+      <div class="sort-row">
+        <label>Sort by</label>
+        <select id="sortBy" onchange="renderModels()">
+          <option value="params-asc">Parameters: Low to High</option>
+          <option value="params-desc">Parameters: High to Low</option>
+          <option value="quality-desc" selected>Quality: Best First</option>
+          <option value="speed-desc">Speed: Fastest First</option>
+          <option value="name-asc">Name A-Z</option>
+        </select>
+        <label style="margin-left:8px">Search</label>
+        <input type="text" id="searchBox" placeholder="Search models..." style="width:200px;font-size:.8rem;padding:4px 9px" oninput="renderModels()">
+      </div>
+
+      <div class="model-grid" id="modelGrid">
+        <div style="color:var(--muted);font-style:italic;font-size:.88rem">Loading models...</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+
+<script>
+let REGISTRY = null;
+let PROVIDERS = null;
+let INSTALLED_MODELS = [];
+let activeFilter = 'all';
+let activeDownloads = {};
+
+async function init() {
+  await loadProviders();
+  await refreshInstalled();
+  renderModels();
+}
+
+async function loadProviders() {
+  try {
+    const r = await fetch('/hazy/providers');
+    const d = await r.json();
+    PROVIDERS = d.providers;
+    REGISTRY  = d.registry;
+    renderProviderStatus();
+    renderAPIKeys();
+    updateStats();
+  } catch (e) {
+    showGlobalAlert('err', 'Cannot connect to Hazy server. Make sure server.js is running.');
+  }
+}
+
+function renderProviderStatus() {
+  if (!PROVIDERS) return;
+  const el = document.getElementById('providerStatus');
+  const rows = Object.entries(PROVIDERS).map(([key, val]) => {
+    const status = val.enabled
+      ? '<span class="badge b-ok">enabled</span>'
+      : '<span class="badge b-no">disabled</span>';
+    const keyStatus = val.isLocal ? '<span class="badge b-local">local</span>'
+      : val.hasKey ? '<span class="badge b-ok">key set</span>'
+      : '<span class="badge b-no">no key</span>';
+    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.05)">
+      <span style="flex:1;font-size:.72rem;color:var(--ink)">${key}</span>${status}${keyStatus}
+    </div>`;
+  }).join('');
+  el.innerHTML = rows;
+}
+
+function renderAPIKeys() {
+  if (!PROVIDERS) return;
+  const cloudProviders = [
+    {key:'anthropic', name:'Anthropic (Claude)', models:'Claude Sonnet 4.5, Opus, Haiku', url:'https://console.anthropic.com'},
+    {key:'openai',    name:'OpenAI (GPT-4o / DALL-E)', models:'GPT-4o, GPT-4o-mini, DALL-E 3, TTS', url:'https://platform.openai.com/api-keys'},
+    {key:'groq',      name:'Groq (Fast Inference)', models:'Llama 3.1 70B, Mixtral — free tier!', url:'https://console.groq.com'},
+    {key:'gemini',    name:'Google Gemini', models:'Gemini 1.5 Pro/Flash, 1M context', url:'https://aistudio.google.com/app/apikey'},
+    {key:'elevenlabs',name:'ElevenLabs (TTS)', models:'Natural voice synthesis, 30 voices', url:'https://elevenlabs.io'},
+    {key:'stability', name:'Stability AI (Images)', models:'Stable Diffusion XL, ultra', url:'https://platform.stability.ai'},
+    {key:'ideogram',  name:'Ideogram (Images)', models:'Best for text in images', url:'https://ideogram.ai'},
+    {key:'fal',       name:'fal.ai (Images + Video)', models:'Flux, Kling video', url:'https://fal.ai'},
+    {key:'suno',      name:'Suno (Music)', models:'AI music generation', url:'https://suno.com'},
+    {key:'runway',    name:'Runway (Video)', models:'Gen-3 video generation', url:'https://runwayml.com'},
+  ];
+
+  const section = document.getElementById('apiKeySection');
+  section.innerHTML = cloudProviders.map(p => {
+    const prov = PROVIDERS[p.key] || {};
+    const hasKey = prov.hasKey;
+    const enabled = prov.enabled;
+    return `<div class="provider-item">
+      <div class="prov-head">
+        <span class="prov-name">${p.name}</span>
+        <span class="prov-status ${enabled ? 'b-ok' : 'b-no'}">${enabled ? 'active' : 'inactive'}</span>
+      </div>
+      <div class="prov-note">${p.models} &mdash; <a href="${p.url}" target="_blank" style="color:var(--gold)">Get API key</a></div>
+      <div class="key-row">
+        <input type="password" id="key_${p.key}" placeholder="${hasKey ? '&#11044;&#11044;&#11044;&#11044;&#11044;&#11044; (key saved)' : 'Paste your API key here...'}" autocomplete="off">
+        <button class="btn btn-p btn-sm" onclick="saveKey('${p.key}')">Save</button>
+        ${hasKey ? '<button class="btn btn-d btn-sm" onclick="clearKey(\''+p.key+'\')">Clear</button>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function saveKey(provider) {
+  const input = document.getElementById('key_' + provider);
+  const apiKey = input.value.trim();
+  try {
+    const r = await fetch('/hazy/save-key', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ provider, apiKey })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showGlobalAlert('ok', provider + ' API key saved successfully! Provider is now ' + (d.enabled ? 'enabled' : 'disabled') + '.');
+      input.value = '';
+      input.placeholder = 'Key saved.';
+      await loadProviders();
+    } else {
+      showGlobalAlert('err', 'Failed to save key: ' + (d.error || 'unknown error'));
+    }
+  } catch (e) {
+    showGlobalAlert('err', 'Could not save key: ' + e.message);
+  }
+}
+
+async function clearKey(provider) {
+  if (!confirm('Remove API key for ' + provider + '?')) return;
+  const r = await fetch('/hazy/save-key', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ provider, apiKey: '' })
+  });
+  const d = await r.json();
+  if (d.ok) { showGlobalAlert('ok', provider + ' key removed.'); await loadProviders(); }
+}
+
+async function refreshInstalled() {
+  try {
+    const r = await fetch('/api/tags');
+    const d = await r.json();
+    INSTALLED_MODELS = (d.models || []).map(m => m.name);
+    renderInstalledList(d.models || []);
+    document.getElementById('statLocal').textContent = INSTALLED_MODELS.length;
+  } catch {
+    document.getElementById('installedList').innerHTML = '<span style="color:var(--muted);font-size:.78rem">Ollama not running</span>';
+  }
+}
+
+function renderInstalledList(models) {
+  const el = document.getElementById('installedList');
+  if (!models.length) { el.innerHTML = '<span style="color:var(--muted);font-size:.78rem;font-style:italic">No models installed yet</span>'; return; }
+  el.innerHTML = models.map(m => {
+    const sizeGB = m.size ? (m.size / 1e9).toFixed(1) + ' GB' : '';
+    return `<div class="il-item">
+      <span class="il-name">${eh(m.name)}</span>
+      <span class="il-size">${sizeGB}</span>
+      <button class="btn btn-d btn-sm" onclick="deleteModel('${eh(m.name)}')" title="Delete">&#10005;</button>
+    </div>`;
+  }).join('');
+}
+
+async function deleteModel(name) {
+  if (!confirm('Delete model "' + name + '" from Ollama?')) return;
+  try {
+    const r = await fetch('/hazy/delete-model', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ model: name })
+    });
+    showGlobalAlert('ok', name + ' deleted.');
+    await refreshInstalled();
+    renderModels();
+  } catch (e) { showGlobalAlert('err', e.message); }
+}
+
+function setFilter(type, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilter = type;
+  renderModels();
+}
+
+function getParamSort(params) {
+  if (!params || params === 'cloud' || params === 'unknown') return -1;
+  const n = parseFloat(params);
+  const m = params.toUpperCase();
+  if (m.includes('B')) return n;
+  return n;
+}
+
+function renderModels() {
+  if (!REGISTRY) return;
+  const grid   = document.getElementById('modelGrid');
+  const sort   = document.getElementById('sortBy').value;
+  const search = document.getElementById('searchBox').value.toLowerCase();
+
+  let allModels = [];
+  if (activeFilter === 'all' || activeFilter === 'text')  allModels.push(...(REGISTRY.textModels  || []).map(m => ({...m, type:'text'})));
+  if (activeFilter === 'all' || activeFilter === 'image') allModels.push(...(REGISTRY.imageModels || []).map(m => ({...m, type:'image'})));
+  if (activeFilter === 'all' || activeFilter === 'audio') allModels.push(...(REGISTRY.audioModels || []).map(m => ({...m, type:'audio'})));
+  if (activeFilter === 'all' || activeFilter === 'music') allModels.push(...(REGISTRY.musicModels || []).map(m => ({...m, type:'music'})));
+  if (activeFilter === 'all' || activeFilter === 'video') allModels.push(...(REGISTRY.videoModels || []).map(m => ({...m, type:'video'})));
+  if (activeFilter === 'local') allModels = (REGISTRY.textModels||[]).filter(m=>m.local).map(m=>({...m,type:'text'}));
+  if (activeFilter === 'cloud') {
+    allModels = [
+      ...(REGISTRY.textModels||[]).filter(m=>!m.local),
+      ...(REGISTRY.imageModels||[]), ...(REGISTRY.audioModels||[]),
+      ...(REGISTRY.musicModels||[]), ...(REGISTRY.videoModels||[])
+    ].map(m => ({...m, type: m.type || 'cloud'}));
+  }
+
+  if (search) allModels = allModels.filter(m =>
+    m.name.toLowerCase().includes(search) ||
+    m.desc?.toLowerCase().includes(search) ||
+    m.provider?.toLowerCase().includes(search)
+  );
+
+  allModels.sort((a,b) => {
+    if (sort === 'params-asc')    return getParamSort(a.params) - getParamSort(b.params);
+    if (sort === 'params-desc')   return getParamSort(b.params) - getParamSort(a.params);
+    if (sort === 'quality-desc')  return (b.quality||0) - (a.quality||0);
+    if (sort === 'speed-desc')    return (b.speed||0) - (a.speed||0);
+    if (sort === 'name-asc')      return a.name.localeCompare(b.name);
+    return 0;
+  });
+
+  const cloudCount = allModels.filter(m=>!m.local).length;
+  document.getElementById('statCloud').textContent = cloudCount;
+
+  if (!allModels.length) { grid.innerHTML = '<div style="color:var(--muted);font-style:italic;font-size:.88rem;padding:10px">No models match your filter.</div>'; return; }
+
+  grid.innerHTML = allModels.map(m => renderModelCard(m)).join('');
+}
+
+function renderModelCard(m) {
+  const isInstalled = INSTALLED_MODELS.includes(m.pull) || INSTALLED_MODELS.some(i => i.startsWith(m.pull?.split(':')[0]||'__'));
+  const prov  = PROVIDERS?.[m.provider] || {};
+  const hasKey= prov.hasKey || m.local;
+  const canUse= m.local ? isInstalled : hasKey;
+
+  const typeIcon = m.type==='image'?'ic-img':m.type==='audio'?'ic-aud':m.type==='music'?'ic-mus':m.type==='video'?'ic-vid':'ic-text';
+  const typeEmoji = m.type==='image'?'&#128247;':m.type==='audio'?'&#127908;':m.type==='music'?'&#127925;':m.type==='video'?'&#127916;':'&#128172;';
+
+  const qualityDots = m.quality ? Array(5).fill(0).map((_,i) =>
+    '<div class="qd' + (i < m.quality ? ' fill' : '') + '"></div>'
+  ).join('') : '';
+
+  const speedDots = m.speed ? Array(5).fill(0).map((_,i) =>
+    '<div class="qd' + (i < m.speed ? ' fill' : '') + '" style="background:' + (i < m.speed ? '#1a6a5a' : '') + '"></div>'
+  ).join('') : '';
+
+  let footContent = '';
+  if (m.local) {
+    if (isInstalled) {
+      footContent = `<span class="installed-badge">&#10003; Installed</span>
+        <button class="btn btn-s btn-sm" onclick="setAsDefault('${eh(m.id)}','${eh(m.name)}')">Set Default</button>
+        <button class="btn btn-d btn-sm" onclick="deleteModel('${eh(m.pull||m.id)}')" style="margin-left:auto">Delete</button>`;
+    } else {
+      footContent = `<button class="btn btn-p btn-sm" id="dl-btn-${btoa(m.id).replace(/[^a-zA-Z0-9]/g,'')}" onclick="downloadModel('${eh(m.pull||m.id)}','${eh(m.id)}')">&#8595; Download</button>
+        <div class="dl-progress" id="dlp-${btoa(m.id).replace(/[^a-zA-Z0-9]/g,'')}"><div class="dl-bar"></div></div>
+        <span class="dl-status" id="dls-${btoa(m.id).replace(/[^a-zA-Z0-9]/g,'')}"></span>`;
+    }
+  } else {
+    if (hasKey) {
+      footContent = `<span class="installed-badge">&#10003; API Key Set</span>
+        <button class="btn btn-s btn-sm" onclick="setAsDefault('${eh(m.id)}','${eh(m.name)}')">Set Default</button>`;
+    } else {
+      footContent = `<span class="needs-key-badge">&#9888; Needs API Key</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);margin-left:4px">${eh(m.provider)}</span>`;
+    }
+  }
+
+  return `<div class="model-card">
+    <div class="mc-head">
+      <div class="mc-icon ${typeIcon}">${typeEmoji}</div>
+      <div class="mc-info">
+        <div class="mc-name">${eh(m.name)}</div>
+        <div class="mc-provider">${eh(m.provider)} &middot; ${eh(m.local?'Local':'Cloud')}</div>
+      </div>
+    </div>
+    <div class="mc-body">
+      <div class="mc-desc">${eh(m.desc||'')}</div>
+      <div class="mc-meta">
+        ${m.params ? '<span class="mc-tag">'+eh(m.params)+'</span>' : ''}
+        ${m.size && m.size !== 'cloud' ? '<span class="mc-tag">'+eh(m.size)+'</span>' : ''}
+        ${m.local ? '<span class="mc-tag b-local">local</span>' : '<span class="mc-tag b-cloud">cloud</span>'}
+      </div>
+      ${qualityDots ? '<div class="quality-bar"><span class="quality-label">Quality</span>'+qualityDots+'</div>' : ''}
+      ${speedDots   ? '<div class="quality-bar"><span class="quality-label">Speed</span>'+speedDots+'</div>' : ''}
+    </div>
+    <div class="mc-foot">${footContent}</div>
+  </div>`;
+}
+
+async function downloadModel(pullName, modelId) {
+  const safeId = btoa(modelId).replace(/[^a-zA-Z0-9]/g,'');
+  const btn  = document.getElementById('dl-btn-' + safeId);
+  const prog = document.getElementById('dlp-' + safeId);
+  const stat = document.getElementById('dls-' + safeId);
+  if (!btn) return;
+
+  btn.disabled = true; btn.textContent = 'Downloading...';
+  if (prog) { prog.style.display='block'; }
+  if (stat) { stat.style.display='block'; stat.textContent = 'Connecting...'; }
+
+  try {
+    const r = await fetch('/hazy/pull', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ model: pullName })
+    });
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value, {stream:true}).split('\n').filter(l=>l.trim())) {
+        try {
+          const j = JSON.parse(line);
+          if (stat) stat.textContent = j.status || '';
+          if (j.total && j.completed && prog) {
+            const pct = Math.round(j.completed / j.total * 100);
+            const bar = prog.querySelector('.dl-bar');
+            if (bar) bar.style.width = pct + '%';
+            if (stat) stat.textContent = j.status + ' ' + pct + '%';
+          }
+        } catch {}
+      }
+    }
+
+    showGlobalAlert('ok', pullName + ' downloaded successfully!');
+    await refreshInstalled();
+    renderModels();
+  } catch (e) {
+    showGlobalAlert('err', 'Download failed: ' + e.message);
+    if (btn) { btn.disabled=false; btn.textContent='&#8595; Download'; }
+    if (prog) prog.style.display='none';
+    if (stat) stat.style.display='none';
+  }
+}
+
+function setAsDefault(modelId, modelName) {
+  localStorage.setItem('hazyDefaultModel', modelId);
+  showGlobalAlert('ok', modelName + ' set as default model for Hazy and Novel Writer.');
+}
+
+function updateStats() {
+  if (!REGISTRY) return;
+  const cloudCount = [
+    ...(REGISTRY.textModels||[]).filter(m=>!m.local),
+    ...(REGISTRY.imageModels||[]), ...(REGISTRY.audioModels||[]),
+    ...(REGISTRY.musicModels||[]), ...(REGISTRY.videoModels||[])
+  ].length;
+  document.getElementById('statCloud').textContent = cloudCount;
+}
+
+function showGlobalAlert(type, msg) {
+  const el = document.getElementById('globalAlert');
+  el.style.display='flex';
+  el.className = 'alert al-' + type;
+  el.innerHTML = '<span>' + eh(msg) + '</span><button onclick="this.parentElement.style.display=\'none\'" style="background:none;border:none;cursor:pointer;margin-left:auto;font-size:.9rem">&#10005;</button>';
+  setTimeout(() => { if (el.style.display!=='none') el.style.display='none'; }, 6000);
+}
+
+const eh = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+init();
+</script>
+</body>
+</html>

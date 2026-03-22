@@ -1,0 +1,2553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hazy Novel Writer v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1a1208;--paper:#f5efe6;--paper-dark:#ede4d5;--gold:#c9973a;--gold-light:#e8c07a;--red:#8b2020;--muted:#7a6a55;--border:#d4c4a8;--success:#2d6a4f;--purple:#5a3a8a;--shadow:0 4px 24px rgba(26,18,8,0.12)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);font-family:"Crimson Pro",Georgia,serif;color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+body::before{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.01) 2px,rgba(255,255,255,0.01) 4px),radial-gradient(ellipse at 20% 50%,#2a1a08 0%,transparent 60%),radial-gradient(ellipse at 80% 50%,#1a0808 0%,transparent 60%),#0f0a04;pointer-events:none;z-index:0}
+.app{position:relative;z-index:1;width:100%;max-width:1040px;padding:0 16px 60px;display:grid;grid-template-columns:236px 1fr;gap:0 16px}
+.full-row{grid-column:1/-1}
+.app-header{grid-column:1/-1;text-align:center;padding:28px 0 16px}
+.ornament{color:var(--gold);font-size:.95rem;letter-spacing:6px;opacity:.6;margin-bottom:8px}
+h1{font-family:"Playfair Display",serif;font-size:clamp(1.6rem,4vw,2.3rem);color:var(--paper);font-weight:400}
+h1 span{color:var(--gold);font-style:italic}
+.tagline{color:#9a8a6a;margin-top:4px;font-size:.88rem;font-style:italic}
+.vtag{display:inline-block;margin-top:6px;background:rgba(201,151,58,.2);color:var(--gold-light);border:1px solid rgba(201,151,58,.3);border-radius:20px;padding:2px 12px;font-family:"JetBrains Mono",monospace;font-size:.6rem;letter-spacing:1px}
+.oll-strip{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:8px 13px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:3px;margin-bottom:4px}
+.oll-strip label{color:#9a8a6a;margin:0;font-size:.68rem;white-space:nowrap}
+.oll-strip input{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:var(--paper);border-radius:3px;padding:5px 9px;font-family:"Crimson Pro",serif;font-size:.88rem;flex:1;outline:none}
+.oll-strip input:focus{border-color:var(--gold)}
+.cs{font-family:"JetBrains Mono",monospace;font-size:.64rem;white-space:nowrap;padding:3px 9px;border-radius:20px}
+.cs.ok{background:rgba(45,106,79,.3);color:#7fd4a0}
+.cs.fail{background:rgba(139,32,32,.3);color:#f09090}
+.cs.checking{background:rgba(201,151,58,.2);color:var(--gold-light)}
+.sidebar{grid-column:1;display:flex;flex-direction:column;gap:10px;padding-top:2px}
+.main-col{grid-column:2;display:flex;flex-direction:column;gap:12px;padding-top:2px}
+.card{background:var(--paper);border-radius:4px;box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.6);overflow:hidden}
+.ch{background:var(--paper-dark);border-bottom:1px solid var(--border);padding:10px 15px;display:flex;align-items:center;gap:8px}
+.step{background:var(--gold);color:white;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-family:"JetBrains Mono",monospace;flex-shrink:0}
+.ch h2{font-family:"Playfair Display",serif;font-size:.9rem;font-weight:700;color:var(--ink);flex:1}
+.badge{font-family:"JetBrains Mono",monospace;font-size:.57rem;padding:2px 7px;border-radius:10px}
+.b-new{background:#e8f5e9;color:var(--success);border:1px solid #b0d8b8}
+.b-db{background:#ede8fc;color:var(--purple);border:1px solid #c8b8f0}
+.b-live{background:#fff3e0;color:#c07010;border:1px solid #f0c070}
+.cb{padding:14px}
+.fr{display:grid;gap:9px;margin-bottom:9px}
+.fr.t2{grid-template-columns:1fr 1fr}
+.fr.t3{grid-template-columns:1fr 1fr 1fr}
+label{display:block;font-size:.68rem;font-family:"JetBrains Mono",monospace;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}
+input[type=text],input[type=number],input[type=url],select,textarea{width:100%;background:white;border:1px solid var(--border);border-radius:3px;padding:6px 9px;font-family:"Crimson Pro",serif;font-size:.9rem;color:var(--ink);transition:border-color .15s,box-shadow .15s;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,151,58,.15)}
+textarea{resize:vertical;min-height:70px;line-height:1.6}
+select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%237a6a55' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;padding-right:26px}
+.char-list{display:flex;flex-direction:column;gap:6px}
+.char-item{background:var(--paper-dark);border:1px solid var(--border);border-radius:3px;padding:8px}
+.cr1{display:grid;grid-template-columns:1fr 1fr auto;gap:5px;margin-bottom:4px;align-items:center}
+.cr2{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:4px}
+.xbtn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.88rem;padding:2px 5px;border-radius:3px;transition:all .15s}
+.xbtn:hover{background:#f0d0d0;color:var(--red)}
+.add-c{background:none;border:1px dashed var(--border);border-radius:3px;color:var(--muted);padding:6px;width:100%;cursor:pointer;font-family:"Crimson Pro",serif;font-size:.83rem;transition:all .15s;margin-top:4px}
+.add-c:hover{border-color:var(--gold);color:var(--gold)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:3px;font-family:"Crimson Pro",serif;font-size:.88rem;cursor:pointer;border:none;transition:all .18s}
+.btn-p{background:var(--gold);color:white;box-shadow:0 2px 8px rgba(201,151,58,.3)}
+.btn-p:hover{background:#b8862e;transform:translateY(-1px)}
+.btn-p:disabled{background:#c4b49a;box-shadow:none;cursor:not-allowed;transform:none}
+.btn-s{background:var(--paper-dark);color:var(--ink);border:1px solid var(--border)}
+.btn-s:hover{background:var(--border)}
+.btn-d{background:#f0d0d0;color:var(--red);border:1px solid #e0b0b0}
+.btn-d:hover{background:#e0b0b0}
+.btn-v{background:#ede8fc;color:var(--purple);border:1px solid #c8b8f0}
+.btn-v:hover{background:#ddd0f8}
+.btn-sm{padding:4px 10px;font-size:.78rem}
+.sbar{background:var(--paper-dark);border:1px solid var(--border);border-radius:3px;padding:7px 12px;display:flex;align-items:center;gap:8px;font-family:"JetBrains Mono",monospace;font-size:.67rem;flex-wrap:wrap;margin-bottom:9px}
+.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:#aaa}
+.sdot.idle{background:#aaa}
+.sdot.planning{background:#9060c0;animation:pulse 1s infinite}
+.sdot.running{background:#f0a020;animation:pulse 1s infinite}
+.sdot.saving{background:#1a6a5a;animation:pulse 1s infinite}
+.sdot.done{background:var(--success)}
+.sdot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.stxt{color:var(--muted);flex:1}
+.scnt{display:flex;gap:10px;color:var(--muted)}
+.scnt span{display:flex;gap:3px}
+.scnt strong{color:var(--ink)}
+.pw{background:var(--border);border-radius:2px;height:3px;overflow:hidden;margin-bottom:10px}
+.pb{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-light));border-radius:2px;transition:width .4s;width:0%}
+.chtabs{
+  display:flex;gap:3px;
+  padding:9px 13px 0;
+  background:var(--paper-dark);
+  border-bottom:1px solid var(--border);
+  overflow-x:auto;
+  flex-wrap:nowrap;
+  scroll-behavior:smooth;
+}
+.chtabs::-webkit-scrollbar{height:3px}
+.chtabs::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.chtab{padding:4px 9px;border-radius:3px 3px 0 0;border:1px solid transparent;border-bottom:none;font-family:"JetBrains Mono",monospace;font-size:.65rem;cursor:pointer;background:transparent;color:var(--muted);transition:all .15s;margin-bottom:-1px}
+.chtab:hover{background:var(--paper);color:var(--ink)}
+.chtab.active{background:var(--paper);border-color:var(--border);color:var(--ink);font-weight:500}
+.chtab.done{color:var(--success)}
+.chtab.gen{color:var(--gold)}
+.chtab.plan{color:var(--purple)}
+/* ── Reading Panel ─────────────────────────────────────── */
+.out{
+  background:white;
+  min-height:280px;max-height:620px;overflow-y:auto;
+  padding:28px 32px;
+  font-family:"Crimson Pro",Georgia,serif;
+  font-size:1.05rem;
+  line-height:2;
+  color:#1e160a;
+  word-break:break-word;
+  border-bottom:1px solid var(--border);
+}
+.out::-webkit-scrollbar{width:5px}
+.out::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Chapter banner */
+.ch-banner{
+  font-family:"JetBrains Mono",monospace;
+  font-size:.65rem;letter-spacing:4px;text-transform:uppercase;
+  color:var(--muted);text-align:center;
+  margin-bottom:6px;padding-bottom:6px;
+}
+
+/* Chapter title from the story text */
+.ch-ttl{
+  font-family:"Playfair Display",serif;
+  font-size:1.45rem;font-weight:700;font-style:italic;
+  color:var(--ink);
+  text-align:center;
+  margin:0 0 24px;
+  padding-bottom:14px;
+  border-bottom:2px solid var(--gold);
+}
+
+/* Body paragraphs */
+.out p{
+  margin:0 0 1.1em;
+  text-indent:0;
+}
+
+/* Dialogue lines — visually distinct */
+.out p.dialogue-line{
+  margin:0 0 .6em;
+  padding-left:18px;
+  border-left:2px solid var(--gold-light);
+  color:#2a1a04;
+  font-size:1.06rem;
+}
+
+/* Internal thoughts — italic, slightly muted */
+.out p.thought-line{
+  margin:0 0 .9em;
+  color:#6a5040;
+  font-style:italic;
+  font-size:.97rem;
+}
+
+/* Scene break divider */
+.out .scene-break{
+  text-align:center;
+  color:var(--gold);
+  font-size:.85rem;
+  letter-spacing:6px;
+  margin:20px 0;
+  opacity:.7;
+}
+.outln-box{background:#faf7f0;border-left:3px solid var(--gold);padding:7px 12px;margin-bottom:16px;font-size:.76rem;line-height:1.6;color:var(--muted);font-style:italic;border-radius:0 3px 3px 0}
+.outln-box strong{color:var(--ink);font-style:normal;font-size:.65rem;font-family:"JetBrains Mono",monospace;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:3px}
+.cursor{display:inline-block;width:2px;height:.95em;background:var(--gold);margin-left:2px;vertical-align:middle;animation:blink .8s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.ph{color:#b0a090;font-style:italic;text-align:center;padding:40px 20px;font-size:.88rem}
+.of{padding:8px 13px;display:flex;align-items:center;justify-content:space-between;gap:7px;flex-wrap:wrap;background:var(--paper-dark)}
+.wcb{font-family:"JetBrains Mono",monospace;font-size:.65rem;color:var(--muted);background:var(--border);padding:3px 9px;border-radius:20px}
+.cb2{font-family:"JetBrains Mono",monospace;font-size:.63rem;padding:3px 9px;border-radius:20px}
+.cb2.active{background:#fff3e0;color:#c07010}
+.cb2.idle{background:#e8f5e9;color:var(--success)}
+.cb2.plan{background:#ede8fc;color:var(--purple)}
+.expa{display:flex;gap:7px;flex-wrap:wrap;padding:9px 13px;background:var(--paper-dark);border-top:1px solid var(--border)}
+.al{padding:8px 12px;border-radius:3px;font-size:.82rem;margin-bottom:8px;display:flex;align-items:flex-start;gap:7px}
+.al.info{background:#e8f4fd;border-left:3px solid #5b9bd5;color:#1a4a6e}
+.al.warn{background:#fff8e1;border-left:3px solid var(--gold);color:#6a4a00}
+.al.ok{background:#e8f5e9;border-left:3px solid var(--success);color:#1a4a2a}
+.al.err{background:#fdecea;border-left:3px solid var(--red);color:#6a1010}
+.lh{background:var(--paper-dark);border-bottom:1px solid var(--border);padding:8px 13px;display:flex;align-items:center;justify-content:space-between}
+.lh h3{font-family:"Playfair Display",serif;font-size:.84rem;font-weight:700;color:var(--ink)}
+.ll{max-height:190px;overflow-y:auto}
+.ll::-webkit-scrollbar{width:4px}
+.ll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.li{padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.li:hover{background:var(--paper-dark)}
+.li.cur{background:#fdf5e8;border-left:3px solid var(--gold)}
+.li-t{font-family:"Playfair Display",serif;font-size:.8rem;font-weight:700;color:var(--ink);margin-bottom:1px}
+.li-m{font-family:"JetBrains Mono",monospace;font-size:.58rem;color:var(--muted)}
+.le{padding:14px;text-align:center;color:var(--muted);font-style:italic;font-size:.8rem}
+.la{padding:8px 12px;display:flex;gap:5px;border-top:1px solid var(--border)}
+.ms{padding:8px 12px;border-bottom:1px solid var(--border)}
+.ms:last-child{border-bottom:none}
+.ml{font-family:"JetBrains Mono",monospace;font-size:.58rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+.mci{background:var(--paper-dark);border:1px solid var(--border);border-radius:3px;padding:5px 8px;margin-bottom:3px;font-size:.76rem}
+.mcn{font-weight:700;color:var(--ink);font-family:"Playfair Display",serif}
+.mcs{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:.55rem;padding:1px 5px;border-radius:10px;margin-left:3px}
+.s-a{background:#e8f5e9;color:var(--success);border:1px solid #b0d8b8}
+.s-d{background:#fdecea;color:var(--red);border:1px solid #f0a0a0}
+.s-o{background:#f5f0e8;color:var(--muted);border:1px solid var(--border)}
+.mev{font-size:.74rem;color:var(--muted);padding:2px 0;border-bottom:1px solid rgba(0,0,0,.04);line-height:1.4}
+.mev:last-child{border-bottom:none}
+.mev::before{content:"+ ";color:var(--gold)}
+.fp{font-family:"JetBrains Mono",monospace;font-size:.58rem;color:var(--red);background:#fdecea;padding:2px 5px;border-radius:3px;display:inline-block;margin:2px;cursor:pointer}
+.fp:hover{background:#f8c0c0}
+.meb{background:none;border:1px solid var(--border);border-radius:3px;padding:1px 6px;font-size:.62rem;font-family:"JetBrains Mono",monospace;color:var(--muted);cursor:pointer;transition:all .15s}
+.meb:hover{border-color:var(--gold);color:var(--gold)}
+.divr{height:1px;background:var(--border);margin:8px 0}
+@media(max-width:680px){.app{grid-template-columns:1fr}.sidebar,.main-col{grid-column:1}.fr.t2,.fr.t3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<div class="app-header">
+  <div class="ornament">&#10022; &#10022; &#10022;</div>
+  <h1>Hazy <span>Novel Writer</span></h1>
+  <p class="tagline">Full-architecture AI story generation with persistent memory &mdash; powered by Ollama</p>
+  <span class="vtag">v2.0 &middot; IndexedDB &middot; Story Memory &middot; Chapter Planner &middot; Anti-Repeat &middot; Auto-Continue</span>
+</div>
+
+<div class="oll-strip">
+  <label>PROVIDER</label>
+  <select id="providerSelect" onchange="onProviderChange()" style="max-width:160px;background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12);color:var(--paper)">
+    <option value="ollama">Ollama (Local)</option>
+    <option value="anthropic">Anthropic (Claude)</option>
+    <option value="openai">OpenAI (GPT-4o)</option>
+    <option value="groq">Groq (Fast)</option>
+    <option value="gemini">Google Gemini</option>
+  </select>
+  <label style="margin-left:6px">MODEL</label>
+  <select id="modelSelect" style="flex:1;background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12);color:var(--paper)">
+    <option value="ollama/llama3.2">llama3.2 (3B)</option>
+  </select>
+  <span class="cs checking" id="connStatus">checking&hellip;</span>
+  <button class="btn btn-s btn-sm" onclick="checkConn()">Test</button>
+  <a href="/model-manager.html" class="btn btn-s btn-sm" style="text-decoration:none">&#9881; Models</a>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+
+  <!-- Library -->
+  <div class="card">
+    <div class="lh">
+      <h3>&#128218; Novel Library</h3>
+      <button class="btn btn-s btn-sm" onclick="newNovel()">+ New</button>
+    </div>
+    <div class="ll" id="libList"><div class="le">No novels yet.<br>Start writing to save.</div></div>
+    <div class="la">
+      <button class="btn btn-d btn-sm" onclick="delNovel()">Delete</button>
+      <button class="btn btn-v btn-sm" onclick="saveAll()">&#128190; Save</button>
+    </div>
+  </div>
+
+  <!-- Memory -->
+  <div class="card">
+    <div class="ch" style="padding:9px 13px">
+      <h2 style="font-size:.84rem">&#129504; Story Memory</h2>
+      <span class="badge b-live" style="margin-left:auto">Live</span>
+    </div>
+    <div class="ms">
+      <div class="ml">Characters &amp; Status</div>
+      <div id="memChars"><span style="color:var(--muted);font-size:.74rem;font-style:italic">No characters yet</span></div>
+    </div>
+    <div class="ms">
+      <div class="ml">Plot Events <button class="meb" onclick="clrEvents()">Clear</button></div>
+      <div id="summaryCount" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--purple);background:#ede8fc;border:1px solid #c8b8f0;border-radius:10px;padding:1px 7px;display:inline-block;margin-bottom:4px">0 chapters summarized</div>
+      <div id="memEvents"><span style="color:var(--muted);font-size:.74rem;font-style:italic">Nothing recorded</span></div>
+    </div>
+    <div class="ms">
+      <div class="ml">Forbidden Phrases <small style="font-size:.53rem">(tap to remove)</small></div>
+      <div id="memFP"></div>
+      <div style="display:flex;gap:4px;margin-top:4px">
+        <input type="text" id="fpInput" placeholder="Add phrase to ban..." style="flex:1;font-size:.74rem;padding:3px 7px">
+        <button class="btn btn-s btn-sm" onclick="addFP()">+</button>
+      </div>
+    </div>
+    <div class="ms">
+      <div class="ml">Locations Visited</div>
+      <div id="memLoc"><span style="color:var(--muted);font-size:.74rem;font-style:italic">None yet</span></div>
+    </div>
+    <div class="ms">
+      <div class="ml">Current Scene Location</div>
+      <input type="text" id="curLocation" placeholder="e.g. forest clearing, castle hall" style="font-size:.76rem;padding:4px 7px">
+    </div>
+  </div>
+
+</div>
+
+<!-- MAIN COLUMN -->
+<div class="main-col">
+
+  <!-- ✨ QUICK GENERATE BOX -->
+  <div class="card full-row" id="quickGenCard" style="border:2px solid var(--gold);box-shadow:0 0 0 3px rgba(201,151,58,.12),var(--shadow)">
+    <div class="ch" style="background:linear-gradient(135deg,#f5ede0,var(--paper-dark))">
+      <div class="step" style="background:var(--gold);font-size:.7rem">✨</div>
+      <h2 style="color:var(--ink)">Quick Story Generator</h2>
+      <span class="badge b-live" style="margin-left:auto">AI Auto-Fill</span>
+    </div>
+    <div class="cb">
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:10px;font-style:italic">
+        Describe your story idea in plain language — the AI will instantly fill in the title, genre, plot, setting, writing style, and all characters automatically.
+      </div>
+      <textarea id="quickPrompt" rows="4" placeholder="Example: A dark romance between a cold vampire lord and a fearless human healer in medieval Europe. 3 main characters. The healer slowly breaks through his walls but both are hunted by a vampire council that forbids human-vampire relationships. Ends with a dramatic confrontation and bittersweet ending." style="font-size:.92rem;line-height:1.7;border:1.5px solid var(--gold);background:#fffdf8"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-p" id="quickGenBtn" onclick="runQuickGen()" style="gap:7px;font-size:.92rem;padding:9px 20px">
+          <span id="quickGenBtnIcon">✨</span> Generate Story Setup
+        </button>
+        <span style="font-size:.76rem;color:var(--muted);font-style:italic">or press <kbd style="background:var(--paper-dark);border:1px solid var(--border);border-radius:3px;padding:1px 6px;font-family:'JetBrains Mono',monospace;font-size:.7rem">Enter</kbd> in the box</span>
+        <div id="quickGenStatus" style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--gold);display:none">
+          <span id="quickGenSpinner" style="display:inline-block;animation:pulse 1s infinite">⚙</span> <span id="quickGenMsg">Generating…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1: Story Setup -->
+  <div class="card">
+    <div class="ch"><div class="step">1</div><h2>Story Setup</h2></div>
+    <div class="cb">
+      <div class="fr t2">
+        <div><label>Novel Title</label><input type="text" id="novelTitle" placeholder="Your novel title..."></div>
+        <div style="grid-column:1/-1"><label>Genre <span style="font-size:.6rem;color:var(--muted);font-style:italic;text-transform:none;letter-spacing:0">(click to toggle — pick 1 or more)</span></label>
+          <div id="genreTags" style="display:flex;flex-wrap:wrap;gap:5px;padding:8px;background:white;border:1px solid var(--border);border-radius:3px;min-height:38px;cursor:pointer" onclick="toggleGenreTag(event)">
+          </div>
+          <input type="hidden" id="genre" value="">
+        </div>
+      </div>
+      <div class="fr">
+        <div><label>Plot Summary &amp; Story Arc</label>
+          <textarea id="plotSummary" rows="4" placeholder="Describe your full story arc: the central conflict, main characters' journey, key turning points, and how it resolves. The more detail you provide here, the more consistent the AI will be across chapters."></textarea>
+        </div>
+      </div>
+      <div class="fr t2">
+        <div><label>Writing Style / Tone</label><input type="text" id="writingStyle" placeholder="e.g. lyrical and atmospheric, fast-paced thriller, slow-burn romance"></div>
+        <div><label>World / Setting</label><input type="text" id="setting" placeholder="e.g. Victorian London, post-apocalyptic wasteland, magical academy"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Characters -->
+  <div class="card">
+    <div class="ch"><div class="step">2</div><h2>Character Registry</h2><span class="badge b-new" style="margin-left:auto">Structured + Tracked</span></div>
+    <div class="cb">
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;font-style:italic">Each character is injected into every chapter prompt with their current status, so the AI never contradicts who is alive, dead, or imprisoned.</div>
+      <div class="char-list" id="charList"></div>
+      <button class="add-c" onclick="addChar()">+ Add Character</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Settings -->
+  <div class="card">
+    <div class="ch"><div class="step">3</div><h2>Generation Settings</h2><span class="badge b-new" style="margin-left:auto">Tuned for Quality</span></div>
+    <div class="cb">
+      <div class="fr t3">
+        <div><label>Total Chapters</label><input type="number" id="totalChapters" value="10" min="1" max="100"></div>
+        <div><label>Target Words / Chapter</label><input type="number" id="wordsPerChapter" value="2000" min="300" max="6000" step="100"></div>
+        <div><label>Max Tokens / Request</label><input type="number" id="maxTokens" value="4096" min="512" max="16384" step="256"></div>
+      </div>
+      <div class="fr t3">
+        <div><label>Temperature</label><input type="number" id="temperature" value="0.85" min="0.3" max="1.4" step="0.05"><small style="font-size:.68rem;color:var(--muted)">Higher = more creative</small></div>
+        <div><label>Repeat Penalty</label><input type="number" id="repeatPenalty" value="1.18" min="1.0" max="1.5" step="0.01"><small style="font-size:.68rem;color:var(--muted)">Higher = less repetition</small></div>
+        <div><label>Top P</label><input type="number" id="topP" value="0.92" min="0.5" max="1.0" step="0.01"><small style="font-size:.68rem;color:var(--muted)">Nucleus sampling</small></div>
+      </div>
+      <div class="al info" style="font-size:.79rem;margin-top:4px">
+        <span style="flex-shrink:0">&#8505;</span>
+        <div>
+          <strong>8-Step generation pipeline per chapter:</strong>
+          LOAD memory from DB &rarr; PLAN 3-scene outline &rarr; BUILD prompt with character registry + last 3 summaries + forbidden phrases &rarr; GENERATE with tuned params &rarr; POST-PROCESS (fix merge errors, detect repeats) &rarr; AUTO-CONTINUE up to 5&times; &rarr; UPDATE memory (extract events, summarize) &rarr; SAVE to IndexedDB.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4: Generate -->
+  <div class="card">
+    <div class="ch"><div class="step">4</div><h2>Generate Novel</h2><span class="badge b-db" style="margin-left:auto">IndexedDB Persistence</span></div>
+    <div class="cb">
+      <div id="alertBox" style="display:none"></div>
+      <div class="sbar">
+        <div class="sdot idle" id="sdot"></div>
+        <span class="stxt" id="stxt">Ready to begin</span>
+        <div class="scnt">
+          <span>Ch <strong id="curCh">&mdash;</strong></span>
+          <span>Words <strong id="totWords">0</strong></span>
+          <span>DB Saves <strong id="dbSaves">0</strong></span>
+        </div>
+      </div>
+      <div class="pw"><div class="pb" id="pbar"></div></div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px">
+        <button class="btn btn-p" id="startBtn" onclick="startGen()">&#10022; Begin Writing</button>
+        <button class="btn btn-s" id="stopBtn" onclick="stopGen()" disabled>&#9209; Stop</button>
+        <button class="btn btn-s btn-sm" id="contBtn" onclick="forceContinue()" disabled>&#8617; Force Continue</button>
+        <button class="btn btn-v btn-sm" onclick="saveAll()">&#128190; Save Now</button>
+        <button class="btn btn-d btn-sm" onclick="resetSession()" style="margin-left:auto">&#10005; Reset</button>
+      </div>
+      <div id="chPanel" style="display:none">
+        <div class="chtabs" id="chTabs"></div>
+        <div class="card" style="margin:0;border-radius:0 0 4px 4px;border-top:none">
+          <div class="out" id="outArea"><div class="ph">Your novel will appear here as it generates&hellip;</div></div>
+          <div class="of">
+            <div class="wcb" id="wcBadge">0 words</div>
+            <div class="cb2 idle" id="cb2">&#10003; Ready</div>
+          </div>
+        </div>
+        <div class="expa">
+          <button class="btn btn-s btn-sm" onclick="expChapter()">&#128196; This Chapter</button>
+          <button class="btn btn-p btn-sm" onclick="expFull()">&#128218; Full Novel (.txt)</button>
+          <button class="btn btn-s btn-sm" onclick="expMD()">&#8595; Markdown</button>
+          <button class="btn btn-v btn-sm" onclick="expJSON()">{ } Export with Outlines</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// =============================================================
+// LAYER 5 — INDEXEDDB
+// =============================================================
+const DB_NAME = 'HazyNovelV2', DB_VER = 1;
+let db = null;
+
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('novels')) {
+        const s = d.createObjectStore('novels', { keyPath: 'id' });
+        s.createIndex('updatedAt', 'updatedAt');
+      }
+      if (!d.objectStoreNames.contains('chapters')) {
+        const s = d.createObjectStore('chapters', { keyPath: 'id' });
+        s.createIndex('novelId', 'novelId');
+        s.createIndex('novelChapter', ['novelId', 'chapterNum']);
+      }
+      if (!d.objectStoreNames.contains('memory')) {
+        d.createObjectStore('memory', { keyPath: 'novelId' });
+      }
+    };
+    req.onsuccess = e => { db = e.target.result; res(db); };
+    req.onerror = () => rej(req.error);
+  });
+}
+
+const dbPut  = (s,o)   => new Promise((r,j) => { const t = db.transaction(s,'readwrite').objectStore(s).put(o);   t.onsuccess=()=>r(t.result); t.onerror=()=>j(t.error); });
+const dbGet  = (s,k)   => new Promise((r,j) => { const t = db.transaction(s,'readonly').objectStore(s).get(k);    t.onsuccess=()=>r(t.result); t.onerror=()=>j(t.error); });
+const dbDel  = (s,k)   => new Promise((r,j) => { const t = db.transaction(s,'readwrite').objectStore(s).delete(k);t.onsuccess=()=>r();         t.onerror=()=>j(t.error); });
+const dbAll  = s       => new Promise((r,j) => { const t = db.transaction(s,'readonly').objectStore(s).getAll();  t.onsuccess=()=>r(t.result); t.onerror=()=>j(t.error); });
+const dbIdx  = (s,i,v) => new Promise((r,j) => { const t = db.transaction(s,'readonly').objectStore(s).index(i).getAll(v); t.onsuccess=()=>r(t.result); t.onerror=()=>j(t.error); });
+const uid    = ()      => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+// =============================================================
+// STATE
+// =============================================================
+const S = {
+  novelId: null,
+  chapters: {},      // { chNum: "text" }
+  outlines: {},      // { chNum: "outline text" }
+  activeChapter: 0,
+  totalChapters: 10,
+  wordsTarget: 2000,
+  isRunning: false,
+  shouldStop: false,
+  abortCtrl: null,
+  dbSaveCount: 0,
+  bible: null,
+
+  // Layer 3 — Story Memory
+  mem: {
+    characterStates:  {},   // { "Name": { status, location, lastSeen } }
+    plotEvents:       [],   // ["[Ch.1] event description", ...]
+    chapterSummaries: {},   // { 1: "summary text", 2: "..." }
+    locationsVisited: [],   // ["Forest", "Castle", ...]
+    forbiddenPhrases: [
+      "felt a shiver run down",
+      "voice barely above a whisper",
+      "voice low and husky",
+      "flutter in her chest",
+      "ran down her spine",
+      "chill ran down",
+      "eyes locked onto",
+      "burned with intensity",
+      "felt herself",
+      "felt himself",
+      "heart skipped a beat",
+      "blood ran cold",
+      "breath caught in",
+      "spine tingled"
+    ],
+    currentLocation: ""
+  }
+};
+
+// =============================================================
+// INIT
+// =============================================================
+window.addEventListener('DOMContentLoaded', async () => {
+  await openDB();
+  addChar(); // start with one blank character row
+  await initProviders(); // this calls onProviderChange() -> checkConn() internally
+  await loadLibrary();
+  renderMemory();
+});
+
+// =============================================================
+// QUICK STORY GENERATOR — AI Auto-Fill
+// =============================================================
+// =============================================================
+// GENRE TAG SYSTEM
+// =============================================================
+const ALL_GENRES = [
+  // Core Fiction
+  'Fantasy','Dark Fantasy','High Fantasy','Urban Fantasy','Fairy Tale',
+  // Romance
+  'Romance','Dark Romance','Slow-Burn Romance','Enemies to Lovers',
+  'Forbidden Love','Love Triangle','Second Chance Romance',
+  // Drama & Slice of Life
+  'Drama','Slice of Life','School Life','Coming of Age','Family Drama',
+  'Contemporary Fiction',
+  // Sci-Fi & Futuristic
+  'Science Fiction','Cyberpunk','Steampunk','Space Opera','Post-Apocalyptic',
+  'Dystopian','Time Travel','Alternate History',
+  // Mystery & Thriller
+  'Mystery','Thriller','Psychological Thriller','Crime','Detective',
+  'Suspense','Political Thriller',
+  // Horror & Dark
+  'Horror','Gothic Horror','Supernatural Horror','Cosmic Horror','Dark Fiction',
+  // Action & Adventure
+  'Adventure','Action','Survival','War','Martial Arts',
+  // Paranormal & Supernatural
+  'Paranormal','Vampire','Werewolf','Witches & Magic','Angels & Demons',
+  'Ghost Story','Mythology',
+  // Historical
+  'Historical Fiction','Historical Romance','Medieval','Ancient World',
+  'Victorian Era','World War',
+  // Humor & Light
+  'Comedy','Romantic Comedy','Parody','Satire','Cozy Fiction',
+  // Anime-style / Webtoon genres
+  'Isekai','Reincarnation','Harem','Reverse Harem','Manhwa / Webtoon Style',
+  'Shounen','Shoujo','Josei','Seinen','Mecha','Cultivation / Xianxia',
+  // Spiritual & Philosophical
+  'Literary Fiction','Philosophical','Spiritual','Inspirational',
+  // Misc
+  'Young Adult','Middle Grade','Children','LGBTQ+','Anthology',
+  'Interactive / Choice-Based','Epistolary','Mystery Romance',
+];
+
+function initGenreTags() {
+  const container = document.getElementById('genreTags');
+  if (!container) return;
+  container.innerHTML = ALL_GENRES.map(g =>
+    `<span class="gtag" data-genre="${g}" style="
+      display:inline-block;padding:3px 10px;border-radius:20px;font-size:.74rem;
+      font-family:'JetBrains Mono',monospace;cursor:pointer;transition:all .15s;
+      background:var(--paper-dark);border:1px solid var(--border);color:var(--muted);
+      user-select:none;
+    " title="Click to select">${g}</span>`
+  ).join('');
+}
+
+function toggleGenreTag(e) {
+  const tag = e.target.closest('.gtag');
+  if (!tag) return;
+  const active = tag.classList.toggle('gtag-on');
+  tag.style.background  = active ? 'var(--gold)'  : 'var(--paper-dark)';
+  tag.style.color       = active ? 'white'         : 'var(--muted)';
+  tag.style.borderColor = active ? 'var(--gold)'   : 'var(--border)';
+  tag.style.fontWeight  = active ? '600'            : 'normal';
+  syncGenreValue();
+}
+
+function syncGenreValue() {
+  const active = [...document.querySelectorAll('.gtag-on')].map(t => t.dataset.genre);
+  const hidden = document.getElementById('genre');
+  if (hidden) hidden.value = active.join(', ');
+}
+
+function setGenreTags(genreStr) {
+  // Deactivate all first
+  document.querySelectorAll('.gtag').forEach(t => {
+    t.classList.remove('gtag-on');
+    t.style.background  = 'var(--paper-dark)';
+    t.style.color       = 'var(--muted)';
+    t.style.borderColor = 'var(--border)';
+    t.style.fontWeight  = 'normal';
+  });
+  // Parse genres — could be comma-separated or slash-separated
+  const requested = genreStr.split(/[,\/]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+  document.querySelectorAll('.gtag').forEach(tag => {
+    const tagName = tag.dataset.genre.toLowerCase();
+    const matches = requested.some(r =>
+      tagName.includes(r) || r.includes(tagName) ||
+      tagName.replace(/[^a-z]/g,'').includes(r.replace(/[^a-z]/g,''))
+    );
+    if (matches) {
+      tag.classList.add('gtag-on');
+      tag.style.background  = 'var(--gold)';
+      tag.style.color       = 'white';
+      tag.style.borderColor = 'var(--gold)';
+      tag.style.fontWeight  = '600';
+      // Scroll tag into view
+      tag.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    }
+  });
+  syncGenreValue();
+}
+
+// =============================================================
+// QUICK STORY GENERATOR — AI Auto-Fill (FIXED v2)
+// =============================================================
+async function runQuickGen() {
+  const prompt = (document.getElementById('quickPrompt')?.value || '').trim();
+  if (!prompt) { showAlert('warn', 'Please describe your story idea first.'); return; }
+
+  const btn    = document.getElementById('quickGenBtn');
+  const status = document.getElementById('quickGenStatus');
+  const msg    = document.getElementById('quickGenMsg');
+  const icon   = document.getElementById('quickGenBtnIcon');
+
+  btn.disabled = true;
+  icon.textContent = '⚙';
+  status.style.display = 'inline-flex';
+  msg.textContent = 'Reading your idea…';
+
+  // Use a direct non-streaming fetch for JSON generation
+  // Lower temperature = more reliable JSON output
+  const systemPrompt = `You are a professional novel planning assistant. The user will describe a story idea.
+You must respond ONLY with a valid JSON object. No markdown. No backticks. No explanation. No comments. Just the raw JSON object itself.
+
+Return EXACTLY this structure:
+{
+  "title": "Creative evocative novel title",
+  "genres": ["Genre1", "Genre2"],
+  "plot": "Rich 3-5 sentence plot summary covering central conflict, character arcs, turning points, and resolution",
+  "setting": "World and setting described in 1-2 sentences",
+  "writingStyle": "Tone and style in one phrase",
+  "totalChapters": 12,
+  "wordsPerChapter": 2000,
+  "characters": [
+    {
+      "name": "Full Name",
+      "role": "protagonist / antagonist / love interest / best friend / rival / mentor",
+      "personality": "trait1, trait2, trait3, trait4",
+      "status": "alive",
+      "desc": "2-3 sentences covering appearance, backstory, motivation, and goals"
+    }
+  ]
+}
+
+Rules:
+- "genres" must be an ARRAY of strings from this list: Fantasy, Dark Fantasy, Romance, Dark Romance, Slow-Burn Romance, Enemies to Lovers, Drama, Slice of Life, School Life, Coming of Age, Science Fiction, Mystery, Thriller, Horror, Adventure, Young Adult, Dystopian, Paranormal, Comedy, Romantic Comedy, Isekai, Reincarnation, Shoujo, Shounen, Historical Fiction, Literary Fiction, Cyberpunk, Supernatural Horror, Gothic Horror, Forbidden Love, Love Triangle, Contemporary Fiction, LGBTQ+, Martial Arts, Mythology, Vampire, Werewolf, Interactive / Choice-Based
+- "totalChapters" must be an integer between 8 and 20
+- "wordsPerChapter" must be an integer between 1500 and 3000
+- Generate 2 to 8 characters based on what the user describes
+- Use real names, not placeholders like "Character A"
+- Do NOT wrap the JSON in backticks or markdown`;
+
+  try {
+    msg.textContent = 'Generating story setup…';
+
+    // Always stream and collect — server normalises ALL providers to NDJSON
+    // Non-streaming (stream:false) breaks cloud providers through this server
+    const isCloud = isCloudProvider();
+    const response = await fetch('/hazy/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: getModel(),
+        ...(getApiKey() ? {apiKey: getApiKey()} : {}),
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: 'Story idea: ' + prompt }
+        ],
+        stream: true,
+        options: isCloud
+          ? { temperature: 0.3, max_tokens: 3000 }
+          : { temperature: 0.3, num_predict: 3000, repeat_penalty: 1.0, top_p: 0.9 },
+      })
+    });
+
+    if (!response.ok) {
+      let errMsg = 'Server error ' + response.status;
+      try { const e = await response.json(); errMsg = e.error || errMsg; } catch {}
+      throw new Error(errMsg);
+    }
+
+    // Collect all streaming chunks into one string
+    msg.textContent = 'Receiving response…';
+    const reader2  = response.body.getReader();
+    const decoder2 = new TextDecoder();
+    let   rawJson  = '';
+    let   buf2     = '';
+
+    while (true) {
+      const { done, value } = await reader2.read();
+      if (done) break;
+      buf2 += decoder2.decode(value, { stream: true });
+      const lines2 = buf2.split('\n');
+      buf2 = lines2.pop();
+      for (const line2 of lines2) {
+        const t = line2.trim();
+        if (!t) continue;
+        try {
+          const j = JSON.parse(t);
+          if (j.error) throw new Error(j.error);
+          if (j.message?.content) rawJson += j.message.content;
+        } catch(e2) {
+          if (e2.message && !e2.message.includes('JSON')) throw e2;
+        }
+      }
+    }
+    rawJson = rawJson.trim();
+
+    msg.textContent = 'Parsing story data…';
+
+    // Strip markdown fences if model added them anyway
+    rawJson = rawJson
+      .replace(/^```json\s*/im, '')
+      .replace(/^```\s*/im,     '')
+      .replace(/```\s*$/im,     '')
+      .trim();
+
+    // Find the outermost JSON object
+    const start = rawJson.indexOf('{');
+    const end   = rawJson.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error('Model did not return valid JSON. Try again.');
+    rawJson = rawJson.slice(start, end + 1);
+
+    let data;
+    try {
+      data = JSON.parse(rawJson);
+    } catch(parseErr) {
+      // Try to fix common JSON issues (trailing commas, unquoted values)
+      const cleaned = rawJson
+        .replace(/,\s*}/g,  '}')
+        .replace(/,\s*]/g,  ']')
+        .replace(/:\s*undefined/g, ': null');
+      data = JSON.parse(cleaned);
+    }
+
+    msg.textContent = 'Filling in the form…';
+
+    // Apply all fields
+    if (data.title)        setV('novelTitle',  data.title);
+    if (data.plot)         setV('plotSummary', data.plot);
+    if (data.setting)      setV('setting',     data.setting);
+    if (data.writingStyle) setV('writingStyle',data.writingStyle);
+
+    if (data.totalChapters)
+      document.getElementById('totalChapters').value =
+        Math.min(Math.max(parseInt(data.totalChapters) || 12, 1), 100);
+
+    if (data.wordsPerChapter)
+      document.getElementById('wordsPerChapter').value =
+        Math.min(Math.max(parseInt(data.wordsPerChapter) || 2000, 300), 6000);
+
+    // Set genres — handle both array and string formats
+    const genreVal = Array.isArray(data.genres)
+      ? data.genres.join(', ')
+      : (data.genre || '');
+    if (genreVal) setGenreTags(genreVal);
+
+    // Clear + fill characters
+    if (data.characters && data.characters.length) {
+      document.getElementById('charList').innerHTML = '';
+      charId = 0;
+      data.characters.forEach(c => addChar(
+        c.name        || '',
+        c.role        || '',
+        c.personality || '',
+        c.status      || 'alive',
+        c.desc        || ''
+      ));
+    }
+
+    // Scroll to the filled form
+    document.getElementById('novelTitle')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    const charCount = (data.characters || []).length;
+    const genreList = Array.isArray(data.genres) ? data.genres.join(', ') : genreVal;
+    showAlert('ok', `Story setup generated! "${data.title}" — ${charCount} characters, genres: ${genreList}`);
+    status.style.display = 'none';
+
+  } catch (err) {
+    console.error('[QuickGen] Error:', err);
+    showAlert('err', 'Quick Generate failed: ' + err.message + '. Try again or fill the form manually.');
+    status.style.display = 'none';
+  }
+
+  btn.disabled = false;
+  icon.textContent = '✨';
+}
+
+function setV(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.value = val;
+}
+
+// Keep setGenre for backward compat — now delegates to tag system
+function setGenre(genreStr) { setGenreTags(genreStr); }
+
+// Enter key in quick prompt box
+document.addEventListener('DOMContentLoaded', () => {
+  initGenreTags();
+  const qp = document.getElementById('quickPrompt');
+  if (qp) {
+    qp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runQuickGen(); }
+    });
+  }
+});
+
+// =============================================================
+// =============================================================
+// LAYER 1 — CONNECTION CHECK
+// =============================================================
+async function checkConn() {
+  const el = document.getElementById('connStatus');
+  el.className = 'cs checking'; el.textContent = 'checking…';
+  const prov = document.getElementById('providerSelect')?.value || 'ollama';
+
+  if (prov === 'ollama') {
+    // Try ALL possible endpoints in parallel — fastest wins
+    const urls = [
+      'http://localhost:11434/api/tags',  // direct to Ollama (always works locally)
+      '/api/tags',                         // through server.js proxy
+    ];
+
+    let connected = false;
+    for (const url of urls) {
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) continue;
+        const d = await r.json();
+        const models = d.models || [];
+        connected = true;
+        if (models.length > 0) {
+          el.className = 'cs ok';
+          el.textContent = '✓ ' + models.length + ' model' + (models.length > 1 ? 's' : '') + ' — ' + models.map(m => m.name).slice(0, 2).join(', ');
+          populateOllamaModels(models);
+        } else {
+          el.className = 'cs fail';
+          el.textContent = '⚠ Connected but no models installed — run: ollama pull llama3.2';
+        }
+        return;
+      } catch { /* try next url */ }
+    }
+
+    if (!connected) {
+      el.className = 'cs fail';
+      el.textContent = '✗ Ollama not running — run: ollama serve';
+    }
+  } else {
+    // Cloud provider
+    try {
+      const r = await fetch('/hazy/providers', { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        const d = await r.json();
+        const info = d.providers?.[prov];
+        if (info?.hasKey) {
+          el.className = 'cs ok';
+          el.textContent = '✓ ' + prov + ' key active';
+        } else {
+          el.className = 'cs fail';
+          el.textContent = '⚠ No ' + prov + ' key — add in Hazy Settings';
+        }
+      } else {
+        el.className = 'cs fail';
+        el.textContent = '⚠ Start server.js to use cloud providers';
+      }
+    } catch {
+      el.className = 'cs fail';
+      el.textContent = '⚠ Start server.js to use cloud providers';
+    }
+  }
+}
+
+// Populate modelSelect with actual installed Ollama models
+function populateOllamaModels(models) {
+  const prov = document.getElementById('providerSelect')?.value || 'ollama';
+  if (prov !== 'ollama') return;
+  const sel = document.getElementById('modelSelect');
+  if (!sel) return;
+  const saved = localStorage.getItem('hazyModel_ollama') || localStorage.getItem('hazyActiveModel') || '';
+  sel.innerHTML = models.map(m => {
+    const gb = m.size ? ' (' + (m.size/1e9).toFixed(1) + 'GB)' : '';
+    return '<option value="ollama/' + m.name + '"' + (('ollama/'+m.name)===saved?' selected':'') + '>' + m.name + gb + '</option>';
+  }).join('');
+  // If nothing matched the saved value, just keep first option selected
+  if (saved && !sel.value) sel.selectedIndex = 0;
+}
+
+// All API calls use absolute paths like '/hazy/chat' — no base URL needed
+const getModel = () => {
+  const sel = document.getElementById('modelSelect');
+  return sel ? sel.value : (localStorage.getItem('hazyDefaultModel') || 'ollama/llama3.2');
+};
+
+// Get the API key for the current provider from localStorage
+const getApiKey = () => {
+  const model    = getModel();
+  const provider = model.split('/')[0];
+  if (provider === 'ollama') return null;
+  return localStorage.getItem('hazyKey_' + provider) || null;
+};
+
+// Check if current provider is cloud
+const isCloudProvider = () => {
+  const prov = getModel().split('/')[0];
+  return ['anthropic','openai','groq','gemini'].includes(prov);
+};
+
+// ── Unified fetch helper — always streams, collects full text ────────────
+// Replaces stream:false calls which break cloud providers through this server
+async function fetchText(messages, opts = {}) {
+  const isCloud = isCloudProvider();
+  const baseOpts = isCloud
+    ? { temperature: opts.temperature || 0.3, max_tokens: opts.max_tokens || opts.num_predict || 1000 }
+    : { temperature: opts.temperature || 0.3, num_predict: opts.num_predict || 1000,
+        repeat_penalty: opts.repeat_penalty || 1.0, top_p: opts.top_p || 0.9 };
+
+  const apiKey = getApiKey();
+  const body = { model: getModel(), messages, stream: true, options: baseOpts };
+  if (apiKey) body.apiKey = apiKey;
+
+  const r = await fetch('/hazy/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!r.ok) {
+    let errMsg = 'Error ' + r.status;
+    try { const e = await r.json(); errMsg = e.error || errMsg; } catch {}
+    throw new Error(errMsg);
+  }
+
+  const reader  = r.body.getReader();
+  const decoder = new TextDecoder();
+  let full = '', buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const j = JSON.parse(line.trim());
+        if (j.error) throw new Error(j.error);
+        if (j.message?.content) full += j.message.content;
+      } catch(e) {
+        if (e.message && !e.message.includes('JSON') && !e.message.includes('Unexpected')) throw e;
+      }
+    }
+  }
+  return full.trim();
+}
+const gv       = id => (document.getElementById(id)?.value || '').trim();
+
+// =============================================================
+// LAYER 1 — CHARACTERS
+// =============================================================
+let charId = 0;
+function addChar(name='', role='', personality='', status='alive', desc='') {
+  charId++;
+  const id = charId;
+  const list = document.getElementById('charList');
+  const div = document.createElement('div');
+  div.className = 'char-item'; div.id = 'char' + id;
+  div.innerHTML =
+    '<div class="cr1">' +
+      '<input type="text" placeholder="Character name" value="' + xa(name) + '" id="cn' + id + '">' +
+      '<input type="text" placeholder="Role / archetype" value="' + xa(role) + '" id="cr' + id + '">' +
+      '<button class="xbtn" onclick="rmChar(' + id + ')">&#10005;</button>' +
+    '</div>' +
+    '<div class="cr2">' +
+      '<input type="text" placeholder="Personality traits" value="' + xa(personality) + '" id="cp' + id + '">' +
+      '<select id="cs' + id + '">' +
+        '<option value="alive"' + (status==='alive'?' selected':'') + '>alive</option>' +
+        '<option value="dead"' + (status==='dead'?' selected':'') + '>dead</option>' +
+        '<option value="imprisoned"' + (status==='imprisoned'?' selected':'') + '>imprisoned</option>' +
+        '<option value="missing"' + (status==='missing'?' selected':'') + '>missing</option>' +
+        '<option value="unknown"' + (status==='unknown'?' selected':'') + '>unknown</option>' +
+      '</select>' +
+    '</div>' +
+    '<input type="text" placeholder="Full description, backstory, goals..." value="' + xa(desc) + '" id="cd' + id + '" style="width:100%;font-size:.78rem;padding:4px 7px;margin-top:4px">';
+  list.appendChild(div);
+}
+
+function rmChar(id) { document.getElementById('char' + id)?.remove(); }
+
+function getChars() {
+  return [...document.querySelectorAll('.char-item')].map(el => {
+    const id = el.id.replace('char', '');
+    return {
+      name:        gv('cn' + id),
+      role:        gv('cr' + id),
+      personality: gv('cp' + id),
+      desc:        gv('cd' + id),
+      status:      document.getElementById('cs' + id)?.value || 'alive'
+    };
+  }).filter(c => c.name);
+}
+
+const xa = s => (s||'').replace(/"/g, '&quot;');
+
+// =============================================================
+// LAYER 2 — STORY BIBLE (system prompt foundation)
+// =============================================================
+function buildBible() {
+  const title   = gv('novelTitle') || 'Untitled Novel';
+  const genre   = gv('genre') || 'Fiction';  // multi-genre from tag selector
+  const plot    = gv('plotSummary');
+  const style   = gv('writingStyle');
+  const setting = gv('setting');
+  const chars   = getChars();
+  const fp      = S.mem.forbiddenPhrases;
+
+  const genreLabel = genre.includes(',') ? 'a multi-genre novel blending ' + genre : 'a ' + genre + ' novel';
+  let b = `You are a professional novelist. You are writing "${title}", ${genreLabel}.
+
+`;
+
+  if (setting) b += `WORLD / SETTING:
+${setting}
+
+`;
+
+  if (plot) b += `FULL STORY OUTLINE:
+${plot}
+
+`;
+
+  if (chars.length) {
+    b += `CHARACTER REGISTRY (THESE ARE PERMANENT — ALWAYS RESPECT THEIR STATUS):
+`;
+    chars.forEach(c => {
+      b += `  NAME: ${c.name}
+`;
+      b += `  ROLE: ${c.role}
+`;
+      if (c.personality) b += `  PERSONALITY: ${c.personality}
+`;
+      if (c.desc)        b += `  DESCRIPTION: ${c.desc}
+`;
+      b += `  CURRENT STATUS: ${c.status}
+
+`;
+    });
+  }
+
+  if (style) b += `WRITING STYLE & TONE:
+${style}
+
+`;
+
+  if (fp.length) {
+    b += `FORBIDDEN PHRASES — YOU MUST NEVER USE THESE EXACT PHRASES:
+`;
+    fp.forEach(p => b += `  ✗ "${p}"
+`);
+    b += `
+`;
+  }
+
+  b += `WRITING STYLE RULES (CRITICAL — READ CAREFULLY):\n`;
+  b += `\n`;
+  b += `LANGUAGE & TONE:\n`;
+  b += `- Write in a CASUAL, natural, easy-to-read style. Use everyday language people actually speak.\n`;
+  b += `- Avoid overly poetic or "literary" language. Keep it simple and real.\n`;
+  b += `- Short sentences are good. One-liners are good. Not every sentence needs to be long.\n`;
+  b += `- Write like you are telling the story to a friend — warm, engaging, effortless to read.\n`;
+  b += `\n`;
+  b += `DIALOGUE RULES:\n`;
+  b += `- Every new speaker gets their OWN new paragraph. Never mix two speakers in one block.\n`;
+  b += `- Dialogue should sound like real people talking — casual, with personality and humor.\n`;
+  b += `- Format: "What she said," he replied. — always on its own line.\n`;
+  b += `- Use body language and reactions after dialogue — show HOW something was said.\n`;
+  b += `\n`;
+  b += `PARAGRAPH & FORMATTING RULES:\n`;
+  b += `- Keep paragraphs SHORT — 2 to 4 sentences max. No walls of text.\n`;
+  b += `- Add a blank line between every paragraph and every dialogue line.\n`;
+  b += `- Use line breaks to give the reader room to breathe.\n`;
+  b += `- Internal thoughts: use italics formatting like *this is what he thought*.\n`;
+  b += `- Scene transitions: use a centered em-dash line — like: ---\n`;
+  b += `\n`;
+  b += `STORY RULES:\n`;
+  b += `1. Show emotions through actions and reactions — not just descriptions.\n`;
+  b += `2. End each chapter on a hook — a cliffhanger, a question, or an emotional punch.\n`;
+  b += `3. NEVER break character or write meta-commentary like "Here is Chapter X".\n`;
+  b += `4. NEVER bring back dead characters or change established facts.\n`;
+  b += `5. When continuing, pick up EXACTLY from the last sentence — no recap, no repetition.\n`;
+  b += `6. Keep character voices consistent — each person should sound like themselves.\n`;
+
+  return { bible: b, title, genre };
+}
+// =============================================================
+// LAYER 2b — CHAPTER PLANNER
+// =============================================================
+async function planChapter(n, total, prevSummary) {
+  setSt('Planning Chapter ' + n + ' outline…'); 
+  setDot('planning');
+  setTabState(n, 'plan'); 
+  setCB2('plan', '⚙ Planning…');
+
+  const charBlock  = buildCharStateBlock();
+  const loc        = S.mem.currentLocation || gv('curLocation');
+  const recentEvts = S.mem.plotEvents
+    .slice(-6)
+    .map(e => '  - ' + e)
+    .join('\n'); // ✅ FIXED
+
+  const pos = chapterPosition(n, total);
+
+  const prompt = `You are planning Chapter ${n} of ${total} for this novel.
+
+Chapter position: ${pos}
+
+${charBlock ? charBlock + '\n\n' : ''}${loc ? `CURRENT LOCATION: ${loc}\n\n` : ''}${recentEvts ? `RECENT PLOT EVENTS:
+${recentEvts}
+
+` : ''}${prevSummary ? `PREVIOUS CHAPTER SUMMARY:
+${prevSummary}
+
+` : ''}Create a concise 3-scene outline for Chapter ${n}.
+Format EXACTLY:
+SCENE 1: [one specific sentence — what happens, who is involved]
+SCENE 2: [one specific sentence — rising action or conflict]
+SCENE 3: [one specific sentence — chapter climax and closing hook]
+
+Use actual character names. Be specific. No vague descriptions.`;
+
+  try {
+    const text = await fetchText(
+      [ { role: 'system', content: S.bible.bible }, { role: 'user', content: prompt } ],
+      { temperature: 0.45, num_predict: 250, repeat_penalty: 1.1 }
+    );
+    return text;
+  } catch {
+    return `SCENE 1: Opening scene with primary character.
+SCENE 2: Rising conflict develops.
+SCENE 3: Chapter climax with a hook into next chapter.`;
+  }
+}
+// =============================================================
+// LAYER 2 — CHAPTER PROMPT BUILDER (Layer 3b — Context Window)
+// =============================================================
+function buildChapterPrompt(n, total, outline) {
+  const target    = S.wordsTarget;
+  const pos       = chapterPosition(n, total);
+  const charBlock = buildCharStateBlock();
+  const loc       = S.mem.currentLocation || gv('curLocation');
+
+  // Layer 3b: rolling last-3 summaries only (never dump full novel)
+  const sumKeys = Object.keys(S.mem.chapterSummaries)
+    .map(Number)
+    .sort((a,b) => b-a)
+    .slice(0, 3)
+    .reverse();
+
+  let p = '';
+
+  // Always inject character registry with current statuses
+  if (charBlock) p += `${charBlock}\n\n`;
+
+  // Current location context
+  if (loc) p += `CURRENT SCENE LOCATION: ${loc}\n\n`;
+
+  // Rolling story memory (last 3 chapters max)
+  if (sumKeys.length) {
+    p += `STORY CONTEXT (last ${sumKeys.length} chapter${sumKeys.length > 1 ? 's' : ''}):\n`;
+    sumKeys.forEach(num => {
+      p += `Chapter ${num}: ${S.mem.chapterSummaries[num]}\n`;
+    });
+    p += `\n`;
+  }
+
+  // Plot events from memory
+  const recentEvts = S.mem.plotEvents.slice(-5);
+  if (recentEvts.length) {
+    p += `KEY EVENTS ALREADY IN THE STORY:\n`;
+    recentEvts.forEach(e => p += `  - ${e}\n`);
+    p += `\n`;
+  }
+
+  // Chapter outline from planner
+  if (outline) {
+    p += `YOUR OUTLINE FOR THIS CHAPTER (FOLLOW THIS):\n${outline}\n\n`;
+  }
+
+  // The actual writing instruction
+  p += `Now write Chapter ${n} of ${total} (${pos}).\n`;
+  p += `\n`;
+  p += `TARGET: Approximately ${target} words.\n`;
+  p += `\n`;
+  p += `START with this exact format on the first line:\n`;
+  p += `Chapter ${n}: [A Short Creative Title]\n`;
+  p += `\n`;
+  p += `Then write the full chapter. Remember:\n`;
+  p += `- Short paragraphs. Breathing room between lines.\n`;
+  p += `- Every new speaker = new line.\n`;
+  p += `- Casual language. Like a story you would tell a friend.\n`;
+  p += `- Use *italics* for internal thoughts.\n`;
+  p += `- Use --- for scene breaks.\n`;
+  p += `- Write complete scenes, not summaries.\n`;
+  p += `- End with something that makes the reader want to keep going.`;
+
+  return p;
+}
+
+function buildCharStateBlock() {
+  const chars = getChars();
+  if (!chars.length) return '';
+
+  const lines = chars.map(c => {
+    const st  = S.mem.characterStates[c.name]?.status || c.status;
+    const loc = S.mem.characterStates[c.name]?.location || '';
+
+    return `  ${c.name} [${c.role}] — STATUS: ${st.toUpperCase()}${
+      loc ? `, last location: ${loc}` : ''
+    }`;
+  });
+
+  return `CHARACTER STATUS (HARD CONSTRAINT — MUST NOT CONTRADICT):\n${lines.join('\n')}`;
+}
+
+function chapterPosition(n, total) {
+  if (n === 1)                               return 'opening chapter — establish world, introduce characters, hook the reader';
+  if (n === total)                           return 'final chapter — climax, resolution, emotional payoff, satisfying ending';
+  if (n <= Math.ceil(total * 0.20))         return 'early chapter — world-building, character development, introduce conflict';
+  if (n <= Math.ceil(total * 0.50))         return 'first-half middle chapter — escalating tension, deepen relationships';
+  if (n <= Math.ceil(total * 0.75))         return 'second-half middle chapter — rising stakes, complications, dark moment';
+  return 'late chapter — approaching climax, maximum stakes, no going back';
+}
+
+// =============================================================
+// LAYER 4 — OLLAMA GENERATION ENGINE (streaming)
+// =============================================================
+async function streamGen(messages, onChunk) {
+  const maxTk = parseInt(gv('maxTokens'))    || 4096;
+  const temp  = parseFloat(gv('temperature'))  || 0.85;
+  const rp    = parseFloat(gv('repeatPenalty'))|| 1.18;
+  const tp    = parseFloat(gv('topP'))         || 0.92;
+
+  S.abortCtrl = new AbortController();
+
+  const apiKey   = getApiKey();
+  const isCloud  = isCloudProvider();
+
+  // Cloud providers don't support Ollama-specific options — send only standard ones
+  const bodyOptions = isCloud
+    ? { temperature: temp, max_tokens: maxTk }
+    : { temperature: temp, num_predict: maxTk, repeat_penalty: rp, top_p: tp, top_k: 40 };
+
+  const reqBody = {
+    model:   getModel(),
+    messages,
+    stream:  true,
+    options: bodyOptions,
+  };
+  if (apiKey) reqBody.apiKey = apiKey; // server uses this to call cloud API
+
+  const r = await fetch('/hazy/chat', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal:  S.abortCtrl.signal,
+    body:    JSON.stringify(reqBody),
+  });
+
+  if (!r.ok) {
+    let errMsg = r.status + ': ' + r.statusText;
+    try { const e = await r.json(); errMsg = e.error || errMsg; } catch {}
+    throw new Error(errMsg);
+  }
+
+const reader  = r.body.getReader();
+const decoder = new TextDecoder();
+let full = '';
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+
+  const chunk = decoder.decode(value, { stream: true });
+
+  for (const line of chunk.split('\n').filter(l => l.trim())) {
+    try {
+      const j = JSON.parse(line);
+      if (j.message?.content) {
+        full += j.message.content;
+        onChunk(j.message.content, full);
+      }
+    } catch {}
+  }
+}
+
+return full;
+}
+// =============================================================
+// LAYER 2c — POST-PROCESSOR
+// =============================================================
+function postProcess(text) {
+  return text
+    .replace(/([.!?])([A-Z])/g, '$1 $2')             // fix merge errors: ".The" -> ". The"
+    .replace(/([a-z,;:])(\n)([a-z])/g, '$1 $3')      // fix broken mid-sentence newlines
+    .replace(/\n{3,}/g, '\n\n')                      // normalize 3+ blank lines to 2
+    .replace(/[ \t]{2,}/g, ' ')                      // collapse multiple spaces/tabs
+    .replace(/^\s+/gm, m => m.replace(/  +/g, ' '))  // trim over-indentation
+    .trim();
+}
+function detectRepetitions(text) {
+  const found = [];
+
+  // 1. Check known forbidden phrases — warn if used more than once
+  S.mem.forbiddenPhrases.forEach(phrase => {
+    const re = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const matches = text.match(re) || [];
+    if (matches.length > 1) found.push('"' + phrase + '" x' + matches.length);
+  });
+
+  // 2. Scan all 4-7 word phrases — AUTO-BAN any used 3+ times
+  const wordRuns = text.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean);
+  const phraseCount = {};
+  for (let i = 0; i < wordRuns.length - 4; i++) {
+    for (let len = 4; len <= 7; len++) {
+      const phrase = wordRuns.slice(i, i + len).join(' ');
+      if (phrase.length < 18) continue;
+      phraseCount[phrase] = (phraseCount[phrase] || 0) + 1;
+    }
+  }
+  Object.entries(phraseCount).forEach(([phrase, count]) => {
+    if (count >= 3 && !S.mem.forbiddenPhrases.includes(phrase)) {
+      S.mem.forbiddenPhrases.push(phrase);
+      found.push('AUTO-BANNED (x' + count + '): "' + phrase + '"');
+    }
+  });
+
+  // 3. Check repeated paragraph openers (first 5 words)
+  const paras = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  const openers = {};
+  paras.forEach(p => {
+    const opener = p.split(/\s+/).slice(0, 5).join(' ').toLowerCase();
+    if (opener.length > 14) {
+      openers[opener] = (openers[opener] || 0) + 1;
+      if (openers[opener] > 1) found.push('repeated opener: "' + opener + '..."');
+    }
+  });
+  return found;
+}
+
+// === FULL-NOVEL SUMMARY ===
+// Builds one complete rolling summary of ALL chapters written so far.
+// This is used by the contradiction checker so it has the full picture.
+function buildFullNovelSummary() {
+  const keys = Object.keys(S.mem.chapterSummaries).map(Number).sort((a, b) => a - b);
+  if (!keys.length) return '';
+  return keys.map(n => 'Chapter ' + n + ': ' + S.mem.chapterSummaries[n]).join('\n');
+}
+
+// === AUTOMATIC PLOT CONTRADICTION CHECKER ===
+// Runs after every chapter. Compares the new chapter against:
+// - ALL chapter summaries (every chapter, not just last 3)
+// - Full character registry with statuses
+// - All recorded plot events
+// Returns array of contradiction strings, or null if clean.
+async function checkPlotContradictions(n, newChapterText) {
+  const fullSummary = buildFullNovelSummary();
+  if (!fullSummary || Object.keys(S.mem.chapterSummaries).length < 1) return null;
+
+  setSt('Ch.' + n + ' -- checking plot consistency across all chapters...');
+
+  const charBlock  = buildCharStateBlock();
+  const allEvents  = S.mem.plotEvents.map(e => '  - ' + e).join('\n');
+
+  try {
+    const r = await fetch('/hazy/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: getModel(),
+        ...(getApiKey() ? {apiKey: getApiKey()} : {}),
+        messages: [{
+          role: 'user',
+          content: [
+            'You are a story continuity editor. Your job is to find REAL plot contradictions.',
+            '',
+            'FULL STORY SUMMARY (ALL chapters written so far):',
+            fullSummary,
+            '',
+            charBlock || '',
+            allEvents ? ('ALL RECORDED PLOT EVENTS:\n' + allEvents) : '',
+            '',
+            'NEW CHAPTER ' + n + ' TEXT (check this against everything above):',
+            newChapterText.substring(0, 4000),
+            '',
+            'INSTRUCTIONS:',
+            '- Find things in the NEW CHAPTER that directly CONTRADICT established facts.',
+            '- A contradiction means: a dead character appearing alive, wrong location, undoing a completed event, character knowing something they were never told, relationship contradicted.',
+            '- Do NOT flag style differences, vague references, or minor timeline gaps.',
+            '- If there are NO real contradictions, respond ONLY with: NO_CONTRADICTIONS',
+            '- If contradictions exist, list each one starting with CONTRADICTION: on its own line.',
+            '- Be concise. One sentence per contradiction.'
+          ].filter(Boolean).join('\n')
+        }],
+        stream: true,
+        options: { temperature: 0.1, num_predict: 500 }
+      })
+    });
+    // Collect streaming response
+    const _cr = r.body.getReader(); const _cd = new TextDecoder();
+    let _cb = '', _cf = '';
+    while(true) { const {done,value} = await _cr.read(); if(done) break; _cb += _cd.decode(value,{stream:true}); const _cl = _cb.split('\n'); _cb=_cl.pop(); for(const _cl2 of _cl){try{const _cj=JSON.parse(_cl2.trim()); if(_cj.message?.content) _cf+=_cj.message.content;}catch{}} }
+    const result = _cf.trim();
+
+    if (!result || result.includes('NO_CONTRADICTIONS')) return null;
+
+    const contradictions = result.split('\n')
+      .map(l => l.trim())
+      .filter(l => l.toUpperCase().startsWith('CONTRADICTION:'))
+      .map(l => l.replace(/^contradiction:/i, '').trim())
+      .filter(Boolean);
+
+    return contradictions.length > 0 ? contradictions : null;
+  } catch (e) {
+    console.warn('Contradiction check failed:', e.message);
+    return null;
+  }
+}
+
+
+
+// =============================================================
+// SUMMARIZE & EXTRACT EVENTS (memory update helpers)
+// =============================================================
+async function summarizeChapter(n, text) {
+  if (!text || text.length < 100) return text.substring(0, 200);
+
+  try {
+    const summary = await fetchText([{
+      role: 'user',
+      content: `Summarize this chapter in exactly 3-4 sentences for story continuity tracking.
+Include: (1) which named characters appeared, (2) the main event that happened, (3) where the chapter ends, (4) the emotional state or situation of the protagonist.
+Be factual and specific. No vague language.
+
+${text.substring(0, 3500)}`
+    }], { temperature: 0.2, num_predict: 320, repeat_penalty: 1.1 });
+    return summary || text.substring(0, 300);
+
+  } catch {
+    return text.substring(0, 300);
+  }
+}
+
+async function extractPlotEvents(n, text) {
+  try {
+    const rawEvents = await fetchText([{
+      role: 'user',
+      content:
+        'From the chapter below, extract the 3-5 most important PLOT EVENTS as short statements.\n' +
+        'Format: one event per line, no bullets, no numbers. Be specific with character names.\n' +
+        'Examples of good events: "The hero discovered the hidden map" or "The villain revealed their true identity"\n\n' +
+        text.substring(0, 3500)
+    }], { temperature: 0.2, num_predict: 250, repeat_penalty: 1.1 });
+
+    const events = rawEvents
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 12 && !line.startsWith('#'))
+      .slice(0, 5);
+
+    events.forEach(ev => {
+      const entry = `[Ch.${n}] ${ev}`;
+      if (!S.mem.plotEvents.includes(entry)) {
+        S.mem.plotEvents.push(entry);
+      }
+    });
+
+    // Keep only the last 50 events
+    if (S.mem.plotEvents.length > 50) {
+      S.mem.plotEvents = S.mem.plotEvents.slice(-50);
+    }
+
+  } catch (error) {
+    console.error('Error extracting plot events:', error);
+  }
+}
+
+async function updateCharacterLocations(n, text) {
+  // Simple heuristic: update character status from form (user-controlled)
+  getChars().forEach(c => {
+    if (!S.mem.characterStates[c.name]) S.mem.characterStates[c.name] = {};
+    S.mem.characterStates[c.name].status = c.status;
+    S.mem.characterStates[c.name].lastSeen = 'Ch.' + n;
+  });
+  // Update current location
+  const loc = gv('curLocation');
+  if (loc && !S.mem.locationsVisited.includes(loc)) {
+    S.mem.locationsVisited.push(loc);
+  }
+  S.mem.currentLocation = loc;
+}
+
+// =============================================================
+// GENERATE ONE CHAPTER — full 8-step pipeline
+// =============================================================
+async function generateChapter(n) {
+  const total  = S.totalChapters;
+  const target = S.wordsTarget;
+  const MAX_CONT = 20;
+
+  // STEP 1: LOAD — sync character states from form into memory
+  await updateCharacterLocations(n - 1, '');
+
+  // STEP 2: PLAN
+  const prevSummary = S.mem.chapterSummaries[n - 1] || '';
+  const outline = await planChapter(n, total, prevSummary);
+  S.outlines[n] = outline;
+
+  // STEP 3: BUILD PROMPT
+  setSt('Writing Chapter ' + n + '…'); setDot('running');
+  setTabState(n, 'gen'); setCB2('active', 'Writing…');
+  showPanel();
+
+  const chPrompt = buildChapterPrompt(n, total, outline);
+  let conv = [{ role: 'user', content: chPrompt }];
+  let fullText = '';
+  S.chapters[n] = '';
+
+  // STEP 4: GENERATE (streaming)
+  fullText = await streamGen(
+    [{ role: 'system', content: S.bible.bible }, ...conv],
+    (chunk, full) => {
+      const cleaned = postProcess(full); // STEP 5 applied live
+      S.chapters[n] = cleaned;
+      if (S.activeChapter === n) renderOutput(n);
+      updateWCBadge(n); updateTotalWords();
+    }
+  );
+
+  // STEP 5: POST-PROCESS final pass
+  fullText = postProcess(fullText);
+  S.chapters[n] = fullText;
+  conv.push({ role: 'assistant', content: fullText });
+
+  // STEP 6: AUTO-CONTINUE (up to 20x) — keeps writing until word target is truly reached
+  let contUsed = 0, reached = false;
+  while (!S.shouldStop && !reached && contUsed < MAX_CONT) {
+    const wc = countWords(fullText);
+    if (wc >= target * 0.99) { reached = true; break; }
+
+    // Also stop if the last continuation added almost nothing (model is truly exhausted)
+    const prevLen = fullText.length;
+    contUsed++;
+    const shortfall = target - wc;
+    setSt('Ch.' + n + ': ' + wc + ' words — auto-continuing (' + contUsed + '/' + MAX_CONT + ')…');
+    setCB2('active', '↻ ' + wc + '/' + target + ' words');
+
+    const continuePrompt = buildContinuePrompt(fullText, wc, shortfall, target);
+    conv.push({ role: 'user', content: continuePrompt });
+
+    const addition = await streamGen(
+      [{ role: 'system', content: S.bible.bible }, ...conv],
+      chunk => {
+        S.chapters[n] = postProcess(S.chapters[n] + chunk);
+        if (S.activeChapter === n) renderOutput(n);
+        updateWCBadge(n); updateTotalWords();
+      }
+    );
+    conv.push({ role: 'assistant', content: addition });
+    fullText = S.chapters[n];
+
+    // Safety: if model added fewer than 50 characters, it's truly stuck — stop looping
+    if (fullText.length - prevLen < 50) {
+      setSt('Ch.' + n + ': model stopped adding content after ' + contUsed + ' continuations.');
+      break;
+    }
+  }
+
+  // STEP 7: UPDATE MEMORY
+  const finalWc = countWords(fullText);
+  setDot('saving');
+  setTabState(n, 'done');
+
+  // 7a. Detect repetitions + AUTO-BAN phrases used 3+ times
+  setSt('Ch.' + n + ' (' + finalWc + ' words) -- scanning for repetitions...');
+  const reps = detectRepetitions(fullText);
+  if (reps.length > 0) {
+    const autoBanned = reps.filter(r => r.startsWith('AUTO-BANNED'));
+    const warnings   = reps.filter(r => !r.startsWith('AUTO-BANNED'));
+    let msg = '';
+    if (autoBanned.length) msg += autoBanned.length + ' phrase(s) auto-added to Forbidden list. ';
+    if (warnings.length)   msg += 'Repeated: ' + warnings.slice(0,3).join('; ');
+    if (msg) showAlert('warn', 'Ch.' + n + ': ' + msg);
+    renderMemory(); // refresh forbidden list display immediately
+  }
+
+  // 7b. Summarize chapter for rolling memory (ALL summaries kept)
+  setSt('Ch.' + n + ' -- summarizing for story memory...');
+  const summary = await summarizeChapter(n, fullText);
+  S.mem.chapterSummaries[n] = summary;
+
+  // 7c. Extract plot events
+  setSt('Ch.' + n + ' -- extracting plot events...');
+  await extractPlotEvents(n, fullText);
+
+  // 7d. Update character locations / status sync
+  await updateCharacterLocations(n, fullText);
+
+  // 7e. AUTOMATIC PLOT CONTRADICTION CHECK (full-novel cross-check)
+  setSt('Ch.' + n + ' -- running full-novel contradiction check...');
+  const contradictions = await checkPlotContradictions(n, fullText);
+  if (contradictions && contradictions.length > 0) {
+    // Show contradiction panel in UI
+    showContradictionAlert(n, contradictions);
+    // Log to memory so it persists
+    if (!S.mem.contradictions) S.mem.contradictions = {};
+    S.mem.contradictions[n] = contradictions;
+  } else {
+    hideContradictionAlert();
+  }
+
+  renderMemory();
+  setCB2('idle', '✓ ' + finalWc + ' words');
+  setSt('Chapter ' + n + ' complete -- ' + finalWc + ' words | Memory updated | Contradiction check done');
+
+  // STEP 8: SAVE to IndexedDB (chapters + full memory including all summaries)
+  await saveChapterToDB(n);
+  await saveMemoryToDB();
+  S.dbSaveCount++;
+  document.getElementById('dbSaves').textContent = S.dbSaveCount;
+
+  renderOutput(n); updateWCBadge(n); updateTotalWords();
+}
+function buildContinuePrompt(text, wc, shortfall, target) {
+  // Get last paragraph as anchor
+  const paras = text.split(/\n\s*\n/).filter(Boolean);
+  const lastPara = paras[paras.length - 1] || '';
+  
+  const sentences = lastPara.split(/(?<=[.!?])\s+/);
+  const lastSentences = sentences.slice(-2).join(' ');
+  const anchor = lastSentences.slice(-300); // max 300 chars
+
+  return (
+    `The chapter currently has ${wc} words and needs approximately ${shortfall} more to reach the ${target}-word target.\n\n` +
+    `The chapter ended with:\n"...${anchor}"\n\n` +
+    `Instructions:\n` +
+    `- Continue the story IMMEDIATELY from the exact point above.\n` +
+    `- Do NOT repeat, summarize, or restate anything that was already written.\n` +
+    `- Do NOT start with a recap or transition phrase like "Meanwhile" or "As we last saw".\n` +
+    `- Maintain the exact same POV, tone, and scene.\n` +
+    `- Write ${shortfall} natural continuation words that flow directly from the last sentence.`
+  );
+}
+
+// =============================================================
+// START / STOP / CONTINUE
+// =============================================================
+async function startGen() {
+  if (S.isRunning) return;
+
+  // Validate
+  if (!gv('novelTitle'))    { showAlert('warn', 'Please enter a novel title.');         return; }
+  if (!gv('plotSummary'))   { showAlert('warn', 'Please enter a plot summary.');        return; }
+  if (!gv('genre'))         { showAlert('warn', 'Please select a genre.');              return; }
+  if (!getChars().length)   { showAlert('warn', 'Please add at least one character.');  return; }
+
+  S.isRunning     = true;
+  S.shouldStop    = false;
+  S.totalChapters = parseInt(gv('totalChapters'))    || 10;
+  S.wordsTarget   = parseInt(gv('wordsPerChapter'))  || 2000;
+  S.dbSaveCount   = 0;
+  S.bible         = buildBible();
+
+  if (!S.novelId) {
+    S.novelId = uid();
+    await saveNovelMetaToDB();
+  }
+
+  setBtns(true); hideAlert();
+  buildChapterTabs(); showPanel();
+  S.activeChapter = 1;
+
+  for (let i = 1; i <= S.totalChapters; i++) {
+    if (S.shouldStop) break;
+
+    // Auto-switch to this chapter's tab so reader follows along
+    S.activeChapter = i;
+    switchTab(i);
+
+    // Scroll the tab into view so it's always visible
+    document.getElementById('tab' + i)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+
+    try {
+      await generateChapter(i);
+    } catch (err) {
+      if (err.name === 'AbortError') { setSt('Stopped at Chapter ' + i + '.'); break; }
+      showAlert('err', 'Error on Chapter ' + i + ': ' + err.message);
+      setDot('error'); break;
+    }
+
+    const pct = (i / S.totalChapters * 100);
+    document.getElementById('pbar').style.width = pct + '%';
+    document.getElementById('curCh').textContent = i + '/' + S.totalChapters;
+
+    // Chapter done — flash the tab green briefly, then auto-advance
+    setTabState(i, 'done');
+    const doneTab = document.getElementById('tab' + i);
+    if (doneTab) {
+      doneTab.style.background = 'rgba(45,106,79,.15)';
+      setTimeout(() => { if (doneTab) doneTab.style.background = ''; }, 1200);
+    }
+
+    // If there's a next chapter, switch to it automatically after a short pause
+    if (i < S.totalChapters && !S.shouldStop) {
+      await new Promise(r => setTimeout(r, 800)); // brief pause so user sees completion
+      S.activeChapter = i + 1;
+      switchTab(i + 1);
+      document.getElementById('tab' + (i + 1))?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }
+
+  S.isRunning = false;
+  setBtns(false);
+
+  if (!S.shouldStop) {
+    setDot('done');
+    const tw = countWords(getFullText());
+    setSt('✓ Novel complete — ' + S.totalChapters + ' chapters, ' + tw.toLocaleString() + ' words');
+    showAlert('ok', 'Your novel is complete! ' + S.totalChapters + ' chapters and ' + tw.toLocaleString() + ' total words. All chapters saved to IndexedDB library.');
+    await saveNovelMetaToDB();
+    await loadLibrary();
+  }
+}
+
+function stopGen() {
+  S.shouldStop = true;
+  if (S.abortCtrl) S.abortCtrl.abort();
+  document.getElementById('stopBtn').disabled = true;
+  setSt('Stopping…'); setDot('idle');
+}
+
+async function forceContinue() {
+  if (S.isRunning || !S.activeChapter) return;
+  const ch = S.activeChapter;
+  const existing = S.chapters[ch] || '';
+  const wc = countWords(existing);
+
+  if (wc >= S.wordsTarget) {
+    showAlert('info', 'Chapter ' + ch + ' already has ' + wc + ' words (target: ' + S.wordsTarget + ').');
+    return;
+  }
+
+  S.isRunning = true; S.shouldStop = false;
+  setBtns(true); setDot('running');
+  setSt('Force-continuing Chapter ' + ch + ' from ' + wc + ' words…');
+  setCB2('active', '↻ ' + wc + '/' + S.wordsTarget);
+
+  if (!S.bible) S.bible = buildBible();
+
+  const conv = [
+    { role: 'user',      content: buildChapterPrompt(ch, S.totalChapters, S.outlines[ch] || '') },
+    { role: 'assistant', content: S.chapters[ch] || existing },
+  ];
+
+  try {
+    let forceAttempt = 0;
+    const FORCE_MAX = 20;
+
+    while (!S.shouldStop && forceAttempt < FORCE_MAX) {
+      const curWc = countWords(S.chapters[ch] || '');
+      if (curWc >= S.wordsTarget * 0.99) break;
+
+      const prevLen = (S.chapters[ch] || '').length;
+      forceAttempt++;
+      const shortfall = S.wordsTarget - curWc;
+      setSt('Force-continuing Ch.' + ch + ': ' + curWc + ' words (' + forceAttempt + '/' + FORCE_MAX + ')…');
+      setCB2('active', '↻ ' + curWc + '/' + S.wordsTarget);
+
+      const cp = buildContinuePrompt(S.chapters[ch] || '', curWc, shortfall, S.wordsTarget);
+      conv.push({ role: 'user', content: cp });
+
+      const addition = await streamGen(
+        [{ role: 'system', content: S.bible.bible }, ...conv],
+        chunk => {
+          S.chapters[ch] = postProcess((S.chapters[ch] || '') + chunk);
+          renderOutput(ch); updateWCBadge(ch); updateTotalWords();
+        }
+      );
+      conv.push({ role: 'assistant', content: addition });
+
+      if ((S.chapters[ch] || '').length - prevLen < 50) {
+        setSt('Ch.' + ch + ': model stopped adding content after ' + forceAttempt + ' attempts.');
+        break;
+      }
+    }
+
+    const newWc = countWords(S.chapters[ch]);
+    setCB2('idle', '✓ ' + newWc + ' words');
+    setDot('done'); setSt('Chapter ' + ch + ' — ' + newWc + ' words');
+    await saveChapterToDB(ch);
+  } catch (err) {
+    if (err.name !== 'AbortError') showAlert('err', err.message);
+  }
+
+  S.isRunning = false; setBtns(false);
+}
+
+function setBtns(running) {
+  document.getElementById('startBtn').disabled  = running;
+  document.getElementById('stopBtn').disabled   = !running;
+  document.getElementById('contBtn').disabled   = running;
+}
+
+// =============================================================
+// LAYER 5 — DATABASE OPERATIONS
+// =============================================================
+async function saveNovelMetaToDB() {
+  if (!S.novelId) return;
+  await dbPut('novels', {
+    id:             S.novelId,
+    title:          gv('novelTitle')   || 'Untitled',
+    genre:          gv('genre')        || 'Fiction',
+    plot:           gv('plotSummary'),
+    setting:        gv('setting'),
+    style:          gv('writingStyle'),
+    characters:     getChars(),
+    totalChapters:  S.totalChapters,
+    wordsTarget:    S.wordsTarget,
+    chaptersWritten:Object.keys(S.chapters).length,
+    totalWords:     countWords(getFullText()),
+    createdAt:      Date.now(),
+    updatedAt:      Date.now()
+  });
+}
+
+async function saveChapterToDB(n) {
+  if (!S.novelId) return;
+  await dbPut('chapters', {
+    id:          S.novelId + '-ch' + n,
+    novelId:     S.novelId,
+    chapterNum:  n,
+    title:       extractChapterTitle(S.chapters[n] || ''),
+    content:     S.chapters[n] || '',
+    outline:     S.outlines[n] || '',
+    wordCount:   countWords(S.chapters[n] || ''),
+    status:      'done',
+    generatedAt: Date.now()
+  });
+}
+
+async function saveMemoryToDB() {
+  if (!S.novelId) return;
+  await dbPut('memory', {
+    novelId:          S.novelId,
+    characterStates:  S.mem.characterStates,
+    plotEvents:       S.mem.plotEvents,
+    chapterSummaries: S.mem.chapterSummaries,
+    locationsVisited: S.mem.locationsVisited,
+    forbiddenPhrases: S.mem.forbiddenPhrases,
+    currentLocation:  S.mem.currentLocation,
+    savedAt:          Date.now()
+  });
+}
+
+async function saveAll() {
+  if (!S.novelId) S.novelId = uid();
+  await saveNovelMetaToDB();
+  for (const n of Object.keys(S.chapters)) await saveChapterToDB(parseInt(n));
+  await saveMemoryToDB();
+  await loadLibrary();
+  showAlert('ok', 'Novel saved to library. ' + Object.keys(S.chapters).length + ' chapters stored in IndexedDB.');
+}
+
+async function loadNovelFromDB(nid) {
+  const meta = await dbGet('novels', nid);
+  if (!meta) return;
+
+  S.novelId = nid;
+  document.getElementById('novelTitle').value   = meta.title   || '';
+  document.getElementById('genre').value        = meta.genre   || '';
+  document.getElementById('plotSummary').value  = meta.plot    || '';
+  document.getElementById('setting').value      = meta.setting || '';
+  document.getElementById('writingStyle').value = meta.style   || '';
+  S.totalChapters = meta.totalChapters || 10;
+  S.wordsTarget   = meta.wordsTarget   || 2000;
+  document.getElementById('totalChapters').value    = S.totalChapters;
+  document.getElementById('wordsPerChapter').value  = S.wordsTarget;
+
+  // Restore characters
+  document.getElementById('charList').innerHTML = ''; charId = 0;
+  (meta.characters || []).forEach(c => addChar(c.name, c.role, c.personality, c.status, c.desc));
+
+  // Restore chapters
+  S.chapters = {}; S.outlines = {};
+  const chs = await dbIdx('chapters', 'novelId', nid);
+  chs.forEach(c => { S.chapters[c.chapterNum] = c.content; S.outlines[c.chapterNum] = c.outline || ''; });
+
+  // Restore memory
+  const mem = await dbGet('memory', nid);
+  if (mem) {
+    S.mem.characterStates  = mem.characterStates  || {};
+    S.mem.plotEvents       = mem.plotEvents       || [];
+    S.mem.chapterSummaries = mem.chapterSummaries || {};
+    S.mem.locationsVisited = mem.locationsVisited || [];
+    S.mem.forbiddenPhrases = mem.forbiddenPhrases || S.mem.forbiddenPhrases;
+    S.mem.currentLocation  = mem.currentLocation  || '';
+    document.getElementById('curLocation').value = S.mem.currentLocation;
+  }
+
+  S.bible = buildBible();
+  buildChapterTabs(); showPanel();
+
+  const maxCh = Object.keys(S.chapters).length > 0
+    ? Math.max(...Object.keys(S.chapters).map(Number)) : 1;
+  S.activeChapter = maxCh;
+  switchTab(maxCh);
+
+  renderMemory(); updateTotalWords();
+  document.getElementById('curCh').textContent = Object.keys(S.chapters).length + '/' + S.totalChapters;
+  setSt('Loaded: "' + meta.title + '" — ' + Object.keys(S.chapters).length + ' chapters restored');
+  await loadLibrary();
+}
+
+async function loadLibrary() {
+  const novels = await dbAll('novels');
+  const list = document.getElementById('libList');
+  if (!list) return;
+
+  if (!novels.length) {
+    list.innerHTML = '<div class="le">No novels yet.<br>Start writing to save.</div>';
+    return;
+  }
+
+  novels.sort((a, b) => b.updatedAt - a.updatedAt);
+
+  list.innerHTML = novels.map(n => {
+    const isCurrent = n.id === S.novelId ? 'cur' : '';
+    const title = eh(n.title || 'Untitled');
+    const genre = eh(n.genre || 'Fiction');
+    const chapters = `${n.chaptersWritten || 0}/${n.totalChapters || 10} ch`;
+    const words = (n.totalWords || 0).toLocaleString() + 'w';
+
+    return `
+      <div class="li ${isCurrent}" onclick="loadNovelFromDB(${n.id})">
+        <div class="li-t">${title}</div>
+        <div class="li-m">${genre} · ${chapters} · ${words}</div>
+      </div>
+    `;
+  }).join('');
+}
+async function delNovel() {
+  if (!S.novelId) {
+    showAlert('warn', 'No novel selected.');
+    return;
+  }
+
+  try {
+    const meta = await dbGet('novels', S.novelId);
+    const name = meta?.title || 'this novel';
+
+    const confirmed = confirm(
+      `Permanently delete "${name}" and all its chapters and memory from IndexedDB?\n\nThis cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    // Delete all chapters
+    const chapters = await dbIdx('chapters', 'novelId', S.novelId);
+    for (const ch of chapters) {
+      await dbDel('chapters', ch.id);
+    }
+
+    // Delete memory and novel
+    await dbDel('memory', S.novelId);
+    await dbDel('novels', S.novelId);
+
+    // Reset and refresh
+    newNovel();
+    await loadLibrary();
+    showAlert('ok', `"${name}" has been deleted from the library.`);
+    
+  } catch (error) {
+    console.error('Error deleting novel:', error);
+    showAlert('error', `Failed to delete the novel: ${error.message}`);
+  }
+}
+function newNovel() {
+  S.novelId = null;
+  S.chapters = {}; S.outlines = {};
+  S.activeChapter = 0; S.dbSaveCount = 0; S.bible = null;
+  S.mem = {
+    characterStates: {}, plotEvents: [], chapterSummaries: {},
+    locationsVisited: [],
+    forbiddenPhrases: [
+      "felt a shiver run down","voice barely above a whisper","voice low and husky",
+      "flutter in her chest","ran down her spine","chill ran down","eyes locked onto",
+      "burned with intensity","felt herself","felt himself","heart skipped a beat",
+      "blood ran cold","breath caught in","spine tingled"
+    ],
+    currentLocation: ''
+  };
+
+  // Clear form
+  ['novelTitle','plotSummary','setting','writingStyle','curLocation'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const genEl = document.getElementById('genre');
+  if (genEl) genEl.value = '';
+  document.getElementById('charList').innerHTML = '';
+  charId = 0;
+  addChar(); // blank row
+
+  document.getElementById('chPanel').style.display = 'none';
+  document.getElementById('pbar').style.width = '0%';
+  document.getElementById('curCh').textContent = '—';
+  document.getElementById('totWords').textContent = '0';
+  document.getElementById('dbSaves').textContent = '0';
+  setSt('New novel — fill in details and begin writing');
+  setDot('idle'); hideAlert(); renderMemory();
+}
+
+// =============================================================
+// STORY MEMORY UI
+// =============================================================
+function renderMemory() {
+  const chars = getChars();
+
+  // Characters
+  const cd = document.getElementById('memChars');
+  if (!chars.length) {
+    cd.innerHTML = '<span style="color:var(--muted);font-size:.74rem;font-style:italic">No characters added yet</span>';
+  } else {
+    cd.innerHTML = chars.map(c => {
+      const st  = S.mem.characterStates[c.name]?.status || c.status || 'alive';
+      const sc  = st==='alive'?'s-a':st==='dead'?'s-d':'s-o';
+      const loc = S.mem.characterStates[c.name]?.location || '';
+      return '<div class="mci">' +
+        '<span class="mcn">' + eh(c.name) + '</span>' +
+        '<span class="mcs ' + sc + '">' + st + '</span>' +
+        (loc ? '<span style="color:var(--muted);font-size:.65rem;margin-left:4px">@ ' + eh(loc) + '</span>' : '') +
+        '<div style="font-size:.72rem;color:var(--muted);margin-top:2px">' + eh(c.role) + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // Plot events (last 8)
+  const ed = document.getElementById('memEvents');
+  const evs = S.mem.plotEvents.slice(-8);
+  ed.innerHTML = evs.length
+    ? evs.map(e => '<div class="mev">' + eh(e) + '</div>').join('')
+    : '<span style="color:var(--muted);font-size:.74rem;font-style:italic">No events recorded yet</span>';
+
+  // Forbidden phrases
+  const fd = document.getElementById('memFP');
+  fd.innerHTML = S.mem.forbiddenPhrases.length
+    ? S.mem.forbiddenPhrases.map((p,i) =>
+        '<span class="fp" onclick="rmFP(' + i + ')" title="Click to remove">' + eh(p) + '</span>'
+      ).join('')
+    : '<span style="color:var(--muted);font-size:.74rem;font-style:italic">None</span>';
+
+  // Locations
+  const ld = document.getElementById('memLoc');
+  const locs = S.mem.locationsVisited.slice(-6);
+  ld.innerHTML = locs.length
+    ? locs.map(l => '<span style="font-size:.72rem;color:var(--muted);margin-right:6px">' + eh(l) + '</span>').join('')
+    : '<span style="color:var(--muted);font-size:.74rem;font-style:italic">None yet</span>';
+}
+
+function addFP() {
+  const inp = document.getElementById('fpInput');
+  const val = inp.value.trim();
+  if (!val) return;
+  if (!S.mem.forbiddenPhrases.includes(val)) S.mem.forbiddenPhrases.push(val);
+  renderMemory(); inp.value = '';
+}
+function rmFP(i)  { S.mem.forbiddenPhrases.splice(i, 1); renderMemory(); }
+function clrEvents() { if (!confirm('Clear all recorded plot events from memory?')) return; S.mem.plotEvents = []; renderMemory(); }
+
+// =============================================================
+// UI HELPERS
+// =============================================================
+function buildChapterTabs() {
+  const t = document.getElementById('chTabs'); t.innerHTML = '';
+  for (let i = 1; i <= S.totalChapters; i++) {
+    const b = document.createElement('button');
+    b.className = 'chtab'; b.id = 'tab' + i; b.textContent = 'Ch ' + i;
+    b.onclick = () => switchTab(i);
+    t.appendChild(b);
+  }
+}
+
+function switchTab(n) {
+  S.activeChapter = n;
+  document.querySelectorAll('.chtab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab' + n)?.classList.add('active');
+  renderOutput(n); updateWCBadge(n);
+}
+
+function setTabState(n, s) {
+  const t = document.getElementById('tab' + n);
+  if (!t) return;
+  t.classList.remove('done', 'gen', 'plan');
+  if (s) t.classList.add(s);
+}
+function showPanel() {
+  const panel = document.getElementById('chPanel');
+  if (panel) panel.style.display = 'block';
+}
+
+function renderOutput(n) {
+  const area = document.getElementById('outArea');
+  const text = S.chapters?.[n] || '';
+  const outline = S.outlines?.[n] || '';
+
+  if (!text && !outline) {
+    area.innerHTML = `<div class="ph">Generating Chapter ${n}…</div>`;
+    return;
+  }
+
+  let html = '';
+
+  // Chapter header banner
+  html += `<div class="ch-banner">Chapter ${n}</div>`;
+
+  // Collapsible outline plan
+  if (outline) {
+    html += `<div class="outln-box"><strong>✎ Plan</strong> ${eh(outline)}</div>`;
+  }
+
+  // Render the chapter body — fmtParagraphs handles titles, dialogue, breaks internally
+  html += fmtParagraphs(text);
+
+  // Live cursor while streaming
+  if (S.isRunning && S.activeChapter === n) {
+    html += `<span class="cursor"></span>`;
+  }
+
+  area.innerHTML = html;
+  area.scrollTop = area.scrollHeight;
+}
+
+function fmtParagraphs(text) {
+  const lines = text.split('\n');
+  let html = '';
+  let buffer = [];
+
+  const flushBuffer = () => {
+    if (!buffer.length) return;
+    const para = buffer.join(' ').trim();
+    if (!para) { buffer = []; return; }
+
+    // Detect dialogue line — starts with a quote character
+    const isDialogue = /^["""'"]/.test(para) || /^[—–-]/.test(para);
+    // Detect scene break
+    const isBreak = /^[-—]{3,}$/.test(para.trim());
+    // Detect internal thought (wrapped in * *)
+    const isThought = /^\*.+\*$/.test(para);
+    // Detect chapter title line
+    const isTitle = /^chapter\s+\d+/i.test(para) && para.length < 80;
+
+    if (isBreak) {
+      html += '<div class="scene-break">✦ ✦ ✦</div>';
+    } else if (isTitle) {
+      html += '<div class="ch-ttl">' + eh(para) + '</div>';
+    } else if (isThought) {
+      // Render *thought* as italic
+      const inner = para.replace(/^\*|\*$/g, '').trim();
+      html += '<p class="thought-line"><em>' + eh(inner) + '</em></p>';
+    } else if (isDialogue) {
+      html += '<p class="dialogue-line">' + renderInline(para) + '</p>';
+    } else {
+      html += '<p>' + renderInline(para) + '</p>';
+    }
+    buffer = [];
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) {
+      flushBuffer();
+    } else {
+      buffer.push(line);
+      // Flush each line individually so every paragraph/dialogue stands alone
+      flushBuffer();
+    }
+  }
+  flushBuffer();
+  return html;
+}
+
+// Render inline formatting: *italic* and **bold**
+function renderInline(text) {
+  return eh(text)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+}
+
+function updateWCBadge(n) {
+  if (S.activeChapter !== n) return;
+  const wc  = countWords(S.chapters[n] || '');
+  const pct = Math.min(100, Math.round(wc / S.wordsTarget * 100));
+  document.getElementById('wcBadge').textContent =
+    wc.toLocaleString() + ' / ' + S.wordsTarget.toLocaleString() + ' words (' + pct + '%)';
+}
+
+function updateTotalWords() {
+  const t = Object.values(S.chapters).reduce((sum, tx) => sum + countWords(tx), 0);
+  document.getElementById('totWords').textContent = t.toLocaleString();
+}
+function extractChapterTitle(text) {
+  const first = (text.split('\n')[0] || '').trim();
+  return first.length < 90 ? first : 'Chapter';
+}
+
+const countWords = t => t.trim().split(/\s+/).filter(Boolean).length;
+
+const setSt = m => {
+  const el = document.getElementById('stxt');
+  if (el) el.textContent = m;
+};
+
+const setDot = s => {
+  const el = document.getElementById('sdot');
+  if (el) el.className = 'sdot ' + s;
+};
+
+const setCB2 = (s, m) => {
+  const b = document.getElementById('cb2');
+  if (b) { b.className = 'cb2 ' + s; b.textContent = m; }
+};
+
+const showPanel2 = () => {
+  const el = document.getElementById('chPanel');
+  if (el) el.style.display = 'block';
+};
+
+const showAlert = (t, m) => {
+  const b = document.getElementById('alertBox');
+  if (b) {
+    b.style.display = 'flex';
+    b.className = 'al ' + t;
+    b.innerHTML = `<span>${eh(m)}</span>`;
+  }
+};
+
+const hideAlert = () => {
+  const b = document.getElementById('alertBox');
+  if (b) b.style.display = 'none';
+};
+
+const eh = s => (s || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
+function resetSession() {
+  if (S.isRunning) { stopGen(); return; }
+
+  const confirmed = confirm(`Reset the current session view?
+
+Note: Your novel data in the library is NOT deleted. This only clears what you see.`);
+  if (!confirmed) return;
+
+  S.chapters = {};
+  S.outlines = {};
+  S.activeChapter = 0;
+
+  const chPanel = document.getElementById('chPanel');
+  if (chPanel) chPanel.style.display = 'none';
+
+  const pbar = document.getElementById('pbar');
+  if (pbar) pbar.style.width = '0%';
+
+  const curCh = document.getElementById('curCh');
+  if (curCh) curCh.textContent = '—';
+
+  const totWords = document.getElementById('totWords');
+  if (totWords) totWords.textContent = '0';
+
+  setSt('Session reset — library data preserved');
+  setDot('idle');
+  hideAlert();
+}
+
+// =============================================================
+// EXPORT
+// =============================================================
+function getFullText() {
+  let out = '';
+  for (let i = 1; i <= S.totalChapters; i++) {
+    if (S.chapters[i]) out += S.chapters[i] + '\n\n';
+  }
+  return out.trim();
+}
+
+function expChapter() {
+  const ch = S.activeChapter;
+  if (!S.chapters[ch]) { showAlert('warn', 'No content in Chapter ' + ch + ' yet.'); return; }
+  const t = gv('novelTitle') || 'novel';
+  dlFile(t + '-chapter-' + ch + '.txt', S.chapters[ch]);
+}
+function expFull() {
+  const text = getFullText();
+  if (!text) {
+    showAlert('warn', 'No chapters generated yet.');
+    return;
+  }
+
+  const title = (gv('novelTitle') || 'novel').trim();
+  const wc = countWords(text);
+  const genre = gv('genre') || 'Fiction';
+
+  const hdr = `${title.toUpperCase()}
+${'='.repeat(Math.min(title.length, 60))}
+
+Genre: ${genre}
+Generated by Hazy Novel Writer v2
+${wc.toLocaleString()} words · ${Object.keys(S.chapters).length} chapters
+
+`;
+
+  dlFile(title.replace(/\s+/g, '-') + '.txt', hdr + text);
+}
+
+function expMD() {
+  const title = (gv('novelTitle') || 'Untitled').trim();
+  const genre = gv('genre') || 'Fiction';
+
+  let md = `# ${title}
+*${genre}*
+
+---
+
+`;
+
+  for (let i = 1; i <= S.totalChapters; i++) {
+    if (S.chapters[i]) {
+      if (S.outlines[i]) {
+        md += `> **Chapter ${i} Plan:** ${S.outlines[i].replace(/\n/g, ' ')}\n\n`;
+      }
+      md += `${S.chapters[i]}\n\n---\n\n`;
+    }
+  }
+
+  dlFile(title.replace(/\s+/g, '-') + '.md', md);
+}
+
+function expJSON() {
+  const t = gv('novelTitle') || 'Untitled';
+  const payload = {
+    title:     t,
+    genre:     gv('genre'),
+    setting:   gv('setting'),
+    style:     gv('writingStyle'),
+    characters:getChars(),
+    memory:    S.mem,
+    chapters:  Object.keys(S.chapters).map(n => ({
+      chapter: parseInt(n),
+      title:   extractChapterTitle(S.chapters[n]),
+      outline: S.outlines[n] || '',
+      content: S.chapters[n],
+      words:   countWords(S.chapters[n])
+    }))
+  };
+  dlFile(t.replace(/\s+/g,'-') + '-full-export.json', JSON.stringify(payload, null, 2));
+}
+
+function dlFile(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  a.download = name; a.click();
+}
+// =============================================================
+// CONTRADICTION ALERT UI
+// =============================================================
+function showContradictionAlert(n, contradictions) {
+  if (!contradictions || !contradictions.length) return;
+
+  let panel = document.getElementById('contradictionPanel');
+  const alertBox = document.getElementById('alertBox');
+  if (!alertBox) return;
+
+  // Create panel if it doesn't exist
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'contradictionPanel';
+    panel.style.cssText = `
+      background: #fff0e0;
+      border: 2px solid #c07010;
+      border-radius: 4px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    `;
+    alertBox.parentNode.insertBefore(panel, alertBox.nextSibling);
+  }
+
+  const list = contradictions.map(c => `
+    <div style="display:flex; gap:8px; padding:5px 0; border-bottom:1px solid rgba(192,112,16,.2)">
+      <span style="color:#c07010; flex-shrink:0">!</span>
+      <span style="font-size:.84rem; color:#6a4000">${eh(c)}</span>
+    </div>
+  `).join('');
+
+  panel.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px">
+      <strong style="font-family:'JetBrains Mono', monospace; font-size:.72rem; color:#8a4000; text-transform:uppercase; letter-spacing:1px">
+        &#9888; Chapter ${n} Plot Contradictions Detected
+      </strong>
+      <button onclick="hideContradictionAlert()" style="background:none; border:none; cursor:pointer; color:#c07010; font-size:1rem">&#10005;</button>
+    </div>
+    ${list}
+    <div style="margin-top:10px; font-size:.78rem; color:#8a4000; font-style:italic">
+      These contradictions were automatically detected by comparing Chapter ${n} against all previous chapter summaries, character statuses, and plot events. Review the chapter content and fix these issues manually, or use Force Continue to regenerate from a specific point.
+    </div>
+  `;
+
+  panel.style.display = 'block';
+}
+
+function hideContradictionAlert() {
+  const panel = document.getElementById('contradictionPanel');
+  if (panel) panel.style.display = 'none';
+}
+
+// Override renderMemory to also show full novel summary count
+const _origRenderMemory = renderMemory;
+function renderMemory() {
+  _origRenderMemory();
+  // Update summary count badge if element exists
+  const el = document.getElementById('summaryCount');
+  if (el) {
+    const n = Object.keys(S.mem.chapterSummaries).length;
+    el.textContent = n + ' chapter' + (n !== 1 ? 's' : '') + ' summarized';
+  }
+}
+
+// =============================================================
+// PROVIDER / MODEL SELECTOR
+// =============================================================
+const PROVIDER_MODELS = {
+  ollama: [
+    {id:'ollama/llama3.2:1b',  label:'Llama 3.2 1B (fastest, ~0.8GB)'},
+    {id:'ollama/llama3.2',     label:'Llama 3.2 3B (recommended, ~2GB)'},
+    {id:'ollama/llama3',       label:'Llama 3 8B (~4.7GB)'},
+    {id:'ollama/mistral',      label:'Mistral 7B (best writing, ~4GB)'},
+    {id:'ollama/mixtral',      label:'Mixtral 8x7B (best local, ~26GB)'},
+    {id:'ollama/gemma2',       label:'Gemma 2 9B (~5.4GB)'},
+    {id:'ollama/phi3',         label:'Phi-3 Mini (~2.3GB)'},
+    {id:'ollama/qwen2.5',      label:'Qwen 2.5 7B (~4.4GB)'},
+    {id:'ollama/deepseek-r1',  label:'DeepSeek R1 7B (~4.5GB)'},
+  ],
+  anthropic: [
+    {id:'anthropic/claude-haiku-4-5-20251001',  label:'Claude Haiku 4.5 — fastest'},
+    {id:'anthropic/claude-sonnet-4-5-20250929', label:'Claude Sonnet 4.5 — recommended'},
+    {id:'anthropic/claude-opus-4-5-20251101',   label:'Claude Opus 4.5 — best quality'},
+    {id:'anthropic/claude-sonnet-4-20250514',   label:'Claude Sonnet 4'},
+    {id:'anthropic/claude-opus-4-20250514',     label:'Claude Opus 4'},
+  ],
+  openai: [
+    {id:'openai/gpt-4o-mini',  label:'GPT-4o Mini — fast'},
+    {id:'openai/gpt-4o',       label:'GPT-4o — recommended'},
+    {id:'openai/gpt-4.1',      label:'GPT-4.1'},
+    {id:'openai/gpt-4.1-mini', label:'GPT-4.1 Mini'},
+    {id:'openai/o4-mini',      label:'o4 Mini — reasoning'},
+    {id:'openai/o3',           label:'o3 — best reasoning'},
+  ],
+  groq: [
+    {id:'groq/llama-3.1-8b-instant',                      label:'Llama 3.1 8B — fastest (free)'},
+    {id:'groq/llama-3.3-70b-versatile',                   label:'Llama 3.3 70B — recommended (free)'},
+    {id:'groq/meta-llama/llama-4-scout-17b-16e-instruct', label:'Llama 4 Scout 17B — newest (free)'},
+    {id:'groq/moonshotai/kimi-k2-instruct',               label:'Kimi K2 — 60 RPM (free)'},
+    {id:'groq/qwen/qwen3-32b',                            label:'Qwen3 32B — 60 RPM (free)'},
+    {id:'groq/openai/gpt-oss-120b',                       label:'GPT OSS 120B (free)'},
+    {id:'groq/compound',                                  label:'Groq Compound (free)'},
+    {id:'groq/compound-mini',                             label:'Groq Compound Mini (free)'},
+    {id:'groq/allam-2-7b',                                label:'Allam 2 7B (free)'},
+  ],
+  gemini: [
+    {id:'gemini/gemini-2.0-flash',   label:'Gemini 2.0 Flash — recommended'},
+    {id:'gemini/gemini-2.5-flash',   label:'Gemini 2.5 Flash — latest'},
+    {id:'gemini/gemini-1.5-pro',     label:'Gemini 1.5 Pro — 1M context'},
+  ],
+};
+
+async function onProviderChange() {
+  const prov = document.getElementById('providerSelect')?.value || 'ollama';
+  const sel  = document.getElementById('modelSelect');
+  localStorage.setItem('hazyProvider', prov);
+
+  if (prov === 'ollama') {
+    if (sel) sel.innerHTML = '<option value="ollama/llama3.2">Detecting models...</option>';
+    await checkConn();
+  } else {
+    const models = PROVIDER_MODELS[prov] || [];
+    if (sel) {
+      sel.innerHTML = models.map(m => '<option value="'+m.id+'">'+m.label+'</option>').join('');
+      const saved = localStorage.getItem('hazyModel_' + prov);
+      if (saved) sel.value = saved;
+    }
+    await checkConn();
+  }
+}
+
+document.addEventListener('change', e => {
+  if (e.target.id === 'modelSelect') {
+    const prov = document.getElementById('providerSelect')?.value || 'ollama';
+    localStorage.setItem('hazyModel_' + prov, e.target.value);
+  }
+});
+
+async function initProviders() {
+  const provSel  = document.getElementById('providerSelect');
+  const modelSel = document.getElementById('modelSelect');
+
+  // Priority: hazyActiveModel (set when user verifies in main app) > hazyProvider > default
+  const activeModel = localStorage.getItem('hazyActiveModel') || '';
+  const activeProv  = activeModel ? activeModel.split('/')[0] : (localStorage.getItem('hazyProvider') || 'ollama');
+
+  if (provSel) provSel.value = activeProv;
+  localStorage.setItem('hazyProvider', activeProv);
+
+  // Populate model dropdown for this provider
+  if (activeProv !== 'ollama') {
+    const models = PROVIDER_MODELS[activeProv] || [];
+    if (modelSel) {
+      modelSel.innerHTML = models.map(m => '<option value="' + m.id + '">' + m.label + '</option>').join('');
+      // Select the exact model that was active in main app
+      if (activeModel && modelSel.querySelector('option[value="' + activeModel + '"]')) {
+        modelSel.value = activeModel;
+      } else {
+        const saved = localStorage.getItem('hazyModel_' + activeProv);
+        if (saved) modelSel.value = saved;
+      }
+    }
+  }
+
+  // Kick off provider change (tests connection, populates Ollama models)
+  await onProviderChange();
+}
+
+</script>
+</body>
+</html>
