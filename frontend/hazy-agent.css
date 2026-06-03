@@ -27,23 +27,59 @@
 }
 
 /* Agent Modal */
+.agent-modal-overlay {
+  z-index: 160;
+}
+
 .agent-modal-content {
-  max-width: 700px;
-  max-height: 85vh;
-  overflow-y: auto;
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(84vh, 760px);
+}
+
+.agent-modal-body {
+  display: grid;
+  gap: 18px;
+}
+
+.agent-modal-content .modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-modal-content .modal-header h2::before {
+  content: "🤖";
+  font-size: 22px;
 }
 
 /* Enable Section */
 .agent-enable-section {
-  padding: 20px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  margin-bottom: 24px;
+  padding: 18px 20px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  margin-bottom: 0;
+}
+
+.agent-enable-section .toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.agent-enable-section .help-text {
+  margin: 12px 0 0 42px;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 /* Tools Section */
 .agent-tools-section {
-  margin-bottom: 24px;
+  margin-bottom: 0;
 }
 
 .agent-tools-section h3 {
@@ -103,9 +139,10 @@
 /* Settings Section */
 .agent-settings {
   padding: 16px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  margin-bottom: 24px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  margin-bottom: 0;
 }
 
 .agent-settings h3 {
@@ -147,6 +184,11 @@
   max-height: 250px;
   overflow-y: auto;
   padding: 2px;
+}
+
+.agent-modal-content .modal-close {
+  font-size: 24px;
+  line-height: 1;
 }
 
 .history-item {
@@ -288,6 +330,56 @@
   font-size: 14px;
 }
 
+[data-theme="ink"] .agent-enable-section,
+[data-theme="dark"] .agent-enable-section,
+[data-theme="ink"] .agent-settings,
+[data-theme="dark"] .agent-settings,
+[data-theme="ink"] .agent-tool-item,
+[data-theme="dark"] .agent-tool-item,
+[data-theme="ink"] .history-item,
+[data-theme="dark"] .history-item {
+  background: #241f1a;
+  border-color: rgba(255,236,204,.18);
+  color: var(--text);
+}
+
+[data-theme="oled"] .agent-enable-section,
+[data-theme="oled"] .agent-settings,
+[data-theme="oled"] .agent-tool-item,
+[data-theme="oled"] .history-item {
+  background: #111;
+  border-color: rgba(255,255,255,.18);
+  color: var(--text);
+}
+
+[data-theme="ink"] .agent-enable-section .help-text,
+[data-theme="dark"] .agent-enable-section .help-text,
+[data-theme="ink"] .agent-tool-item .tool-description,
+[data-theme="dark"] .agent-tool-item .tool-description,
+[data-theme="ink"] .history-time,
+[data-theme="dark"] .history-time {
+  color: #ded3c4;
+}
+
+[data-theme="oled"] .agent-enable-section .help-text,
+[data-theme="oled"] .agent-tool-item .tool-description,
+[data-theme="oled"] .history-time {
+  color: #d8d8cf;
+}
+
+[data-theme="ink"] .setting-row input[type="number"],
+[data-theme="dark"] .setting-row input[type="number"] {
+  background: #17130f;
+  border-color: rgba(255,236,204,.22);
+  color: var(--text);
+}
+
+[data-theme="oled"] .setting-row input[type="number"] {
+  background: #050505;
+  border-color: rgba(255,255,255,.22);
+  color: var(--text);
+}
+
 /* Scrollbars */
 .agent-tools-list::-webkit-scrollbar,
 .agent-history::-webkit-scrollbar {
@@ -331,8 +423,12 @@
 /* Responsive */
 @media (max-width: 768px) {
   .agent-modal-content {
-    max-width: 95%;
+    width: min(100%, calc(100vw - 20px));
     max-height: 90vh;
+  }
+
+  .agent-enable-section .help-text {
+    margin-left: 0;
   }
 
   .tool-params pre,

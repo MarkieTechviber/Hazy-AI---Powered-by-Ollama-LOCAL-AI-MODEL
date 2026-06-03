@@ -116,7 +116,6 @@ HARD RULES:
 
 // All supported programming languages for the Code Builder picker
 const CODE_LANGUAGES = [
-  { label: 'Auto - Hazy decides', value: 'auto',        ext: '',      icon: '' },
   { label: 'Python',         value: 'python',      ext: 'py',    icon: '' },
   { label: 'Java',           value: 'java',        ext: 'java',  icon: '' },
   { label: 'C++',            value: 'cpp',         ext: 'cpp',   icon: '' },
@@ -145,6 +144,7 @@ const CODE_LANGUAGES = [
   { label: 'MATLAB',         value: 'matlab',      ext: 'm',     icon: '' },
   { label: 'Fortran',        value: 'fortran',     ext: 'f90',   icon: '' },
   { label: 'COBOL',          value: 'cobol',       ext: 'cob',   icon: '' },
+  { label: 'Any / Auto',     value: 'auto',        ext: '',      icon: '' },
 ];
 
 // ========================
@@ -184,8 +184,11 @@ KNOWN LIMITATIONS (be upfront about these):
   // Ref: Claude Technical Reference §2.4 (Temperature 0-1, Top-P 0.9-0.99, Top-K 10-100)
   temperature: 0.7,      // 0.0 = deterministic, 1.0 = creative
   maxTokens: 8192,       // Claude supports up to 200k; 8192 is a solid local default
+  topP: 0.95,            // Nucleus sampling — Claude uses 0.9–0.99
   topK: 40,              // Limits to top-K tokens — Claude uses 10–100
-  theme: 'cream',
+  repeatPenalty: 1.05,   // Slight repetition penalty for cleaner output
+  contextSize: 8192,     // Context window for local models
+  theme: 'hazel',
   ttsEnabled: false,
   ttsEngine: 'browser',     // 'browser' | 'piper'
   ttsVoice: 'en_US-lessac-medium',  // Piper voice model name
@@ -262,9 +265,6 @@ const el = {
   toastContainer:     $('toastContainer'),
   sidebar:            $('sidebar'),
   sidebarToggle:      $('sidebarToggle'),
-  mobileSidebarToggle:$('mobileSidebarToggle'),
-  profileMenuBtn:     $('profileMenuBtn'),
-  profileMenu:        $('profileMenu'),
   suggestionGrid:     $('suggestionGrid'),
   exportBtn:          $('exportBtn'),
   ttsToggleBtn:       $('ttsToggleBtn'),
@@ -425,7 +425,6 @@ function init() {
   loadConversations();
   applyTheme(STATE.theme);
   applyAppearanceSettings();
-  renderCodeLanguageOptions();
   normalizeFrontendIcons();
   setupEventListeners();
   checkOllamaConnection();
@@ -438,46 +437,6 @@ function init() {
 // ========================
 const SETTINGS_VERSION = 2; // bump this when default systemPrompt changes
 
-function normalizeTheme(theme) {
-  if (theme === 'hazel') return 'cream';
-  if (theme === 'dark') return 'ink';
-  return ['cream', 'warm', 'ink', 'oled'].includes(theme) ? theme : 'cream';
-}
-
-function resolveFontSizeInput() {
-  const preset = document.getElementById('settingsFontSize')?.value || '14px';
-  if (preset !== 'custom') return preset;
-  const custom = document.getElementById('settingsFontSizeCustom')?.value.trim();
-  return custom || STATE.fontSize || '14px';
-}
-
-function syncFontSizeControls(fontSize) {
-  const fsEl = document.getElementById('settingsFontSize');
-  const customEl = document.getElementById('settingsFontSizeCustom');
-  if (!fsEl) return;
-
-  if (fsEl.value === 'custom' && customEl && !customEl.hidden) {
-    customEl.value = fontSize;
-    return;
-  }
-
-  const presetValues = ['13px', '14px', '16px'];
-  if (presetValues.includes(fontSize)) {
-    fsEl.value = fontSize;
-    if (customEl) {
-      customEl.hidden = true;
-      customEl.value = fontSize;
-    }
-    return;
-  }
-
-  fsEl.value = 'custom';
-  if (customEl) {
-    customEl.hidden = false;
-    customEl.value = fontSize;
-  }
-}
-
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem('hazy_settings') || '{}');
@@ -487,7 +446,7 @@ function loadSettings() {
     if (s.temperature != null) STATE.temperature = s.temperature;
     if (s.maxTokens)       STATE.maxTokens    = s.maxTokens;
     if (s.model)           STATE.model        = s.model;
-    STATE.theme = normalizeTheme(s.theme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'ink' : 'cream'));
+    STATE.theme = s.theme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'hazel');
     // Persona + Scenario
     if (s.personaEnabled  != null) STATE.personaEnabled  = s.personaEnabled;
     if (s.personaRelation)         STATE.personaRelation = s.personaRelation;
@@ -506,9 +465,9 @@ function loadSettings() {
     if (s.density)         STATE.density        = s.density;
     if (s.codeHL   != null) STATE.codeHL        = s.codeHL;
     if (s.markdown != null) STATE.markdown      = s.markdown;
-    if (s.repeatPenalty != null) STATE.repeatPenalty = s.repeatPenalty;
-    if (s.topP != null)          STATE.topP          = s.topP;
-    if (s.contextSize != null)   STATE.contextSize   = s.contextSize;
+    if (s.repeatPenalty)   STATE.repeatPenalty  = s.repeatPenalty;
+    if (s.topP)            STATE.topP           = s.topP;
+    if (s.contextSize)     STATE.contextSize    = s.contextSize;
 
     // Website builder settings
     if (s.showLiveCode != null) STATE.showLiveCode = s.showLiveCode;
@@ -527,9 +486,7 @@ function loadSettings() {
     document.querySelectorAll('.theme-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.theme === STATE.theme)
     );
-  } catch (e) {
-    console.warn('[Hazy] Settings load failed:', e);
-  }
+  } catch(e) {}
 }
 
 function saveSettings() {
@@ -543,7 +500,7 @@ function saveSettings() {
   STATE.maxTokens    = parseInt(el.maxTokens.value);
 
   // Read appearance settings from the new Settings panel
-  const fontSize    = resolveFontSizeInput();
+  const fontSize    = document.getElementById('settingsFontSize')?.value    || '14px';
   const density     = document.getElementById('settingsDensity')?.value     || 'normal';
   const codeHL      = document.getElementById('settingsCodeHighlight')?.checked !== false;
   const markdown    = document.getElementById('settingsMarkdown')?.checked    !== false;
@@ -585,14 +542,11 @@ function saveSettings() {
 }
 
 function applyTheme(theme) {
-  STATE.theme = normalizeTheme(theme);
-  document.documentElement.setAttribute('data-theme', STATE.theme);
-  document.querySelectorAll('.theme-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.theme === STATE.theme)
-  );
+  STATE.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
   const hljsLink = $('hljs-theme');
   if (hljsLink) {
-    hljsLink.href = ['cream', 'warm'].includes(STATE.theme)
+    hljsLink.href = theme === 'hazel'
       ? 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css'
       : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css';
   }
@@ -637,7 +591,7 @@ function applyAppearanceSettings() {
   const dEl  = document.getElementById('settingsDensity');
   const chEl = document.getElementById('settingsCodeHighlight');
   const mdEl = document.getElementById('settingsMarkdown');
-  syncFontSizeControls(fontSize);
+  if (fsEl) fsEl.value = fontSize;
   if (dEl)  dEl.value  = STATE.density || 'normal';
   if (chEl) chEl.checked = codeHL;
   if (mdEl) mdEl.checked = markdown;
@@ -898,63 +852,6 @@ function getActiveSystemPrompt(isBuild, isCode) {
   return STATE.systemPrompt;
 }
 
-function buildHazyMetadata({ files, isBuild, isCode }) {
-  const agentEnabled = Boolean(window.hazyAgent?.isActive?.() || localStorage.getItem('hazyAgentEnabled') === 'true');
-  return {
-    mode: STATE.mode,
-    codeLangHint: STATE.codeLang || 'auto',
-    isBuild,
-    isCode,
-    agentEnabled,
-    agentMaxIterations: Number(window.hazyAgent?.maxIterations || localStorage.getItem('hazyAgentMaxIterations') || 5),
-    attachments: (files || []).map(f => ({
-      name: f.name,
-      category: f.category,
-      ext: f.ext || '',
-      size: f.size,
-      contentPreview: f.content ? f.content.slice(0, 8000) : ''
-    }))
-  };
-}
-
-function decodeHazyTraceHeader(response) {
-  const encoded = response?.headers?.get?.('X-Hazy-Trace');
-  if (!encoded) return null;
-
-  try {
-    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
-    const binary = atob(padded);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const json = new TextDecoder().decode(bytes);
-    return JSON.parse(json);
-  } catch (error) {
-    console.warn('Could not decode Hazy reasoning trace:', error);
-    return null;
-  }
-}
-
-function renderHazyDecisionTrace(trace) {
-  // Decision trace UI disabled: do not render or expose reasoning trace to the frontend
-  return '';
-}
-
-function appendHazyDecisionTrace(trace) {
-  const html = renderHazyDecisionTrace(trace);
-  if (!html) return null;
-
-  const div = document.createElement('div');
-  div.className = 'hazy-trace-wrap';
-  div.innerHTML = html;
-  el.messagesArea.appendChild(div);
-  scrollToBottom(true);
-  return div;
-}
-
-function renderAssistantContent(content, trace = null) {
-  return `${renderHazyDecisionTrace(trace)}${renderMarkdown(content || '')}`;
-}
-
 // ── Generate the first message automatically when starting a persona chat ─
 async function injectPersonaOpener() {
   if (!STATE.personaEnabled) return;
@@ -981,8 +878,8 @@ async function injectPersonaOpener() {
       : '/hazy/chat';
 
     const personaBody = window.location.protocol === 'file:'
-      ? { model: STATE.model, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens } }
-      : { model: savedModel, apiKey: localApiKey || undefined, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens, max_tokens: STATE.maxTokens } };
+      ? { model: STATE.model, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.4), num_predict: STATE.maxTokens } }
+      : { model: savedModel, apiKey: localApiKey || undefined, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.4), num_predict: STATE.maxTokens, max_tokens: STATE.maxTokens } };
 
     const response = await fetch(personaChatEndpoint, {
       method: 'POST',
@@ -993,10 +890,7 @@ async function injectPersonaOpener() {
 
     if (!response.ok) throw new Error(`${response.status}`);
 
-    const hazyTrace = decodeHazyTraceHeader(response);
-
     removeTypingIndicator();
-    if (hazyTrace) appendHazyDecisionTrace(hazyTrace);
     const aiTs = Date.now();
     const { contentDiv } = appendMessage('assistant', '', true, aiTs);
     let fullContent = '';
@@ -1610,7 +1504,7 @@ function appendMessage(role, content, animate = true, ts) {
   }
   group.appendChild(meta);
 
-    if (role === 'assistant') {
+  if (role === 'assistant') {
     // Check if this message was originally a build/code result
     const convMsg2 = STATE.activeConvId
       ? (STATE.conversations[STATE.activeConvId]?.messages || []).find(
@@ -1646,11 +1540,11 @@ function appendMessage(role, content, animate = true, ts) {
         if (openBtn) openBtn.onclick = () => { window._lastBuild = projectData; openBuilderPanel(projectData); };
       } else {
         // Couldn't re-parse — show as markdown (best effort)
-        contentDiv.innerHTML = renderAssistantContent(content, convMsg2?.trace || null);
+        contentDiv.innerHTML = renderMarkdown(content);
         highlightCodeBlocks(contentDiv);
       }
     } else {
-      contentDiv.innerHTML = renderAssistantContent(content, convMsg2?.trace || null);
+      contentDiv.innerHTML = renderMarkdown(content);
       highlightCodeBlocks(contentDiv);
     }
   } else {
@@ -1706,9 +1600,7 @@ function appendMessage(role, content, animate = true, ts) {
     actions.querySelector('.regen-btn')?.addEventListener('click', regenerateLast);
   }
 
-  // Place action buttons inside the message container so they align to the bubble
-  msgDiv.appendChild(actions);
-  group.appendChild(msgDiv);
+  group.appendChild(actions);
   el.messagesArea.appendChild(group);
   return { group, contentDiv };
 }
@@ -2358,23 +2250,13 @@ const FILE_ACCEPT = {
 const CODE_EXTS = new Set([
   'js','ts','jsx','tsx','html','css','py','java','cpp','c','h',
   'sh','bash','json','yaml','yml','xml','md','txt','csv','env',
-  'log','sql','php','rb','go','rs','swift','kt','vue','svelte','zip',
+  'log','sql','php','rb','go','rs','swift','kt','vue','svelte',
 ]);
-
-function renderCodeLanguageOptions() {
-  if (!el.codeLangSelect) return;
-
-  el.codeLangSelect.innerHTML = CODE_LANGUAGES.map((lang) =>
-    `<option value="${lang.value}">${lang.label}</option>`
-  ).join('');
-  el.codeLangSelect.value = STATE.codeLang || 'auto';
-}
 
 function categorizeFile(file) {
   if (FILE_ACCEPT.image.includes(file.type)) return 'image';
   if (FILE_ACCEPT.pdf.includes(file.type))   return 'pdf';
   const ext = file.name.split('.').pop().toLowerCase();
-  if (ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') return 'zip';
   if (CODE_EXTS.has(ext) || FILE_ACCEPT.text.includes(file.type)) return 'text';
   return 'unknown';
 }
@@ -2413,38 +2295,6 @@ function readAsText(file) {
     r.onerror = () => rej(r.error);
     r.readAsText(file);
   });
-}
-
-async function extractZipProjectSummary(file) {
-  if (typeof JSZip === 'undefined') {
-    return `[ZIP: ${file.name} - JSZip not loaded, cannot inspect project archive]`;
-  }
-
-  try {
-    const zip = await JSZip.loadAsync(await file.arrayBuffer());
-    const entries = Object.values(zip.files).filter(entry => !entry.dir).slice(0, 120);
-    const fileList = entries.map(entry => entry.name);
-    const keyFiles = entries.filter(entry =>
-      /(?:package\.json|tsconfig\.json|vite\.config|requirements\.txt|pyproject\.toml|pom\.xml|build\.gradle|cargo\.toml|go\.mod|composer\.json|index\.(?:html|js|ts)|app\.(?:js|ts|py))/i.test(entry.name)
-    ).slice(0, 8);
-    const previews = [];
-
-    for (const entry of keyFiles) {
-      try {
-        const text = await entry.async('string');
-        previews.push(`--- ${entry.name} ---\n${text.slice(0, 2500)}`);
-      } catch {}
-    }
-
-    return [
-      `[ZIP PROJECT: ${file.name}]`,
-      `Files (${fileList.length} scanned):`,
-      fileList.slice(0, 80).join('\n'),
-      previews.length ? `\nKey file previews:\n${previews.join('\n\n')}` : ''
-    ].join('\n');
-  } catch (e) {
-    return `[ZIP inspection failed: ${e.message}]`;
-  }
 }
 
 // Extract text from PDF using PDF.js
@@ -2500,10 +2350,6 @@ async function processFiles(fileList) {
       } else if (category === 'pdf') {
         entry.content    = await extractPDFText(file);
         entry.previewUrl = null;
-      } else if (category === 'zip') {
-        entry.content    = await extractZipProjectSummary(file);
-        entry.previewUrl = null;
-        entry.ext        = 'zip';
       } else {
         entry.content    = await readAsText(file);
         entry.previewUrl = null;
@@ -2590,9 +2436,6 @@ function buildMessageWithFiles(userText, files) {
     context = textFiles.map(f => {
       if (f.category === 'pdf') {
         return `\n\n[Attached PDF: ${f.name}]\n${f.content}`;
-      }
-      if (f.category === 'zip') {
-        return `\n\n[Attached ZIP project: ${f.name}]\n${f.content}`;
       }
       const lang = f.ext || '';
       return `\n\n[Attached file: ${f.name}]\n\`\`\`${lang}\n${f.content}\n\`\`\``;
@@ -2717,7 +2560,6 @@ async function sendMessage(userText) {
       model:    modelField,
       messages,
       stream:   true,
-      hazy:     buildHazyMetadata({ files, isBuild, isCode }),
       // Pass key in body — server uses this first, falls back to hazy-config.json
       apiKey:   localApiKey || undefined,
       options: {
@@ -2740,7 +2582,6 @@ async function sendMessage(userText) {
     if (window.location.protocol === 'file:') {
       chatEndpoint = `${STATE.ollamaUrl}/api/chat`;
       chatBody.model = STATE.model; // Ollama wants bare model name
-      delete chatBody.hazy;
     }
 
     const response = await fetch(chatEndpoint, {
@@ -2809,8 +2650,6 @@ async function sendMessage(userText) {
       }
     }
 
-    const hazyTrace = decodeHazyTraceHeader(response);
-
     removeTypingIndicator();
     const aiTs = Date.now();
     const { contentDiv } = appendMessage('assistant', '', true, aiTs);
@@ -2860,7 +2699,7 @@ async function sendMessage(userText) {
                   </div>`;
               }
             } else {
-              contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace) + '<span class="stream-cursor"></span>';
+              contentDiv.innerHTML = renderMarkdown(fullContent) + '<span class="stream-cursor"></span>';
             }
             scrollToBottom();
           }
@@ -2874,7 +2713,7 @@ async function sendMessage(userText) {
 
     // Final flush to IndexedDB before parsing
 
-    conv.messages.push({ role: 'assistant', content: fullContent, ts: aiTs, buildMode: (isBuild || isCode) ? (isCode ? 'code' : 'website') : undefined, trace: hazyTrace || undefined });
+    conv.messages.push({ role: 'assistant', content: fullContent, ts: aiTs, buildMode: (isBuild || isCode) ? (isCode ? 'code' : 'website') : undefined });
     saveConversations();
 
     // Generate a smart title after the very first exchange
@@ -2944,7 +2783,7 @@ async function sendMessage(userText) {
         showToast('Could not extract files — see suggestions below', '');
       }
     } else {
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace);
+      contentDiv.innerHTML = renderMarkdown(fullContent);
       highlightCodeBlocks(contentDiv);
     }
 
@@ -3150,11 +2989,6 @@ function closeSidebarMobile() {
     el.sidebar.classList.remove('open');
     document.querySelector('.sidebar-overlay')?.classList.remove('active');
   }
-}
-
-function setProfileMenuOpen(open) {
-  el.profileMenu?.classList.toggle('open', open);
-  el.profileMenuBtn?.classList.toggle('open', open);
 }
 
 // ========================
@@ -3470,20 +3304,12 @@ function setupEventListeners() {
     card.addEventListener('click', () => {
       el.chatInput.value = card.dataset.prompt;
       updateSendBtn(); autoResizeTextarea(); el.chatInput.focus();
-      setMode(card.dataset.mode || 'chat');
+      setMode('build');
     });
   });
 
-  // Profile menu
-  el.profileMenuBtn?.addEventListener('click', e => {
-    e.stopPropagation();
-    const shouldOpen = !el.profileMenu?.classList.contains('open');
-    setProfileMenuOpen(shouldOpen);
-  });
-
   // Model selector — fixed-position dropdown that escapes sidebar overflow
-  el.modelSelector.addEventListener('click', e => {
-    e.stopPropagation();
+  el.modelSelector.addEventListener('click', () => {
     const isOpen = el.modelDropdown.classList.contains('open');
     if (isOpen) {
       el.modelDropdown.classList.remove('open');
@@ -3511,16 +3337,10 @@ function setupEventListeners() {
     if (!el.modelSelector.contains(e.target) && !el.modelDropdown.contains(e.target)) {
       el.modelDropdown.classList.remove('open'); el.modelSelector.classList.remove('open');
     }
-    if (el.profileMenu?.classList.contains('open') &&
-        !el.profileMenu.contains(e.target) &&
-        !el.profileMenuBtn?.contains(e.target)) {
-      setProfileMenuOpen(false);
-    }
   });
 
   // Settings
   el.settingsBtn.addEventListener('click', () => {
-    setProfileMenuOpen(false);
     document.getElementById('historyDrawer')?.classList.remove('open');
     document.getElementById('moreMenu')?.classList.remove('open');
     document.getElementById('appScrim')?.classList.remove('active');
@@ -3538,7 +3358,7 @@ function setupEventListeners() {
     const rpEl  = document.getElementById('settingsRepeatPenalty');
     const tpEl  = document.getElementById('settingsTopP');
     const csEl  = document.getElementById('settingsContextSize');
-    syncFontSizeControls(STATE.fontSize || '14px');
+    if (fsEl)  fsEl.value    = STATE.fontSize    || '14px';
     if (dEl)   dEl.value     = STATE.density     || 'normal';
     if (chEl)  chEl.checked  = STATE.codeHL      !== false;
     if (mdEl)  mdEl.checked  = STATE.markdown    !== false;
@@ -3559,6 +3379,18 @@ function setupEventListeners() {
       document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active'); applyTheme(btn.dataset.theme);
     });
+  });
+
+  // Sidebar mobile
+  el.sidebarToggle.addEventListener('click', () => {
+    el.sidebar.classList.toggle('open');
+    let overlay = document.querySelector('.sidebar-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'sidebar-overlay'; document.body.appendChild(overlay);
+      overlay.addEventListener('click', () => { el.sidebar.classList.remove('open'); overlay.classList.remove('active'); });
+    }
+    overlay.classList.toggle('active', el.sidebar.classList.contains('open'));
   });
 
   const historyDrawer = document.getElementById('historyDrawer');
@@ -3585,10 +3417,7 @@ function setupEventListeners() {
   document.getElementById('welcomeHistoryBtn')?.addEventListener('click', openHistoryBtn);
   document.getElementById('historyDrawerClose')?.addEventListener('click', closeUtilityPanels);
   document.getElementById('moreMenuBtn')?.addEventListener('click', openMoreMenu);
-  document.getElementById('railMoreBtn')?.addEventListener('click', () => {
-    setProfileMenuOpen(false);
-    openMoreMenu();
-  });
+  document.getElementById('railMoreBtn')?.addEventListener('click', openMoreMenu);
   document.getElementById('moreMenuClose')?.addEventListener('click', closeUtilityPanels);
   document.getElementById('railSettingsBtn')?.addEventListener('click', () => el.settingsBtn.click());
   document.getElementById('moreTrainingBtn')?.addEventListener('click', () => {
@@ -3601,7 +3430,6 @@ function setupEventListeners() {
   document.addEventListener('keydown', e => {
     if ((e.metaKey||e.ctrlKey) && e.key === 'k') { e.preventDefault(); STATE.activeConvId = null; showWelcomeScreen(); renderChatHistory(); el.chatInput.focus(); }
     if (e.key === 'Escape') {
-      setProfileMenuOpen(false);
       closeModal('settingsModal');
       closeModal('renameModal');
       closeModal('personaModal');
@@ -3737,10 +3565,7 @@ function setupEventListeners() {
   });
 
   // ── Persona ──────────────────────────────────────
-  el.personaBtn?.addEventListener('click', () => {
-    setProfileMenuOpen(false);
-    openPersonaModal();
-  });
+  el.personaBtn?.addEventListener('click', () => openPersonaModal());
   el.personaClose?.addEventListener('click', () => closeModal('personaModal'));
   el.personaCancelBtn?.addEventListener('click', () => closeModal('personaModal'));
   el.personaModal?.addEventListener('click', e => { if (e.target === el.personaModal) closeModal('personaModal'); });
@@ -4751,14 +4576,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Appearance tab — live preview as user changes values
-  document.getElementById('settingsFontSize')?.addEventListener('change', e => {
-    const customEl = document.getElementById('settingsFontSizeCustom');
-    if (customEl) customEl.hidden = e.target.value !== 'custom';
-    STATE.fontSize = resolveFontSizeInput();
-    applyAppearanceSettings();
-  });
-  document.getElementById('settingsFontSizeCustom')?.addEventListener('input', () => {
-    STATE.fontSize = resolveFontSizeInput();
+  document.getElementById('settingsFontSize')?.addEventListener('change', () => {
+    STATE.fontSize = document.getElementById('settingsFontSize').value;
     applyAppearanceSettings();
   });
   document.getElementById('settingsDensity')?.addEventListener('change', () => {

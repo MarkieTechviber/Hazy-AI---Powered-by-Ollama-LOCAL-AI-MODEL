@@ -25,6 +25,48 @@
 
   console.log('🤖 HAZY Agent Mode v1.0 Loading...');
 
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function getActiveAgentModel() {
+    return localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
+  }
+
+  function getProviderFromModel(model) {
+    return (model || '').split('/')[0] || 'ollama';
+  }
+
+  function isCloudProvider(provider) {
+    return ['anthropic', 'openai', 'groq', 'gemini'].includes(provider);
+  }
+
+  function buildAgentEndpoint() {
+    return window.location.protocol === 'file:'
+      ? `${STATE.ollamaUrl}/api/chat`
+      : '/hazy/chat';
+  }
+
+  function isSafeCodeExpression(code) {
+    if (typeof code !== 'string') return false;
+
+    const trimmed = code.trim();
+    if (!trimmed || trimmed.length > 400) return false;
+
+    const blockedPatterns = [
+      /\b(?:window|document|globalThis|self|parent|top|frames)\b/i,
+      /\b(?:Function|eval|fetch|XMLHttpRequest|WebSocket|Worker|import)\b/i,
+      /\b(?:localStorage|sessionStorage|indexedDB|navigator|location|history)\b/i,
+      /\b(?:constructor|prototype|__proto__|this|new)\b/i,
+      /[;={}]/,
+      /=>/
+    ];
+
+    return blockedPatterns.every(pattern => !pattern.test(trimmed));
+  }
+
   // ============================================================================
   // BUILT-IN TOOLS
   // ============================================================================
@@ -146,7 +188,7 @@
 
     code_executor: {
       name: 'code_executor',
-      description: 'Execute JavaScript code safely in a sandboxed environment. Returns the result.',
+      description: 'Evaluate small JavaScript expressions for math/data work only. This is intentionally restricted and is not a secure sandbox.',
       parameters: {
         type: 'object',
         properties: {
@@ -159,22 +201,28 @@
       },
       execute: async (params) => {
         try {
-          // Create sandbox
+          if (!isSafeCodeExpression(params.code)) {
+            return {
+              success: false,
+              error: 'Only simple JavaScript expressions are allowed in code_executor.'
+            };
+          }
+
           const sandbox = {
-            console: {
-              log: (...args) => args.join(' ')
-            },
             Math,
             Date,
             JSON,
             Array,
             Object,
             String,
-            Number
+            Number,
+            Boolean
           };
 
-          // Execute code in sandbox
-          const func = new Function(...Object.keys(sandbox), params.code);
+          const func = new Function(
+            ...Object.keys(sandbox),
+            '"use strict"; return (' + params.code + ');'
+          );
           const result = func(...Object.values(sandbox));
 
           return {
@@ -416,8 +464,8 @@ IMPORTANT:
       }
 
       this.toolCallHistory = [];
-      let currentMessage = userMessage;
       let iteration = 0;
+      const messages = [{ role: 'user', content: userMessage }];
 
       // Add tool instructions to system prompt
       const agentPrompt = this.getToolsPrompt();
@@ -429,14 +477,14 @@ IMPORTANT:
           iteration++;
 
           // Get AI response
-          const response = await this.getAIResponse(currentMessage);
+          const response = await this.getAIResponse(messages);
           
           // Check if response contains a tool call
           const toolCall = this.parseToolCall(response);
+          messages.push({ role: 'assistant', content: response });
 
           if (!toolCall) {
             // No tool call - this is the final answer
-            STATE.systemPrompt = originalSystemPrompt;
             return {
               useAgent: true,
               finalResponse: response,
@@ -450,11 +498,13 @@ IMPORTANT:
           this.displayToolResult(toolCall.tool, toolResult);
 
           // Prepare next message with tool result
-          currentMessage = `Previous thought: ${toolCall.thought}\n\nTool: ${toolCall.tool}\nResult: ${JSON.stringify(toolResult)}\n\nBased on this result, what's your next action or final answer?`;
+          messages.push({
+            role: 'user',
+            content: `Tool result for ${toolCall.tool}: ${JSON.stringify(toolResult)}\n\nContinue reasoning. If you need another tool, respond with JSON only. Otherwise provide the final answer.`
+          });
         }
 
         // Max iterations reached
-        STATE.systemPrompt = originalSystemPrompt;
         return {
           useAgent: true,
           finalResponse: 'Agent reached maximum iterations. Here\'s what I found:\n\n' + 
@@ -463,25 +513,77 @@ IMPORTANT:
         };
 
       } catch (error) {
-        STATE.systemPrompt = originalSystemPrompt;
         console.error('Agent loop error:', error);
         return {
           useAgent: false,
           error: error.message
         };
+      } finally {
+        STATE.systemPrompt = originalSystemPrompt;
       }
     }
 
-    async getAIResponse(message) {
-      // This would integrate with your existing sendMessage function
-      // For now, return a mock response
-      // In production, call your actual LLM API
-      return new Promise((resolve) => {
-        // Mock - replace with actual API call
-        setTimeout(() => {
-          resolve('Mock AI response');
-        }, 1000);
+    async getAIResponse(messageInput) {
+      const savedModel = getActiveAgentModel();
+      const provider = getProviderFromModel(savedModel);
+      const isCloud = isCloudProvider(provider);
+      const apiKey = isCloud ? (localStorage.getItem('hazyKey_' + provider) || '') : '';
+      const endpoint = buildAgentEndpoint();
+      const messages = Array.isArray(messageInput)
+        ? messageInput
+        : [{ role: 'user', content: String(messageInput) }];
+
+      const requestBody = {
+        model: endpoint === '/hazy/chat' ? savedModel : STATE.model,
+        apiKey: apiKey || undefined,
+        messages: [
+          { role: 'system', content: STATE.systemPrompt },
+          ...messages
+        ],
+        stream: false,
+        options: {
+          temperature: STATE.temperature,
+          num_predict: Math.min(STATE.maxTokens || 2048, 2048),
+          max_tokens: Math.min(STATE.maxTokens || 2048, 2048),
+          top_p: STATE.topP,
+          top_k: STATE.topK,
+          repeat_penalty: STATE.repeatPenalty,
+          num_ctx: STATE.contextSize
+        }
+      };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
       });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => response.statusText);
+        throw new Error(`Agent request failed (${response.status}): ${errorText}`);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        return data.message?.content || data.choices?.[0]?.message?.content || '';
+      }
+
+      const rawText = await response.text();
+      const lines = rawText.split('\n').map(line => line.trim()).filter(Boolean);
+      let combined = '';
+
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line);
+          combined += parsed.message?.content || '';
+        } catch (error) {
+          // Ignore malformed streaming fragments and keep best-effort output.
+        }
+      }
+
+      return combined || rawText.trim();
     }
 
     displayToolCall(toolCall) {
@@ -495,7 +597,7 @@ IMPORTANT:
           <span class="tool-icon">🔧</span>
           <span class="tool-name">Using: ${toolCall.tool}</span>
         </div>
-        <div class="tool-thought">${this.escapeHtml(toolCall.thought)}</div>
+        <div class="tool-thought">${escapeHtml(toolCall.thought)}</div>
         <div class="tool-params">
           <strong>Parameters:</strong>
           <pre>${JSON.stringify(toolCall.parameters, null, 2)}</pre>
@@ -523,7 +625,7 @@ IMPORTANT:
           <span class="tool-name">Result: ${toolName}</span>
         </div>
         <div class="tool-result-content">
-          <pre>${this.escapeHtml(String(resultText))}</pre>
+          <pre>${escapeHtml(String(resultText))}</pre>
         </div>
       `;
       
@@ -535,12 +637,6 @@ IMPORTANT:
       return this.toolCallHistory.map((call, idx) => {
         return `${idx + 1}. ${call.tool}: ${call.result.success ? '✅ ' + call.result.result : '❌ ' + call.result.error}`;
       }).join('\n');
-    }
-
-    escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
     }
 
     getToolsList() {
@@ -568,14 +664,20 @@ IMPORTANT:
     }
 
     createUI() {
-      // Add Agent button to header
-      const headerRight = document.querySelector('.header-right');
-      if (!headerRight) return;
+      const mountTarget = document.querySelector('.header-right')
+        || document.querySelector('.input-mode-bar')
+        || document.querySelector('.conversation-header')
+        || document.querySelector('.topbar-actions');
+      const agentBtn = document.getElementById('agentBtn') || document.createElement('button');
+      const legacyIndicator = document.getElementById('agentIndicator');
 
-      const agentBtn = document.createElement('button');
-      agentBtn.id = 'agentBtn';
+      if (legacyIndicator && legacyIndicator.parentElement?.id === 'legacy-hooks') {
+        legacyIndicator.remove();
+      }
+
       agentBtn.className = 'icon-btn';
       agentBtn.title = 'Agent Mode';
+      agentBtn.setAttribute('aria-label', 'Agent Mode');
       agentBtn.innerHTML = `
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
           <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
@@ -583,8 +685,10 @@ IMPORTANT:
         </svg>
         <span class="agent-indicator" id="agentIndicator"></span>
       `;
-      
-      headerRight.insertBefore(agentBtn, headerRight.firstChild);
+
+      if (mountTarget && !mountTarget.contains(agentBtn)) {
+        mountTarget.appendChild(agentBtn);
+      }
 
       this.createModal();
     }
@@ -592,22 +696,22 @@ IMPORTANT:
     createModal() {
       const modal = document.createElement('div');
       modal.id = 'agentModal';
-      modal.className = 'modal';
+      modal.className = 'modal-overlay agent-modal-overlay';
       modal.innerHTML = `
-        <div class="modal-content agent-modal-content">
+        <div class="modal modal-compact agent-modal-content">
           <div class="modal-header">
-            <h2>🤖 Agent Mode</h2>
-            <button class="modal-close" id="agentCloseBtn">&times;</button>
+            <h2>Agent Mode</h2>
+            <button class="modal-close" id="agentCloseBtn" aria-label="Close Agent Mode">&times;</button>
           </div>
           
-          <div class="modal-body">
+          <div class="modal-body modal-body-padded agent-modal-body">
             <!-- Enable Toggle -->
             <div class="agent-enable-section">
               <label class="toggle-label">
                 <input type="checkbox" id="agentEnableToggle">
                 <span>Enable Agent Mode</span>
               </label>
-              <p class="help-text">When enabled, the AI can use tools to search the web, perform calculations, and execute code to answer your questions.</p>
+              <p class="help-text">When enabled, the AI can use tools to search the web, perform calculations, and evaluate small JavaScript expressions. The code tool is intentionally restricted and is not a secure sandbox.</p>
             </div>
 
             <!-- Available Tools -->
@@ -645,7 +749,7 @@ IMPORTANT:
       });
 
       // Close modal
-      document.getElementById('agentCloseBtn')?.addEventListener('click', () => {
+      this.modal?.querySelector('#agentCloseBtn')?.addEventListener('click', () => {
         this.closeModal();
       });
 
@@ -654,7 +758,7 @@ IMPORTANT:
       });
 
       // Enable toggle
-      document.getElementById('agentEnableToggle')?.addEventListener('change', (e) => {
+      this.modal?.querySelector('#agentEnableToggle')?.addEventListener('change', (e) => {
         if (e.target.checked) {
           this.agent.enable();
           this.updateIndicator();
@@ -667,26 +771,26 @@ IMPORTANT:
       });
 
       // Max iterations
-      document.getElementById('agentMaxIterations')?.addEventListener('change', (e) => {
+      this.modal?.querySelector('#agentMaxIterations')?.addEventListener('change', (e) => {
         this.agent.maxIterations = parseInt(e.target.value);
         localStorage.setItem('hazyAgentMaxIterations', e.target.value);
       });
     }
 
     openModal() {
-      this.modal.classList.add('active');
+      this.modal.classList.add('open');
       this.refreshToolsList();
       this.refreshHistory();
     }
 
     closeModal() {
-      this.modal.classList.remove('active');
+      this.modal.classList.remove('open');
     }
 
     refreshToolsList() {
       const tools = this.agent.getToolsList();
-      const listEl = document.getElementById('agentToolsList');
-      const countEl = document.getElementById('toolCount');
+      const listEl = this.modal?.querySelector('#agentToolsList');
+      const countEl = this.modal?.querySelector('#toolCount');
       
       if (!listEl || !countEl) return;
 
@@ -696,8 +800,8 @@ IMPORTANT:
         <div class="agent-tool-item">
           <div class="tool-icon">🔧</div>
           <div class="tool-info">
-            <div class="tool-name">${this.escapeHtml(tool.name)}</div>
-            <div class="tool-description">${this.escapeHtml(tool.description)}</div>
+            <div class="tool-name">${escapeHtml(tool.name)}</div>
+            <div class="tool-description">${escapeHtml(tool.description)}</div>
           </div>
         </div>
       `).join('');
@@ -705,7 +809,7 @@ IMPORTANT:
 
     refreshHistory() {
       const history = this.agent.toolCallHistory;
-      const historyEl = document.getElementById('agentHistory');
+      const historyEl = this.modal?.querySelector('#agentHistory');
       
       if (!historyEl) return;
 
@@ -723,7 +827,7 @@ IMPORTANT:
               <span class="history-time">${time}</span>
             </div>
             <div class="history-result ${call.result.success ? 'success' : 'error'}">
-              ${call.result.success ? '✅' : '❌'} ${this.escapeHtml(String(call.result.result || call.result.error))}
+              ${call.result.success ? '✅' : '❌'} ${escapeHtml(String(call.result.result || call.result.error))}
             </div>
           </div>
         `;
@@ -734,8 +838,8 @@ IMPORTANT:
       const enabled = localStorage.getItem('hazyAgentEnabled') === 'true';
       const maxIterations = localStorage.getItem('hazyAgentMaxIterations') || '5';
       
-      const toggle = document.getElementById('agentEnableToggle');
-      const iterInput = document.getElementById('agentMaxIterations');
+      const toggle = this.modal?.querySelector('#agentEnableToggle');
+      const iterInput = this.modal?.querySelector('#agentMaxIterations');
       
       if (toggle) toggle.checked = enabled;
       if (iterInput) iterInput.value = maxIterations;
@@ -759,11 +863,6 @@ IMPORTANT:
       }
     }
 
-    escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
   }
 
   // ============================================================================

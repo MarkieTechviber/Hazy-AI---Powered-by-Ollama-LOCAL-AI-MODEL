@@ -14,7 +14,6 @@
   <link rel="stylesheet" href="hazy-agent.css" />
 </head>
 <body>
-  <!-- UI RESET: legacy dashboard shell erased; compatibility hooks remain hidden so app.js keeps working. -->
   <svg width="0" height="0" style="position:absolute;left:-9999px;overflow:hidden" aria-hidden="true" focusable="false">
     <symbol id="icon-chat" viewBox="0 0 24 24"><path d="M5 6.5C5 5.12 6.12 4 7.5 4h9C17.88 4 19 5.12 19 6.5v6c0 1.38-1.12 2.5-2.5 2.5H10l-4 3v-3H7.5C6.12 15 5 13.88 5 12.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="icon-home" viewBox="0 0 24 24"><path d="M4.5 11.5 12 5l7.5 6.5M6.5 10.75V19h4.5v-5H13v5h4.5v-8.25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -46,271 +45,292 @@
     <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/></symbol>
   </svg>
 
-  <div class="app-shell dream-layout">
+  <div class="app-shell">
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-top">
-        <div class="sidebar-profile-bar">
-          <button class="sidebar-profile-trigger" id="profileMenuBtn" type="button" title="Open profile menu">
-            <div class="brand-mark sidebar-profile-avatar"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bot"></use></svg></div>
-            <div class="brand-copy sidebar-profile-copy">
-              <strong>Hazy</strong>
-              <span>Your local AI assistant</span>
-            </div>
-            <span class="chevron">⌄</span>
-          </button>
+      <div class="sidebar-brand">
+        <div class="brand-mark"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bot"></use></svg></div>
+        <div class="brand-copy">
+          <strong>Hazy</strong>
+          <span>Dream On</span>
         </div>
-
-        <div class="sidebar-profile-menu" id="profileMenu">
-          <div class="profile-status-pill">
-            <span class="status-dot online" id="statusDot"></span>
-            <span id="statusText">Online</span>
-          </div>
-          <button class="sidebar-card model-selector" id="modelSelector" type="button">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-box"></use></svg>
-            <span class="model-selector-copy">
-              <strong id="currentModelName">minimax-m3:cloud</strong>
-              <small>Local · Private</small>
-            </span>
-            <span class="chevron">⌄</span>
-          </button>
-          <button class="sidebar-card" id="settingsBtn" type="button">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-settings"></use></svg>
-            <span>Settings</span>
-            <span class="chevron">⌄</span>
-          </button>
-          <button class="sidebar-card" id="personaBtn" type="button">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-user"></use></svg>
-            <span>Persona</span>
-            <span class="chevron">⌄</span>
-          </button>
-          <button class="sidebar-card" id="railMoreBtn" type="button">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-more"></use></svg>
-            <span>More Tools</span>
-            <span class="chevron">⌄</span>
-          </button>
-        </div>
-
-        <div class="sidebar-search-row">
-          <label class="sidebar-search" for="historySearch">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-search"></use></svg>
-            <input id="historySearch" type="search" placeholder="Search chats..." autocomplete="off" />
-          </label>
-        </div>
-
-        <button class="new-chat-btn" id="newChatBtn" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-sparkles"></use></svg>
-          <span>New Chat</span>
-        </button>
-        <button class="clear-chat-btn" id="clearChatBtn" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
-          <span>Clear Chat</span>
-        </button>
-
-        <div class="sidebar-section-label">Recent Chats</div>
-        <p class="sidebar-history-note">Jump back into older threads, rename them, or clean them up from here.</p>
-        <div class="chat-history" id="chatHistory"></div>
       </div>
 
-      <div class="sidebar-bottom" hidden>
-        <button class="sidebar-card model-selector" id="legacyModelSelector" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-box"></use></svg>
-          <span class="model-selector-copy">
-            <strong id="legacyCurrentModelName">minimax-m3:cloud</strong>
-            <small>Local · Private</small>
-          </span>
-          <span class="chevron">⌄</span>
+      <div class="sidebar-utility-group">
+        <button class="utility-btn utility-btn-primary" id="newChatBtn" title="New chat">
+          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>
+          <span>New Chat</span>
         </button>
-
-        <button class="sidebar-card" id="legacyRailSettingsBtn" type="button">
+        <button class="utility-btn" id="historyToggleBtn" title="Recent chats">
+          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>
+          <span>Recent</span>
+        </button>
+        <button class="utility-btn" id="railSettingsBtn" title="Settings">
           <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-settings"></use></svg>
           <span>Settings</span>
-          <span class="chevron">⌄</span>
         </button>
-        <button class="sidebar-card" id="legacyPersonaBtn" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-user"></use></svg>
-          <span>Persona</span>
-          <span class="chevron">⌄</span>
-        </button>
-        <button class="sidebar-card" id="legacyRailMoreBtn" type="button">
+        <button class="utility-btn" id="railMoreBtn" title="More tools">
           <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-more"></use></svg>
-          <span>More Tools</span>
-          <span class="chevron">⌄</span>
+          <span>More</span>
         </button>
+      </div>
 
-        <div class="privacy-card">
-          <div>
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-check"></use></svg>
-            <strong>Hazy is local &amp; private</strong>
-          </div>
-          <p>Your data stays on your machine.</p>
-          <button id="legacySurfaceHistoryBtn" type="button">Learn more →</button>
+      <div class="sidebar-meta">
+        <div class="sidebar-note">
+          <span class="sidebar-note-label">Workspace</span>
+          <strong>Local-first AI</strong>
+          <p>Chat, build, preview, and iterate without a cluttered dashboard.</p>
         </div>
+        <button class="clear-chat-btn" id="clearChatBtn">
+          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-clipboard"></use></svg>
+          Clear Active Chat
+        </button>
       </div>
     </aside>
 
-    <main class="workspace">
-      <button class="topbar-icon mobile-sidebar-toggle" id="mobileSidebarToggle" type="button" title="Open sidebar">
-        <span></span><span></span><span></span>
-      </button>
-      <header class="topbar" hidden>
+    <div class="main-column">
+      <header class="topbar">
         <div class="topbar-left">
-          <button class="topbar-icon" id="legacySidebarToggle" type="button" title="Toggle sidebar">
-            <span></span><span></span><span></span>
+          <button class="icon-chip mobile-only" id="sidebarToggle" title="Open navigation">
+            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-more"></use></svg>
           </button>
           <div class="topbar-brand">
             <strong>Hazy</strong>
-            <span>Your local AI assistant</span>
+            <span>Local AI workspace</span>
           </div>
         </div>
+
+        <div class="topbar-search">
+          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-search"></use></svg>
+          <input id="historySearch" type="text" placeholder="Search recent chats or ask Hazy what you need next..." autocomplete="off" />
+          <kbd>Ctrl K</kbd>
+        </div>
+
         <div class="topbar-actions">
-          <button class="status-pill" id="legacyTopbarStatus" type="button">
-            <span class="status-dot" id="legacyStatusDot"></span>
-            <span id="legacyStatusText">Online</span>
+          <button class="topbar-pill topbar-pill-status" id="topbarStatus" type="button">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Online</span>
           </button>
-          <button class="topbar-icon" id="legacySettingsBtn" type="button" title="Settings">
+
+          <button class="topbar-pill model-selector" id="modelSelector" type="button">
+            <span class="model-selector-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-robot"></use></svg></span>
+            <span class="model-selector-copy">
+              <span class="model-name" id="currentModelName">minimax-m3:cloud</span>
+              <span class="model-tag">Local / Private</span>
+            </span>
+          </button>
+
+          <button class="icon-chip" id="settingsBtn" title="Settings">
             <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-settings"></use></svg>
           </button>
-          <button class="avatar-btn" id="legacyMoreMenuBtn" type="button" title="More tools">D</button>
+
+          <button class="icon-chip" id="moreMenuBtn" title="More">
+            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-more"></use></svg>
+          </button>
         </div>
       </header>
 
-      <section class="main-stage">
-        <div class="conversation-header">
-          <div>
-            <span class="surface-label">Current Thread</span>
-            <h2 id="currentThreadTitle">Start with one clear prompt</h2>
-            <p id="currentThreadMeta">Ask a question, build a site, generate code, or reopen a recent thread.</p>
-          </div>
-        </div>
-
-        <div class="welcome-screen" id="welcomeScreen">
-          <div class="hero-orb"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bot"></use></svg></div>
-          <h1>Hazy</h1>
-          <p class="hero-brand">by <strong>Dream On</strong></p>
-          <p class="hero-subtitle">Your local AI assistant to chat, code, and build full websites.</p>
-
-          <div class="starter-grid" id="suggestionGrid">
-            <button class="suggestion-card" data-mode="build" data-prompt="Build a portfolio landing page with a working contact form, clean responsive styling, and simple Express backend.">
-              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-sparkles"></use></svg></span>
-              <span><strong>Build a portfolio landing page with contact form</strong><small>Create a modern landing page with a working contact form.</small></span>
-              <b>›</b>
-            </button>
-            <button class="suggestion-card" data-mode="build" data-prompt="Create a multi-page restaurant website with a Node.js backend, menu, booking flow, and admin panel.">
-              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-code"></use></svg></span>
-              <span><strong>Multi-page restaurant website with Node.js backend</strong><small>Full-stack website with menu, booking, and admin panel.</small></span>
-              <b>›</b>
-            </button>
-            <button class="suggestion-card" data-mode="code" data-prompt="Create an analytics dashboard with Chart.js using clean cards, live sample data, and responsive layout.">
-              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chart"></use></svg></span>
-              <span><strong>Analytics dashboard with Chart.js charts</strong><small>Interactive dashboard and real-time data visualizations.</small></span>
-              <b>›</b>
-            </button>
-            <button class="suggestion-card" data-mode="code" data-prompt="Build a secure responsive contact form with Express.js backend and email notifications.">
-              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-clipboard"></use></svg></span>
-              <span><strong>Contact form with Express.js backend</strong><small>Secure responsive contact form with email notifications.</small></span>
-              <b>›</b>
+      <div class="main-layout">
+        <section class="main-surface">
+          <div class="surface-header">
+            <div>
+              <span class="surface-label">Conversation</span>
+              <h2 id="currentThreadTitle">Start with one clear prompt</h2>
+              <p id="currentThreadMeta">Ask a question, build a site, generate code, or reopen a recent thread.</p>
+            </div>
+            <button class="surface-link-btn" id="surfaceHistoryBtn" type="button">
+              <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-clock"></use></svg>
+              Recent Chats
             </button>
           </div>
 
-          <div class="recent-shortcuts" id="recentShortcutList">
-            <div class="empty-history">Your recent conversations will appear here.</div>
-          </div>
-        </div>
+          <div class="welcome-screen" id="welcomeScreen">
+            <div class="welcome-copy">
+              <span class="welcome-eyebrow">Simple by default</span>
+              <h1>One place to think, build, and ship.</h1>
+              <p>Hazy is now chat-first. Start with a prompt, switch modes when needed, and keep build output attached to the same conversation.</p>
+            </div>
 
-        <div class="chat-container" id="chatContainer">
-          <div class="messages-area" id="messagesArea"></div>
-          <div id="scrollAnchor"></div>
-        </div>
-        <button class="scroll-bottom-btn" id="scrollBottomBtn" type="button" title="Scroll to latest">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>
-        </button>
-      </section>
+            <div class="starter-grid" id="suggestionGrid">
+              <button class="starter-card suggestion-card" data-prompt="Help me think through a feature I want to build and turn it into a clean implementation plan.">
+                <span class="starter-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg></span>
+                <strong>Talk It Through</strong>
+                <span>Ask Hazy to clarify a messy idea or outline a better next step.</span>
+              </button>
+              <button class="starter-card suggestion-card" data-prompt="Create a full multi-page website for a restaurant with Home, Menu, About, and Contact pages. Include a Node.js backend with Express.">
+                <span class="starter-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-globe"></use></svg></span>
+                <strong>Build a Website</strong>
+                <span>Generate a complete site with pages, styling, and backend wiring.</span>
+              </button>
+              <button class="starter-card suggestion-card" data-prompt="Refactor this JavaScript module for clarity, better structure, and safer edge-case handling.">
+                <span class="starter-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-code"></use></svg></span>
+                <strong>Build Code</strong>
+                <span>Generate, refactor, and explain code without switching tools.</span>
+              </button>
+              <button class="starter-card suggestion-card" data-prompt="Turn this rough product idea into a phased roadmap with milestones, risks, and implementation order.">
+                <span class="starter-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bolt"></use></svg></span>
+                <strong>Make a Plan</strong>
+                <span>Break a rough concept into practical phases, files, and milestones.</span>
+              </button>
+            </div>
 
-      <aside class="builder-panel" id="builderPanel">
-        <div class="builder-header">
-          <div>
-            <span class="surface-label">Builder Output</span>
-            <h3 id="builderProjectName">Project Preview</h3>
-          </div>
-          <button class="icon-btn" id="builderClose" type="button" title="Close builder">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
-          </button>
-        </div>
-        <div class="builder-toolbar">
-          <div class="builder-meta"><span id="builderFileLabel">No file selected</span><span id="builderFileCount"></span></div>
-          <div class="builder-actions">
-            <button id="builderPreviewToggle" type="button">Preview</button>
-            <button id="builderRefresh" type="button">Refresh</button>
-            <button id="builderCopyFile" type="button">Copy</button>
-            <button id="builderDownload" type="button">Download</button>
-          </div>
-        </div>
-        <div class="builder-tabs" id="builderTabs"></div>
-        <div class="builder-body" id="builderBody">
-          <div class="builder-code-pane" id="builderCodePane"><pre><code id="builderCode"></code></pre></div>
-          <div class="builder-preview-pane" id="builderPreviewPane">
-            <div class="preview-toolbar">
-              <span>Preview</span>
-              <div class="preview-viewport-switcher">
-                <button class="viewport-btn active" data-width="100%" type="button">Desktop</button>
-                <button class="viewport-btn" data-width="768px" type="button">Tablet</button>
-                <button class="viewport-btn" data-width="390px" type="button">Mobile</button>
+            <div class="welcome-recent">
+              <div class="welcome-recent-header">
+                <span class="surface-label">Recent Threads</span>
+                <button class="surface-link-btn subtle" type="button" id="welcomeHistoryBtn">Open drawer</button>
+              </div>
+              <div class="recent-shortcuts" id="recentShortcutList">
+                <div class="empty-history">Your recent conversations will appear here.</div>
               </div>
             </div>
-            <div class="preview-wrapper" id="previewWrapper"><iframe id="previewFrame" title="Project preview"></iframe></div>
           </div>
-        </div>
-        <div class="builder-footer"><span id="builderStatus">No active build output</span></div>
-      </aside>
 
-      <section class="input-area">
+          <div class="chat-shell">
+            <div class="chat-container" id="chatContainer">
+              <div class="messages-area" id="messagesArea"></div>
+              <div id="scrollAnchor"></div>
+            </div>
+            <button class="scroll-bottom-btn" id="scrollBottomBtn" title="Scroll to latest">
+              <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>
+            </button>
+          </div>
+        </section>
+
+        <aside class="builder-panel" id="builderPanel">
+          <div class="builder-header">
+            <div>
+              <span class="surface-label">Builder Output</span>
+              <h3 id="builderProjectName">Project Preview</h3>
+            </div>
+            <button class="icon-chip" id="builderClose" title="Close builder">
+              <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
+            </button>
+          </div>
+
+          <div class="builder-toolbar">
+            <div class="builder-meta">
+              <span id="builderFileLabel">No file selected</span>
+              <span id="builderFileCount"></span>
+            </div>
+            <div class="builder-actions">
+              <button class="builder-action-btn" id="builderPreviewToggle" type="button">Preview</button>
+              <button class="builder-action-btn" id="builderRefresh" type="button">Refresh</button>
+              <button class="builder-action-btn" id="builderCopyFile" type="button">Copy</button>
+              <button class="builder-action-btn primary" id="builderDownload" type="button">Download</button>
+            </div>
+          </div>
+
+          <div class="builder-tabs" id="builderTabs"></div>
+          <div class="builder-body" id="builderBody">
+            <div class="builder-code-pane" id="builderCodePane">
+              <pre class="builder-code-block"><code id="builderCode"></code></pre>
+            </div>
+            <div class="builder-preview-pane" id="builderPreviewPane">
+              <div class="preview-toolbar">
+                <span class="surface-label">Preview</span>
+                <div class="preview-viewport-switcher">
+                  <button class="viewport-btn active" data-width="100%" type="button">Desktop</button>
+                  <button class="viewport-btn" data-width="768px" type="button">Tablet</button>
+                  <button class="viewport-btn" data-width="390px" type="button">Mobile</button>
+                </div>
+              </div>
+              <div class="preview-wrapper" id="previewWrapper">
+                <iframe id="previewFrame" title="Project preview"></iframe>
+              </div>
+            </div>
+          </div>
+
+          <div class="builder-footer">
+            <span id="builderStatus">No active build output</span>
+          </div>
+        </aside>
+      </div>
+
+      <div class="input-area">
         <div class="input-mode-bar" id="inputModeBar">
-          <button class="mode-btn active" id="modeChatBtn" data-mode="chat" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Chat</button>
-          <button class="mode-btn" id="modeBuildBtn" data-mode="build" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-globe"></use></svg>Build Website</button>
-          <button class="mode-btn" id="modeCodeBtn" data-mode="code" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-code"></use></svg>Build Code</button>
-          <div class="code-lang-wrap" id="codeLangWrap">
-            <select id="codeLangSelect" aria-label="Code language">
-              <option value="auto" selected>Auto - Hazy decides</option>
-            </select>
-          </div>
-          <div class="mode-status" id="modeIndicator"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Chat mode</div>
+          <button class="mode-btn active" id="modeChatBtn" data-mode="chat">Chat</button>
+          <button class="mode-btn" id="modeBuildBtn" data-mode="build">Build Website</button>
+          <button class="mode-btn" id="modeCodeBtn" data-mode="code">Build Code</button>
+          <div class="mode-status" id="modeIndicator">Chat mode</div>
         </div>
+
         <div class="file-preview-strip" id="filePreviewStrip"></div>
+
         <div class="composer-card">
-          <button class="composer-icon-btn" id="ttsToggleBtn" type="button" title="Voice"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-microphone"></use></svg></button>
-          <button class="composer-icon-btn" id="uploadBtn" type="button" title="Attach file"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-clipboard"></use></svg></button>
-          <div class="composer-input-shell">
-            <textarea id="chatInput" rows="1" placeholder="Ask Hazy anything..."></textarea>
-            <button class="composer-secondary-btn" id="stopBtn" type="button">Stop</button>
-          </div>
-          <button class="send-btn" id="sendBtn" type="button" title="Send"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-send"></use></svg></button>
+          <button class="composer-icon-btn" id="ttsToggleBtn" title="Voice settings">
+            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-microphone"></use></svg>
+          </button>
+          <button class="composer-icon-btn" id="uploadBtn" title="Attach files">
+            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-clipboard"></use></svg>
+          </button>
+          <textarea id="chatInput" placeholder="Message Hazy..." rows="1"></textarea>
+          <button class="composer-secondary-btn" id="stopBtn" title="Stop generating">Stop</button>
+          <button class="send-btn" id="sendBtn" title="Send">
+            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-send"></use></svg>
+          </button>
         </div>
-        <div class="composer-footer"><span>Hazy by <strong>Dream On</strong> · Powered by Ollama</span><span id="charCount"></span></div>
-      </section>
-    </main>
+
+        <div class="composer-footer">
+          <span>Local-first by Dream On. One workspace for chat, code, and build output.</span>
+          <span id="charCount"></span>
+        </div>
+      </div>
+    </div>
 
     <div class="model-dropdown" id="modelDropdown">
       <div class="dropdown-header">Available Models</div>
-      <div class="model-list" id="modelList"><div class="model-item loading-models">Connecting to Ollama...</div></div>
+      <div class="model-list" id="modelList">
+        <div class="model-item loading-models">Connecting to Ollama...</div>
+      </div>
     </div>
   </div>
 
   <div class="history-drawer" id="historyDrawer">
     <div class="drawer-header">
-      <div><span class="surface-label">Recent Chats</span><h3>Conversation List</h3></div>
-      <button class="icon-btn" id="historyDrawerClose" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg></button>
+      <div>
+        <span class="surface-label">Recent Chats</span>
+        <h3>Return to a conversation</h3>
+      </div>
+      <button class="icon-chip" id="historyDrawerClose" title="Close recent chats">
+        <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
+      </button>
     </div>
-    <p class="drawer-note">Recent chats are already placed cleanly in the sidebar so they never cover the main canvas.</p>
+    <div class="drawer-body">
+      <div class="chat-history" id="chatHistory"></div>
+    </div>
   </div>
 
   <div class="more-menu" id="moreMenu">
-    <div class="drawer-header">
-      <div><span class="surface-label">Secondary Tools</span><h3>More</h3></div>
-      <button class="icon-btn" id="moreMenuClose" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg></button>
+    <div class="drawer-header compact">
+      <div>
+        <span class="surface-label">Secondary Tools</span>
+        <h3>More</h3>
+      </div>
+      <button class="icon-chip" id="moreMenuClose" title="Close more menu">
+        <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
+      </button>
     </div>
     <div class="more-menu-list">
-      <button class="more-menu-item" id="exportBtn" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-folder"></use></svg><span><strong>Export Chat</strong><small>Download the current thread as text.</small></span></button>
-      <button class="more-menu-item" id="moreTrainingBtn" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bolt"></use></svg><span><strong>Training Data</strong><small>Build datasets from chats and examples.</small></span></button>
+      <button class="more-menu-item" id="exportBtn" type="button">
+        <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-folder"></use></svg>
+        <div>
+          <strong>Export Chat</strong>
+          <span>Download the current thread as text.</span>
+        </div>
+      </button>
+      <button class="more-menu-item" id="personaBtn" type="button">
+        <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-user"></use></svg>
+        <div>
+          <strong>Personas</strong>
+          <span>Open the companion and roleplay setup.</span>
+        </div>
+      </button>
+      <button class="more-menu-item" id="moreTrainingBtn" type="button">
+        <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bolt"></use></svg>
+        <div>
+          <strong>Training Data</strong>
+          <span>Build datasets from chats and examples.</span>
+        </div>
+      </button>
     </div>
   </div>
 
@@ -318,21 +338,13 @@
 
   <div id="legacy-hooks" hidden>
     <span id="ttsLabel"></span>
-    <button id="ttsVoiceBtn" type="button"></button>
-    <input id="fileInput" type="file" multiple />
+    <button id="ttsVoiceBtn"></button>
+    <input id="fileInput" type="file" />
+    <div id="codeLangWrap"></div>
+    <select id="codeLangSelect"></select>
     <span id="personaStatusBadge"></span>
     <div id="ollamaConnStatus"></div>
     <div id="hazy-appearance-overrides"></div>
-    <div id="quickPromptsDropdown"></div>
-    <button id="voiceInputBtn" type="button"></button>
-    <button id="ragBtn" type="button"></button><span id="ragIndicator"></span><input id="ragFileInput" type="file" multiple />
-    <button id="agentBtn" type="button"></button><span id="agentIndicator"></span>
-    <button id="autoContinueBtn" type="button"></button><input id="autoContinueToggle" type="checkbox" /><input id="maxAttemptsInput" type="number" />
-    <div id="chatBox"></div><div id="knowledgeModal"></div><div id="knowledgeList"></div><input id="knowledgeSearch" />
-    <div id="ragDocumentsList"></div><input id="ragEnableToggle" type="checkbox" /><div id="ragUploadArea"></div><span id="docCount"></span><span id="totalChunks"></span><span id="avgChunkSize"></span><button id="ragCloseBtn" type="button"></button>
-    <input id="agentEnableToggle" type="checkbox" /><input id="agentMaxIterations" type="number" /><div id="agentToolsList"></div><span id="toolCount"></span><div id="agentHistory"></div><button id="agentCloseBtn" type="button"></button>
-    <button id="autoContinueCloseBtn" type="button"></button>
-    <div id="exportModal"></div><div id="importModal"></div><div id="templatesModal"></div><div id="templateGrid"></div><div id="templateFillModal"></div><form id="templateFillForm"></form><div id="templateFillTitle"></div><div id="shortcutsPanel"></div><div id="performanceModal"></div><div id="performanceStats"></div><div id="performanceModelList"></div>
   </div>
 
   <div class="modal-overlay" id="renameModal">
@@ -605,26 +617,15 @@
               <button class="theme-btn active" data-theme="cream" type="button">Cream</button>
               <button class="theme-btn" data-theme="warm" type="button">Warm</button>
               <button class="theme-btn" data-theme="ink" type="button">Ink</button>
-              <button class="theme-btn" data-theme="oled" type="button">OLED</button>
             </div>
             <div class="setting-grid two-column">
               <div class="setting-group">
                 <label class="setting-label" for="settingsFontSize">Font size</label>
-                <select class="setting-input" id="settingsFontSize">
-                  <option value="13px">Small</option>
-                  <option value="14px" selected>Middle</option>
-                  <option value="16px">Large</option>
-                  <option value="custom">Custom</option>
-                </select>
-                <input class="setting-input appearance-custom-input" id="settingsFontSizeCustom" type="text" value="14px" placeholder="Example: 15px" hidden />
+                <input class="setting-input" id="settingsFontSize" type="text" value="14px" />
               </div>
               <div class="setting-group">
                 <label class="setting-label" for="settingsDensity">Density</label>
-                <select class="setting-input" id="settingsDensity">
-                  <option value="compact">Small</option>
-                  <option value="normal" selected>Middle</option>
-                  <option value="comfortable">Large</option>
-                </select>
+                <input class="setting-input" id="settingsDensity" type="text" value="normal" />
               </div>
             </div>
             <div class="setting-group">

@@ -270,6 +270,18 @@
     }
 
     createButton() {
+      // The main app already owns the composer voice control.
+      // Don't inject a second button into the same row.
+      if (document.getElementById('ttsToggleBtn')) {
+        this.button = document.getElementById('ttsToggleBtn');
+        return;
+      }
+
+      if (document.querySelector('.composer-card .voice-btn')) {
+        this.button = document.querySelector('.composer-card .voice-btn');
+        return;
+      }
+
       const uploadBtn = document.getElementById('uploadBtn');
       if (!uploadBtn) return;
 
@@ -460,6 +472,7 @@
       const draft = this.loadDraft();
       if (draft && !chatInput.value) {
         chatInput.value = draft;
+        chatInput.dispatchEvent(new Event('input', { bubbles: true }));
       }
 
       // Auto-save on input

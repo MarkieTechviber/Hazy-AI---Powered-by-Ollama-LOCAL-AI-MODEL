@@ -15,31 +15,31 @@
 const QUICK_PROMPTS = {
   // Code-related
   '/code': {
-    label: '💻 Write Code',
+    label: 'Write Code',
     prompt: 'Write production-ready, well-commented code for: ',
     description: 'Generate clean, documented code',
     category: 'code'
   },
   '/debug': {
-    label: '🐛 Debug Code',
+    label: 'Debug Code',
     prompt: 'Debug this code and fix all errors. Explain what was wrong:\n\n',
     description: 'Find and fix bugs',
     category: 'code'
   },
   '/refactor': {
-    label: '♻️ Refactor Code',
+    label: 'Refactor Code',
     prompt: 'Refactor this code to be more efficient, readable, and maintainable:\n\n',
     description: 'Improve code quality',
     category: 'code'
   },
   '/review': {
-    label: '👀 Code Review',
+    label: 'Code Review',
     prompt: 'Review this code for bugs, security issues, and best practices:\n\n',
     description: 'Professional code review',
     category: 'code'
   },
   '/test': {
-    label: '🧪 Write Tests',
+    label: 'Write Tests',
     prompt: 'Write comprehensive unit tests for this code:\n\n',
     description: 'Generate test cases',
     category: 'code'
@@ -47,19 +47,19 @@ const QUICK_PROMPTS = {
 
   // Explanation
   '/explain': {
-    label: '📖 Explain Simply',
+    label: 'Explain Simply',
     prompt: 'Explain this concept in simple terms that anyone can understand: ',
     description: 'ELI5 explanation',
     category: 'learning'
   },
   '/deep': {
-    label: '🔬 Deep Dive',
+    label: 'Deep Dive',
     prompt: 'Provide a detailed, technical explanation of: ',
     description: 'In-depth analysis',
     category: 'learning'
   },
   '/compare': {
-    label: '⚖️ Compare',
+    label: 'Compare',
     prompt: 'Compare and contrast these concepts with pros/cons: ',
     description: 'Side-by-side comparison',
     category: 'learning'
@@ -67,25 +67,25 @@ const QUICK_PROMPTS = {
 
   // Writing
   '/write': {
-    label: '✍️ Write Content',
+    label: 'Write Content',
     prompt: 'Write professional, engaging content about: ',
     description: 'Content creation',
     category: 'writing'
   },
   '/improve': {
-    label: '✨ Improve Writing',
+    label: 'Improve Writing',
     prompt: 'Improve this text for clarity, grammar, and impact:\n\n',
     description: 'Polish your writing',
     category: 'writing'
   },
   '/summarize': {
-    label: '📝 Summarize',
+    label: 'Summarize',
     prompt: 'Provide a concise summary of:\n\n',
     description: 'Quick summary',
     category: 'writing'
   },
   '/translate': {
-    label: '🌐 Translate',
+    label: 'Translate',
     prompt: 'Translate this to [language]:\n\n',
     description: 'Language translation',
     category: 'writing'
@@ -93,19 +93,19 @@ const QUICK_PROMPTS = {
 
   // Business
   '/email': {
-    label: '📧 Draft Email',
+    label: 'Draft Email',
     prompt: 'Draft a professional email about: ',
     description: 'Email composition',
     category: 'business'
   },
   '/plan': {
-    label: '📋 Create Plan',
+    label: 'Create Plan',
     prompt: 'Create a detailed action plan for: ',
     description: 'Strategic planning',
     category: 'business'
   },
   '/analyze': {
-    label: '📊 Analyze Data',
+    label: 'Analyze Data',
     prompt: 'Analyze this data and provide insights:\n\n',
     description: 'Data analysis',
     category: 'business'
@@ -113,13 +113,13 @@ const QUICK_PROMPTS = {
 
   // Creative
   '/brainstorm': {
-    label: '💡 Brainstorm Ideas',
+    label: 'Brainstorm Ideas',
     prompt: 'Generate creative ideas for: ',
     description: 'Idea generation',
     category: 'creative'
   },
   '/story': {
-    label: '📚 Write Story',
+    label: 'Write Story',
     prompt: 'Write a creative story about: ',
     description: 'Storytelling',
     category: 'creative'
@@ -127,13 +127,13 @@ const QUICK_PROMPTS = {
 
   // Problem Solving
   '/solve': {
-    label: '🎯 Solve Problem',
+    label: 'Solve Problem',
     prompt: 'Help me solve this problem step-by-step: ',
     description: 'Problem-solving',
     category: 'problem'
   },
   '/optimize': {
-    label: '⚡ Optimize',
+    label: 'Optimize',
     prompt: 'How can I optimize this for better performance:\n\n',
     description: 'Performance optimization',
     category: 'problem'

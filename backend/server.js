@@ -25,6 +25,9 @@ const https  = require('https');
 const fs     = require('fs');
 const path   = require('path');
 const url    = require('url');
+const { prepareChatRequest, analyzeMessage } = require('./orchestrator');
+const { runDeterministicTools } = require('./tools/toolRouter');
+// reasoning trace generation removed: no public trace header will be emitted
 
 // ─────────────────────────────────────────────────────
 // Paths
@@ -73,6 +76,15 @@ function setCORS(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Expose-Headers', [
+      'X-Hazy-Emotion',
+      'X-Hazy-Intent',
+      'X-Hazy-Mode',
+      'X-Hazy-Reasoning',
+      'X-Hazy-Code-Language',
+      'X-Hazy-Agent-Enabled',
+      'X-Hazy-Tool-Used'
+    ].join(', '));
 }
 
 // ─────────────────────────────────────────────────────
@@ -280,17 +292,55 @@ function streamOpenAIToOllamaFormat(proxyRes, clientRes) {
 // ROUTE: /hazy/chat  — universal chat endpoint
 // ─────────────────────────────────────────────────────
 async function handleHazyChat(req, res) {
-  const body = await readBody(req);
+  const originalBody = await readBody(req);
   const cfg  = loadConfig();
-  const modelId = body.model || cfg.defaults?.textModel || 'ollama/llama3.2';
+
+  // Agent Mode is routed here, not through a fragile frontend-only loop.
+  // If the user asks for web/current/online information while Agent Mode is on,
+  // Hazy gathers tool context before the model sees the request.
+  const toolRun = await runDeterministicTools({ body: originalBody, cfg });
+  const body = toolRun.body;
+
+  const prepared = prepareChatRequest(body);
+  const analysis = prepared.analysis;
+  const providerBody = prepared.providerBody;
+  const modelId = providerBody.model || cfg.defaults?.textModel || 'ollama/llama3.2';
   const provider = modelId.split('/')[0];
 
+  // buildPublicReasoningTrace removed: do not generate or expose decision trace
   setCORS(res);
+  res.setHeader('X-Hazy-Emotion', analysis.emotionData.emotion);
+  res.setHeader('X-Hazy-Intent', analysis.intentData.primaryIntent);
+  res.setHeader('X-Hazy-Mode', analysis.strategy.mode);
+  res.setHeader('X-Hazy-Agent-Enabled', String(Boolean(toolRun.agentEnabled)));
+  if (toolRun.toolResults?.length) {
+    res.setHeader('X-Hazy-Tool-Used', toolRun.toolResults.map((item) => item.tool).join(','));
+  }
+  if (analysis.reasoning?.reasoningLevel) {
+    res.setHeader('X-Hazy-Reasoning', analysis.reasoning.reasoningLevel);
+  }
+  if (analysis.codeAnalysis?.language) {
+    res.setHeader('X-Hazy-Code-Language', analysis.codeAnalysis.language);
+  }
+
+  if (analysis.reasoning?.needsQuestion && analysis.reasoning.question) {
+    if (body.stream === false) {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ message: { content: analysis.reasoning.question }, done: true }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Transfer-Encoding': 'chunked', 'Access-Control-Allow-Origin': '*' });
+    res.write(JSON.stringify({ message: { content: analysis.reasoning.question }, done: false }) + '\n');
+    res.write(JSON.stringify({ done: true }) + '\n');
+    res.end();
+    return;
+  }
 
   // ── Ollama ──
   if (provider === 'ollama') {
     const ollamaUrl  = new URL(cfg.providers?.ollama?.baseUrl || 'http://localhost:11434');
-    const ollamaBody = { ...body, model: modelId.replace('ollama/', '') };
+    const ollamaBody = { ...providerBody, model: modelId.replace('ollama/', '') };
     streamProxy({
       hostname: ollamaUrl.hostname,
       port: ollamaUrl.port || 80,
@@ -304,9 +354,9 @@ async function handleHazyChat(req, res) {
 
   // ── Anthropic ──
   if (provider === 'anthropic') {
-    const apiKey = body.apiKey || cfg.providers?.anthropic?.apiKey || process.env.ANTHROPIC_API_KEY;
+    const apiKey = providerBody.apiKey || cfg.providers?.anthropic?.apiKey || process.env.ANTHROPIC_API_KEY;
     if (!apiKey) { res.writeHead(401); res.end(JSON.stringify({ error: 'Anthropic API key not set. Add it in Settings → AI Providers.' })); return; }
-    const anthBody = toAnthropicBody(body);
+    const anthBody = toAnthropicBody(providerBody);
     const proxyReq = https.request({
       hostname: 'api.anthropic.com', port: 443, path: '/v1/messages',
       method: 'POST',
@@ -320,9 +370,9 @@ async function handleHazyChat(req, res) {
 
   // ── OpenAI ──
   if (provider === 'openai') {
-    const apiKey = body.apiKey || cfg.providers?.openai?.apiKey || process.env.OPENAI_API_KEY;
+    const apiKey = providerBody.apiKey || cfg.providers?.openai?.apiKey || process.env.OPENAI_API_KEY;
     if (!apiKey) { res.writeHead(401); res.end(JSON.stringify({ error: 'OpenAI API key not set. Add it in Settings → AI Providers.' })); return; }
-    const oaiBody = toOpenAIBody(body);
+    const oaiBody = toOpenAIBody(providerBody);
     const proxyReq = https.request({
       hostname: 'api.openai.com', port: 443, path: '/v1/chat/completions',
       method: 'POST',
@@ -336,9 +386,9 @@ async function handleHazyChat(req, res) {
 
   // ── Groq ──
   if (provider === 'groq') {
-    const apiKey = body.apiKey || cfg.providers?.groq?.apiKey || process.env.GROQ_API_KEY;
+    const apiKey = providerBody.apiKey || cfg.providers?.groq?.apiKey || process.env.GROQ_API_KEY;
     if (!apiKey) { res.writeHead(401); res.end(JSON.stringify({ error: 'Groq API key not set. Add it in Settings → AI Providers.' })); return; }
-    const groqBody = toGroqBody(body);
+    const groqBody = toGroqBody(providerBody);
     const proxyReq = https.request({
       hostname: 'api.groq.com', port: 443, path: '/openai/v1/chat/completions',
       method: 'POST',
@@ -352,10 +402,10 @@ async function handleHazyChat(req, res) {
 
   // ── Gemini ──
   if (provider === 'gemini') {
-    const apiKey = body.apiKey || cfg.providers?.gemini?.apiKey || process.env.GEMINI_API_KEY;
+    const apiKey = providerBody.apiKey || cfg.providers?.gemini?.apiKey || process.env.GEMINI_API_KEY;
     if (!apiKey) { res.writeHead(401); res.end(JSON.stringify({ error: 'Gemini API key not set. Add it in Settings → AI Providers.' })); return; }
-    const gemModel = (body.model || 'gemini/gemini-2.0-flash').startsWith('gemini/') ? body.model.slice('gemini/'.length) : (body.model || 'gemini-2.0-flash');
-    const gemBody  = toGeminiBody(body);
+    const gemModel = (providerBody.model || 'gemini/gemini-2.0-flash').startsWith('gemini/') ? providerBody.model.slice('gemini/'.length) : (providerBody.model || 'gemini-2.0-flash');
+    const gemBody  = toGeminiBody(providerBody);
     // Gemini uses SSE stream
     const proxyReq = https.request({
       hostname: 'generativelanguage.googleapis.com', port: 443,
@@ -424,6 +474,29 @@ async function handleProviders(req, res) {
   });
   res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
   res.end(JSON.stringify({ providers: enabled, registry }));
+}
+
+async function handleAnalyze(req, res) {
+  setCORS(res);
+  const body = await readBody(req);
+  const analysis = analyzeMessage({
+    body,
+    conversationId: body.conversationId || 'default',
+    userId: body.userId || 'default'
+  });
+
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+  res.end(JSON.stringify({
+    emotion: analysis.emotionData,
+    intent: analysis.intentData,
+    messageType: analysis.messageType,
+    safety: analysis.safety,
+    strategy: analysis.strategy,
+    toneProfile: analysis.toneProfile,
+    responsePlan: analysis.responsePlan,
+    memory: analysis.memory,
+    ragContext: analysis.ragContext
+  }, null, 2));
 }
 
 // ─────────────────────────────────────────────────────
@@ -573,6 +646,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── Hazy universal API routes ──
   if (pathname === '/hazy/chat')         { await handleHazyChat(req, res); return; }
+  if (pathname === '/hazy/analyze')      { await handleAnalyze(req, res); return; }
   if (pathname === '/hazy/providers')    { await handleProviders(req, res); return; }
   if (pathname === '/hazy/pull')         { await handlePull(req, res); return; }
   if (pathname === '/hazy/delete-model') { await handleDeleteModel(req, res); return; }
@@ -600,6 +674,9 @@ const server = http.createServer(async (req, res) => {
         'Access-Control-Allow-Origin': '*',
       });
       proxyRes2.pipe(res);
+    });
+    proxyReq2.setTimeout(8000, () => {
+      proxyReq2.destroy(new Error('Ollama request timed out'));
     });
     proxyReq2.on('error', err2 => {
       if (!res.headersSent) res.writeHead(503, { 'Content-Type': 'application/json' });
