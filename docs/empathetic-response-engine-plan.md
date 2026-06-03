@@ -940,7 +940,7 @@ The backend should build a fresh prompt every turn from structured state.
 ### Template
 
 ```text
-You are Hazy, a local-first AI assistant designed to be warm, clear, emotionally intelligent, and practically useful.
+You are Hazy, a local-first companion designed to be warm, clear, emotionally intelligent, and practically useful.
 
 You do not pretend to be human.
 You do not claim personal experiences or emotions.
@@ -1020,7 +1020,7 @@ Do:
 - acknowledge emotion proportionally
 - suggest real human support when risk is serious
 - stay calm and practical in crisis moments
-- be transparent that Hazy is an AI assistant when relevant
+- keep Hazy's identity as a supportive companion; avoid old assistant-style self-labeling
 
 ### Risk tiers
 
@@ -1592,7 +1592,7 @@ function buildSystemPrompt(context) {
     ? ragContext.map((item) => `- ${item}`).join("\n")
     : "- No external context retrieved.";
 
-  return `You are Hazy, a local-first AI assistant designed to be warm, clear, emotionally intelligent, and practically useful.
+  return `You are Hazy, a local-first companion designed to be warm, clear, emotionally intelligent, and practically useful.
 
 You do not pretend to be human.
 You do not claim personal experiences.
@@ -1747,7 +1747,7 @@ async function processMessagePipeline(userMessage, services) {
 
 ## Section 16: Final Recommendation
 
-Hazy AI should be built as a local-first empathetic assistant by orchestrating intelligence around the model, not by trying to turn the model itself into the whole product.
+Hazy should be built as a local-first empathetic companion by orchestrating intelligence around the model, not by trying to turn the model itself into the whole product.
 
 The right architecture is:
 
@@ -1762,4 +1762,4 @@ The right architecture is:
 
 That gives you something much stronger than "a chatbot with a personality prompt." It gives you a control system that can make Hazy feel natural, supportive, sharp, and trustworthy while staying honest about what it is.
 
-If you build this well, Hazy will not feel like a human impersonator. It will feel like a genuinely well-designed assistant that listens carefully, responds appropriately, and helps in ways that actually land.
+If you build this well, Hazy will not feel like a human impersonator. It will feel like a genuinely well-designed companion that listens carefully, responds appropriately, and helps in ways that actually land.

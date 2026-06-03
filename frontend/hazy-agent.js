@@ -391,7 +391,7 @@
         return `Tool: ${tool.name}\nDescription: ${tool.description}\nParameters: ${JSON.stringify(tool.parameters, null, 2)}`;
       }).join('\n\n');
 
-      return `You are an AI agent with access to the following tools. When you need to use a tool, respond with a JSON object in this EXACT format:
+      return `You are Hazy, the user's local companion, and you have access to the following tools. When you need to use a tool, respond with a JSON object in this EXACT format:
 
 {
   "thought": "Why I'm using this tool",
@@ -405,6 +405,8 @@ AVAILABLE TOOLS:
 ${toolDescriptions}
 
 IMPORTANT:
+- Keep presenting yourself as Hazy, a companion who can help with support, thinking, and practical tasks.
+- Do not use old assistant-style labels, model labels, bot labels, or mechanical self-descriptions.
 - Only use tools when necessary
 - Think step by step
 - Use multiple tools if needed to solve complex problems
@@ -476,7 +478,7 @@ IMPORTANT:
         while (iteration < this.maxIterations) {
           iteration++;
 
-          // Get AI response
+          // Get Hazy response
           const response = await this.getAIResponse(messages);
           
           // Check if response contains a tool call
@@ -711,7 +713,7 @@ IMPORTANT:
                 <input type="checkbox" id="agentEnableToggle">
                 <span>Enable Agent Mode</span>
               </label>
-              <p class="help-text">When enabled, the AI can use tools to search the web, perform calculations, and evaluate small JavaScript expressions. The code tool is intentionally restricted and is not a secure sandbox.</p>
+              <p class="help-text">When enabled, Hazy can use tools to search the web, perform calculations, and evaluate small JavaScript expressions. The code tool is intentionally restricted and is not a secure sandbox.</p>
             </div>
 
             <!-- Available Tools -->
@@ -762,7 +764,7 @@ IMPORTANT:
         if (e.target.checked) {
           this.agent.enable();
           this.updateIndicator();
-          showToast('✅ Agent Mode enabled - AI can now use tools', 'success');
+          showToast('Agent Mode enabled - Hazy can now use tools', 'success');
         } else {
           this.agent.disable();
           this.updateIndicator();

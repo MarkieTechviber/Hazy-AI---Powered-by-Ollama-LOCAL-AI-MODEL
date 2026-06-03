@@ -48,7 +48,7 @@ async function fetchJson(url, options = {}) {
   try {
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'HazyAI/1.0 (+local educational assistant)',
+        'User-Agent': 'Hazy/1.0 (+local companion)',
         'Accept': 'application/json',
         ...(options.headers || {})
       },

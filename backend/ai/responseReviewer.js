@@ -18,6 +18,16 @@ function reviewResponse(response, context) {
     revised = revised.replace(/I know exactly how you feel\.?\s*/i, "That makes sense as a hard thing to sit with. ");
   }
 
+  if (/\b(?:I(?:'| a)m|I am)\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/i.test(revised)) {
+    issues.push("self_ai_label");
+    revised = revised.replace(/\b(?:I(?:'| a)m|I am)\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi, "I'm Hazy");
+  }
+
+  if (/\bas\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/i.test(revised)) {
+    if (!issues.includes("self_ai_label")) issues.push("self_ai_label");
+    revised = revised.replace(/\bas\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi, "as Hazy");
+  }
+
   const questionCount = (revised.match(/\?/g) || []).length;
   if (questionCount > 2) {
     issues.push("too_many_questions");
@@ -41,7 +51,7 @@ function reviewResponse(response, context) {
     approved: issues.length === 0,
     issues,
     response: revised,
-    needsRewrite: issues.some((issue) => ["false_human_experience", "too_solution_heavy", "dependency_language"].includes(issue))
+    needsRewrite: issues.some((issue) => ["false_human_experience", "too_solution_heavy", "dependency_language", "self_ai_label"].includes(issue))
   };
 }
 

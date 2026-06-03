@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hazy - Local AI Assistant by Dream On</title>
+  <title>Hazy - Local Companion by Dream On</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -51,10 +51,12 @@
       <div class="sidebar-top">
         <div class="sidebar-profile-bar">
           <button class="sidebar-profile-trigger" id="profileMenuBtn" type="button" title="Open profile menu">
-            <div class="brand-mark sidebar-profile-avatar"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bot"></use></svg></div>
+            <div class="brand-mark sidebar-profile-avatar">
+              <img class="hazy-theme-logo" src="assets/logos/hazy_logo_cream_transparent.svg" alt="Hazy logo" data-hazy-logo />
+            </div>
             <div class="brand-copy sidebar-profile-copy">
               <strong>Hazy</strong>
-              <span>Your local AI assistant</span>
+              <span>Your local companion</span>
             </div>
             <span class="chevron">⌄</span>
           </button>
@@ -159,7 +161,7 @@
           </button>
           <div class="topbar-brand">
             <strong>Hazy</strong>
-            <span>Your local AI assistant</span>
+            <span>Your local companion</span>
           </div>
         </div>
         <div class="topbar-actions">
@@ -184,10 +186,12 @@
         </div>
 
         <div class="welcome-screen" id="welcomeScreen">
-          <div class="hero-orb"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bot"></use></svg></div>
+          <div class="hero-orb">
+            <img class="hazy-theme-logo" src="assets/logos/hazy_logo_cream_transparent.svg" alt="Hazy logo" data-hazy-logo />
+          </div>
           <h1>Hazy</h1>
           <p class="hero-brand">by <strong>Dream On</strong></p>
-          <p class="hero-subtitle">Your local AI assistant to chat, code, and build full websites.</p>
+          <p class="hero-subtitle">Your local companion for support, coding, and building full websites.</p>
 
           <div class="starter-grid" id="suggestionGrid">
             <button class="suggestion-card" data-mode="build" data-prompt="Build a portfolio landing page with a working contact form, clean responsive styling, and simple Express backend.">

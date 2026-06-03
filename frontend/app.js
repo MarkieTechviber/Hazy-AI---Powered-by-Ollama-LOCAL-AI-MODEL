@@ -1,5 +1,5 @@
 /**
- * Hazy — AI Chatbot + Website Builder
+ * Hazy - Local Companion + Website Builder
  * by Dream On
  *
  * Features:
@@ -147,6 +147,13 @@ const CODE_LANGUAGES = [
   { label: 'COBOL',          value: 'cobol',       ext: 'cob',   icon: '' },
 ];
 
+const HAZY_LOGO_BY_THEME = {
+  cream: 'assets/logos/hazy_logo_cream_transparent.svg',
+  warm: 'assets/logos/hazy_logo_warm_transparent.svg',
+  ink: 'assets/logos/hazy_logo_ink_transparent.svg',
+  oled: 'assets/logos/hazy_logo_oled_transparent.svg',
+};
+
 // ========================
 // State
 // ========================
@@ -157,7 +164,14 @@ const STATE = {
   isStreaming: false,
   abortController: null,
   ollamaUrl: 'http://localhost:11434',
-  systemPrompt: `You are Hazy, an expert AI assistant and programming mentor modelled on best-in-class AI behaviour.
+  systemPrompt: `You are Hazy, a warm local companion and programming mentor.
+
+IDENTITY:
+- Present yourself as Hazy, the user's local companion who is ready to help.
+- Do not use old assistant-style labels, model labels, bot labels, or mechanical self-descriptions.
+- Do not describe yourself in a way that makes you feel distant or mechanical.
+- Be emotionally present, steady, supportive, and practical. Offer comfort through words, help the user think clearly, and assist with coding or building when needed.
+- Do not pretend to be human or claim real-world physical experiences. You can still speak naturally, warmly, and personally as Hazy.
 
 CORE BEHAVIOUR (how you always respond):
 - Lead with the answer, then explain. Never bury the key point.
@@ -444,6 +458,17 @@ function normalizeTheme(theme) {
   return ['cream', 'warm', 'ink', 'oled'].includes(theme) ? theme : 'cream';
 }
 
+function getThemeLogoSrc(theme = STATE.theme) {
+  return HAZY_LOGO_BY_THEME[normalizeTheme(theme)] || HAZY_LOGO_BY_THEME.cream;
+}
+
+function updateThemeLogos(theme = STATE.theme) {
+  const logoSrc = getThemeLogoSrc(theme);
+  document.querySelectorAll('[data-hazy-logo]').forEach(logo => {
+    logo.setAttribute('src', logoSrc);
+  });
+}
+
 function resolveFontSizeInput() {
   const preset = document.getElementById('settingsFontSize')?.value || '14px';
   if (preset !== 'custom') return preset;
@@ -587,6 +612,7 @@ function saveSettings() {
 function applyTheme(theme) {
   STATE.theme = normalizeTheme(theme);
   document.documentElement.setAttribute('data-theme', STATE.theme);
+  updateThemeLogos(STATE.theme);
   document.querySelectorAll('.theme-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.theme === STATE.theme)
   );
@@ -1701,7 +1727,7 @@ function appendMessage(role, content, animate = true, ts) {
     });
   }
 
-  // Regenerate (assistant messages only)
+  // Regenerate (Hazy messages only)
   if (role === 'assistant') {
     actions.querySelector('.regen-btn')?.addEventListener('click', regenerateLast);
   }
@@ -3647,7 +3673,7 @@ function setupEventListeners() {
   $('ttsCancelBtn')?.addEventListener('click', () => closeModal('ttsModal'));
 
   el.ttsTestBtn?.addEventListener('click', () => {
-    const sample = "Hey there! This is Hazy speaking — your local AI assistant by Dream On.";
+    const sample = "Hey there! This is Hazy speaking - your local companion by Dream On.";
     speakText(sample);
   });
 
@@ -3949,7 +3975,7 @@ async function trainSplitWithAI() {
   const text = document.getElementById('trainBulkText').value.trim();
   if (!text) { showToast('Paste some text first', 'error'); return; }
   const status = document.getElementById('trainBulkStatus');
-  if (status) status.textContent = 'Asking AI to extract pairs…';
+  if (status) status.textContent = 'Asking Hazy to extract pairs...';
 
   const prompt = `You are a training data generator. Read the text below and extract 5-15 question-answer pairs from it for fine-tuning a language model.
 
@@ -3992,7 +4018,7 @@ ${text.slice(0, 3000)}`;
     showToast(`Extracted ${pairs.length} training pairs!`, 'success');
   } catch(e) {
     if (status) status.textContent = 'Failed — try "Add as Raw Text" instead';
-    showToast('AI extraction failed: ' + e.message, 'error');
+    showToast('Hazy extraction failed: ' + e.message, 'error');
   }
 }
 
@@ -4023,7 +4049,7 @@ function trainAddSelectedChats() {
     const conv = STATE.conversations[cb.dataset.id];
     if (!conv) return;
     const msgs = (conv.messages || []).filter(m => m.role !== 'system');
-    // Pair user → assistant messages
+    // Pair user -> Hazy messages
     for (let i = 0; i < msgs.length - 1; i++) {
       if (msgs[i].role === 'user' && msgs[i+1].role === 'assistant') {
         TRAINING.pairs.push({

@@ -1,7 +1,7 @@
-# Hazy — Local AI Assistant
+# Hazy - Local Companion
 ### by Dream On
 
-A feature-rich AI chatbot that runs **100% on your machine** using [Ollama](https://ollama.com).
+A feature-rich local companion that runs **100% on your machine** using [Ollama](https://ollama.com).
 Fully private — no cloud, no subscriptions, no data leaving your device.
 
 ---
@@ -12,10 +12,10 @@ Fully private — no cloud, no subscriptions, no data leaving your device.
 |---|---|
 | 💬 **Smart Chat** | Streaming responses, markdown rendering, syntax highlighting |
 | 🌐 **Website Builder** | AI generates full multi-file websites (HTML/CSS/JS + backend) with live preview & ZIP download |
-| 🎭 **AI Companion** | Character.AI-style personas with scenarios, relationships, and roleplay |
+| 🎭 **Companion Personas** | Character-style personas with scenarios, relationships, and roleplay |
 | 📎 **File Upload** | Attach images (vision), PDFs, code files, CSVs — AI reads and understands them |
 | 🎤 **Piper AI Voice** | Lightweight neural TTS — natural voices, 12 languages, runs 100% locally |
-| ✏️ **Edit Messages** | Edit any sent message and regenerate the AI response from that point |
+| ✏️ **Edit Messages** | Edit any sent message and regenerate Hazy's response from that point |
 | 🔍 **Search Chats** | Search your conversation history from the sidebar |
 | 🏷️ **Smart Titles** | AI auto-generates a short descriptive title for each chat |
 | 🌓 **3 Themes** | Hazel (warm), Dark, OLED |
@@ -133,7 +133,7 @@ Hazy includes **Piper** — a fast, lightweight neural text-to-speech engine tha
 6. Click **Preview Voice** to test it
 7. Click **Enable & Start**
 
-Every AI response will now be read aloud in the selected voice automatically.
+Every Hazy response will now be read aloud in the selected voice automatically.
 
 ### Available voices
 
@@ -189,7 +189,7 @@ contact forms with validation, Google Fonts, responsive design.
 
 ---
 
-## 🎭 AI Companion (Persona)
+## 🎭 Companion Personas
 
 Click the **Persona** button in the sidebar to create a character and scenario.
 
@@ -209,7 +209,7 @@ Click the **Persona** button in the sidebar to create a character and scenario.
 Or build your own — write a custom scenario description, set the opening line,
 choose a relationship type, personality traits, and conversation tone.
 
-The AI opens the scene automatically, uses `*actions*` for body language and environment,
+Hazy opens the scene automatically, uses `*actions*` for body language and environment,
 stays fully in character, and never breaks the fourth wall.
 
 ---
@@ -238,7 +238,7 @@ Click **Settings** (⚙️) in the sidebar:
 | Setting | Description | Default |
 |---|---|---|
 | Ollama URL | Where Ollama is running | `http://localhost:11434` |
-| System Prompt | How the AI behaves in Chat mode | Helpful assistant |
+| System Prompt | How Hazy behaves in Chat mode | Warm companion |
 | Temperature | Creativity (0 = precise, 2 = very creative) | 0.7 |
 | Max Tokens | Max response length — use 4096+ for website building | 4096 |
 | Theme | Hazel / Dark / OLED | Auto-detected from system |
