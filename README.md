@@ -32,6 +32,7 @@ Fully private — no cloud, no subscriptions, no data leaving your device.
 | Storage | 5GB | 20GB+ |
 | OS | Windows 10 / macOS 12 / Ubuntu 20.04 | Any modern OS |
 | Browser | Chrome 112+ / Edge 112+ | Chrome latest |
+| Node.js | 22.5+ | 24 LTS/current |
 
 ---
 
@@ -75,6 +76,23 @@ ollama pull llama3.2-vision  # Llama 3.2 Vision
 Double-click start.bat
 ```
 
+### Windows Desktop Controller
+
+For a small system-tray controller, double-click:
+
+```text
+start-controller.bat
+```
+
+It can restart or stop Hazy and Ollama, force-shut down Windows, or restart
+Windows. Computer power actions always show a warning and a cancellable
+10-second countdown. Closing the controller window hides it in the Windows
+notification area and leaves Hazy and Ollama running. The launcher also opens
+Hazy at `http://localhost:8080` in your default browser, but only after both
+Ollama and Hazy pass their health checks. Restarting Hazy and Ollama follows
+the same readiness checks before reopening the website. The controller always
+uses `localhost` for the browser so conversation storage remains on one origin.
+
 **macOS / Linux:**
 ```bash
 chmod +x start.sh
@@ -88,13 +106,31 @@ node server.js
 # Open http://localhost:8080
 ```
 
-**Manual (Python):**
+**Legacy Python proxy (reduced feature set):**
 ```bash
 cd backend
 pip install -r requirements.txt
 python server.py
 # Open http://localhost:8080
 ```
+
+The Node.js backend is the canonical Hazy runtime. It includes companion
+orchestration, SQLite memory, retrieval, secure provider credentials, and the
+agent security boundary. The Python server remains a limited Ollama proxy and
+should not be used when feature parity matters.
+
+### Local data and provider keys
+
+- Conversations and durable companion memories are stored transactionally in
+  `cache/hazy-engine/hazy.db`.
+- Existing JSON memory is imported automatically on first start.
+- Provider API keys are encrypted with AES-256-GCM in the local database.
+- The vault master key stays in `cache/hazy-engine/.hazy-master-key` or can be
+  supplied through `HAZY_MASTER_KEY`.
+- Provider keys are never stored in browser `localStorage` or returned by the
+  provider-status API.
+- Cross-origin API access defaults to the local Hazy origin. Set
+  `HAZY_ALLOWED_ORIGIN` only when intentionally serving the UI elsewhere.
 
 ---
 

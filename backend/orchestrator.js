@@ -13,10 +13,15 @@ const { analyzeCodeRequest } = require("./ai/coding/codeIntelligence");
 const { scanProjectContext } = require("./ai/coding/projectContextScanner");
 const { buildReasoningProfile } = require("./ai/reasoning/reasoningController");
 const { MemoryManager } = require("./memory/memoryManager");
+const { HazyDatabase } = require("./storage/hazyDatabase");
 const { VectorSearch } = require("./rag/vectorSearch");
+const { classifyAgentMode } = require("./agent/agentTypes");
+const { buildRuntimeContextBlock } = require("./agent/promptPolicy");
+const { defaultAgentRuntime, createToolContext } = require("./agent/agentRuntime");
 
 const dataDir = path.join(__dirname, "..", "cache", "hazy-engine");
-const memoryManager = new MemoryManager(path.join(dataDir, "memory"));
+const database = new HazyDatabase(path.join(dataDir, "hazy.db"));
+const memoryManager = new MemoryManager(path.join(dataDir, "memory"), { database });
 const vectorSearch = new VectorSearch(path.join(dataDir, "rag"));
 
 function getLatestUserMessage(messages = []) {
@@ -36,6 +41,7 @@ function deriveProfileHints({ intentData, strategy }) {
 }
 
 function analyzeMessage({ body, conversationId = "default", userId = "default" }) {
+  const projectId = body.projectId || body.hazy?.projectId || "";
   const latestMessage = getLatestUserMessage(body.messages || []);
   const emotionData = detectEmotion(latestMessage);
   const intentData = detectIntent(latestMessage);
@@ -48,9 +54,29 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     safety
   });
   const toneProfile = getToneProfile(strategy.mode);
-  const memory = memoryManager.getRelevantMemory({ conversationId, userId });
-  const ragContext = vectorSearch.search(latestMessage);
+  const memory = memoryManager.getRelevantMemory({ conversationId, userId, projectId });
+  const ragContext = vectorSearch.search(latestMessage, {
+    userId,
+    fileIds: body.hazy?.selectedFileIds || body.fileIds,
+    limit: body.hazy?.ragMaxChunks || 8,
+    candidateLimit: body.hazy?.ragCandidateLimit || 30,
+    minimumScore: body.hazy?.ragMinimumScore ?? 0.12
+  });
   const toolResults = Array.isArray(body.hazy?.toolResults) ? body.hazy.toolResults : [];
+  const toolContext = createToolContext(body);
+  const pendingConfirmation = defaultAgentRuntime.confirmations.findPending(toolContext);
+  const agentMode = classifyAgentMode({
+    message: latestMessage,
+    hasRetrievedContext: ragContext.length > 0,
+    hasToolResults: toolResults.length > 0,
+    pendingConfirmation,
+    safety
+  });
+  const runtimeContext = buildRuntimeContextBlock(toolContext, {
+    mode: agentMode,
+    availableToolNames: defaultAgentRuntime.registry.list(toolContext).map((tool) => tool.name),
+    pendingConfirmation
+  });
   const userLangHint = body.hazy?.codeLangHint && body.hazy.codeLangHint !== "auto"
     ? body.hazy.codeLangHint
     : null;
@@ -69,14 +95,16 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     mode: body.hazy?.mode || "chat",
     codeAnalysis,
     projectContext,
-    safety
+    safety,
+    requestedMode: body.hazy?.reasoningMode || "auto",
+    showSummary: body.hazy?.showReasoningSummary !== false
   });
   const responsePlan = planResponse({
     strategy,
     userNeed: emotionData.userNeed,
     toneProfile,
-    memory,
-    ragContext
+    memory: [],
+    ragContext: []
   });
 
   const prompt = buildSystemPrompt({
@@ -87,17 +115,20 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     userNeed: emotionData.userNeed,
     responseMode: strategy.mode,
     responsePlan,
-    memory,
-    ragContext,
+    memory: [],
+    ragContext: [],
     questionLimit: strategy.questionLimit,
     safety,
     reasoning,
     codeAnalysis,
     projectContext,
-    toolResults
+    toolResults,
+    agentMode,
+    runtimeContext
   });
 
   return {
+    projectId,
     latestMessage,
     emotionData,
     intentData,
@@ -108,6 +139,9 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     memory,
     ragContext,
     toolResults,
+    agentMode,
+    runtimeContext,
+    pendingConfirmation,
     projectContext,
     codeAnalysis,
     reasoning,
@@ -120,7 +154,32 @@ function prepareChatRequest(body = {}) {
   const conversationId = body.conversationId || "default";
   const userId = body.userId || "default";
   const analysis = analyzeMessage({ body, conversationId, userId });
-  const providerBody = prepareProviderPayload(body, analysis.prompt);
+  const conversation = memoryManager.getConversation(conversationId);
+  const providerBody = prepareProviderPayload({
+    ...body,
+    hazy: {
+      ...(body.hazy || {}),
+      contextPacking: {
+        memory: analysis.memory.filter((item) =>
+          item.type === 'preference' || item.type === 'project_fact'
+        ),
+        summary: (conversation.summaries || []).slice(-2).join('\n\n'),
+        retrievedChunks: analysis.ragContext
+      }
+    }
+  }, analysis.prompt);
+  analysis.contextWindow = providerBody.hazyContext;
+  const provider = String(providerBody.model || '').split('/')[0];
+  const nativeProvider = ['anthropic', 'openai'].includes(provider) ? provider : 'hazy';
+  providerBody.hazyReasoning = {
+    mode: analysis.reasoning?.reasoningMode || 'auto',
+    reasoningMode: analysis.reasoning?.reasoningMode || 'auto',
+    level: analysis.reasoning?.reasoningLevel || 'direct',
+    effort: analysis.reasoning?.effort || 'none',
+    budgetTokens: analysis.reasoning?.budgetTokens || 0,
+    nativeProvider,
+    publicSummaryEnabled: Boolean(analysis.reasoning?.publicSummaryEnabled)
+  };
 
   return {
     conversationId,
@@ -136,6 +195,7 @@ function finalizeResponse({ conversationId, userId, userMessage, responseText, a
     emotion: analysis.emotionData.emotion,
     intensity: analysis.emotionData.intensity,
     taskType: analysis.reasoning?.taskType || "general",
+    reasoningTask: analysis.reasoning?.reasoningTask,
     codeType: analysis.codeAnalysis?.codeType,
     language: analysis.codeAnalysis?.language,
     userMessage
@@ -144,6 +204,7 @@ function finalizeResponse({ conversationId, userId, userMessage, responseText, a
   memoryManager.recordTurn({
     conversationId,
     userId,
+    projectId: analysis.projectId || "",
     userMessage,
     finalResponse: review.response,
     analysis: {
@@ -160,5 +221,7 @@ function finalizeResponse({ conversationId, userId, userMessage, responseText, a
 module.exports = {
   analyzeMessage,
   prepareChatRequest,
-  finalizeResponse
+  finalizeResponse,
+  database,
+  memoryManager
 };

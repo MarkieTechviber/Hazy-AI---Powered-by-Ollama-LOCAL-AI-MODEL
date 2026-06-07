@@ -1,0 +1,298 @@
+'use strict';
+
+const http = require('http');
+const https = require('https');
+const crypto = require('crypto');
+
+function requestJson(target, { method = 'POST', headers = {}, body, timeoutMs = 60_000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const parsed = target instanceof URL ? target : new URL(target);
+    const transport = parsed.protocol === 'https:' ? https : http;
+    const request = transport.request({
+      protocol: parsed.protocol,
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: `${parsed.pathname}${parsed.search}`,
+      method,
+      headers: { 'Content-Type': 'application/json', ...headers }
+    }, (response) => {
+      let raw = '';
+      response.on('data', (chunk) => { raw += chunk.toString(); });
+      response.on('end', () => {
+        let data;
+        try {
+          data = JSON.parse(raw || '{}');
+        } catch {
+          data = { error: { message: raw || 'Provider returned invalid JSON.' } };
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          const message = data?.error?.message || data?.message || `Provider request failed (${response.statusCode}).`;
+          const error = new Error(message);
+          error.statusCode = response.statusCode;
+          error.providerBody = data;
+          reject(error);
+          return;
+        }
+        resolve(data);
+      });
+    });
+    request.setTimeout(timeoutMs, () => request.destroy(new Error('Provider request timed out.')));
+    request.on('error', reject);
+    request.write(JSON.stringify(body || {}));
+    request.end();
+  });
+}
+
+function parseArguments(value) {
+  if (value && typeof value === 'object') return value;
+  try {
+    return JSON.parse(value || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function toOpenAITools(tools = []) {
+  return tools.map((tool) => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+      strict: tool.strict === true
+    }
+  }));
+}
+
+function toOpenAIMessages(input = []) {
+  return input.map((message) => {
+    if (message.role === 'assistant' && Array.isArray(message.toolCalls)) {
+      return {
+        role: 'assistant',
+        content: message.content || null,
+        tool_calls: message.toolCalls.map((call) => ({
+          id: call.id,
+          type: 'function',
+          function: {
+            name: call.name,
+            arguments: JSON.stringify(call.arguments || {})
+          }
+        }))
+      };
+    }
+    if (message.role === 'tool') {
+      return {
+        role: 'tool',
+        tool_call_id: message.callId,
+        content: String(message.content || '')
+      };
+    }
+    return { role: message.role, content: String(message.content || '') };
+  });
+}
+
+function normalizeOpenAIResponse(data) {
+  const message = data?.choices?.[0]?.message || {};
+  const toolCalls = (message.tool_calls || []).map((call) => ({
+    id: call.id || crypto.randomUUID(),
+    name: call.function?.name || '',
+    arguments: parseArguments(call.function?.arguments)
+  })).filter((call) => call.name);
+  const usage = {
+    inputTokens: Number(data?.usage?.prompt_tokens || 0),
+    outputTokens: Number(data?.usage?.completion_tokens || 0)
+  };
+  if (toolCalls.length) {
+    return { type: 'tool_calls', text: message.content || '', toolCalls, usage };
+  }
+  return { type: 'final_answer', text: message.content || '', usage };
+}
+
+function toOllamaMessages(input = []) {
+  return input.map((message) => {
+    if (message.role === 'assistant' && Array.isArray(message.toolCalls)) {
+      return {
+        role: 'assistant',
+        content: message.content || '',
+        tool_calls: message.toolCalls.map((call) => ({
+          function: { name: call.name, arguments: call.arguments || {} }
+        }))
+      };
+    }
+    if (message.role === 'tool') {
+      return { role: 'tool', content: String(message.content || '') };
+    }
+    return { role: message.role, content: String(message.content || '') };
+  });
+}
+
+function normalizeOllamaResponse(data) {
+  const message = data?.message || {};
+  const toolCalls = (message.tool_calls || []).map((call) => ({
+    id: call.id || crypto.randomUUID(),
+    name: call.function?.name || '',
+    arguments: parseArguments(call.function?.arguments)
+  })).filter((call) => call.name);
+  const usage = {
+    inputTokens: Number(data?.prompt_eval_count || 0),
+    outputTokens: Number(data?.eval_count || 0)
+  };
+  if (toolCalls.length) {
+    return { type: 'tool_calls', text: message.content || '', toolCalls, usage };
+  }
+  return { type: 'final_answer', text: message.content || '', usage };
+}
+
+function toAnthropicMessages(input = []) {
+  const messages = [];
+  for (const message of input.filter((item) => item.role !== 'system')) {
+    if (message.role === 'assistant' && Array.isArray(message.toolCalls)) {
+      messages.push({
+        role: 'assistant',
+        content: [
+          ...(message.content ? [{ type: 'text', text: message.content }] : []),
+          ...message.toolCalls.map((call) => ({
+            type: 'tool_use',
+            id: call.id,
+            name: call.name,
+            input: call.arguments || {}
+          }))
+        ]
+      });
+      continue;
+    }
+    if (message.role === 'tool') {
+      const block = {
+        type: 'tool_result',
+        tool_use_id: message.callId,
+        content: String(message.content || '')
+      };
+      const previous = messages.at(-1);
+      if (previous?.role === 'user' && Array.isArray(previous.content)
+        && previous.content.every((item) => item.type === 'tool_result')) {
+        previous.content.push(block);
+      } else {
+        messages.push({ role: 'user', content: [block] });
+      }
+      continue;
+    }
+    messages.push({ role: message.role, content: String(message.content || '') });
+  }
+  return messages;
+}
+
+function normalizeAnthropicResponse(data) {
+  const toolCalls = (data?.content || []).filter((item) => item.type === 'tool_use').map((call) => ({
+    id: call.id || crypto.randomUUID(),
+    name: call.name || '',
+    arguments: call.input || {}
+  })).filter((call) => call.name);
+  const text = (data?.content || [])
+    .filter((item) => item.type === 'text')
+    .map((item) => item.text)
+    .join('');
+  const usage = {
+    inputTokens: Number(data?.usage?.input_tokens || 0),
+    outputTokens: Number(data?.usage?.output_tokens || 0)
+  };
+  if (toolCalls.length) return { type: 'tool_calls', text, toolCalls, usage };
+  return { type: 'final_answer', text, usage };
+}
+
+function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
+  const modelId = providerBody.model || cfg.defaults?.textModel || 'ollama/llama3.2';
+  const provider = modelId.split('/')[0];
+
+  return async ({ input, tools, temperature }) => {
+    if (provider === 'ollama') {
+      const baseUrl = new URL(cfg.providers?.ollama?.baseUrl || 'http://localhost:11434');
+      const data = await requestJson(new URL('/api/chat', baseUrl), {
+        body: {
+          model: modelId.replace(/^ollama\//, ''),
+          messages: toOllamaMessages(input),
+          tools: toOpenAITools(tools),
+          stream: false,
+          think: providerBody.hazyReasoning?.reasoningMode !== 'off',
+          options: {
+            ...(providerBody.options || {}),
+            temperature
+          }
+        }
+      });
+      return normalizeOllamaResponse(data);
+    }
+
+    if (provider === 'anthropic') {
+      const apiKey = getApiKey('anthropic', cfg);
+      if (!apiKey) throw new Error('Anthropic API key is not configured.');
+      const data = await requestJson('https://api.anthropic.com/v1/messages', {
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: {
+          model: modelId.replace(/^anthropic\//, ''),
+          system: input.find((message) => message.role === 'system')?.content || '',
+          messages: toAnthropicMessages(input),
+          tools: tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            input_schema: tool.parameters
+          })),
+          tool_choice: { type: 'auto' },
+          max_tokens: providerBody.options?.max_tokens || 4096,
+          temperature
+        }
+      });
+      return normalizeAnthropicResponse(data);
+    }
+
+    const compatible = {
+      openai: {
+        url: 'https://api.openai.com/v1/chat/completions',
+        keyName: 'openai',
+        model: modelId.replace(/^openai\//, '')
+      },
+      groq: {
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        keyName: 'groq',
+        model: modelId.replace(/^groq\//, '')
+      },
+      nvidia: {
+        url: `${(cfg.providers?.nvidia?.baseUrl || 'https://integrate.api.nvidia.com/v1').replace(/\/$/, '')}/chat/completions`,
+        keyName: 'nvidia',
+        model: modelId.replace(/^nvidia\//, '').replace(/^nvidia\//, '')
+      }
+    }[provider];
+
+    if (!compatible) {
+      throw new Error(`Agent tool calling is not yet supported for provider: ${provider}`);
+    }
+    const apiKey = getApiKey(compatible.keyName, cfg);
+    if (!apiKey) throw new Error(`${provider} API key is not configured.`);
+    const data = await requestJson(compatible.url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: {
+        model: compatible.model,
+        messages: toOpenAIMessages(input),
+        tools: toOpenAITools(tools),
+        tool_choice: 'auto',
+        stream: false,
+        max_tokens: providerBody.options?.max_tokens || 4096,
+        temperature
+      }
+    });
+    return normalizeOpenAIResponse(data);
+  };
+}
+
+module.exports = {
+  createProviderAgentCaller,
+  normalizeAnthropicResponse,
+  normalizeOllamaResponse,
+  normalizeOpenAIResponse,
+  toAnthropicMessages,
+  toOllamaMessages,
+  toOpenAIMessages,
+  toOpenAITools
+};

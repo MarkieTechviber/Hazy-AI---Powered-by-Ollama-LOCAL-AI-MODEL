@@ -1,4 +1,10 @@
 const TEMPLATE_GUIDES = {
+  companion_conversation_response: [
+    "Respond to the person, not just the literal request.",
+    "Continue the conversational thread naturally.",
+    "Offer help only when it fits instead of forcing a task structure.",
+    "Leave room for warmth, humor, reflection, or simple presence."
+  ],
   emotional_support_response: [
     "Start with a soft acknowledgment.",
     "Reflect the user's experience in plain language.",
@@ -55,7 +61,7 @@ const TEMPLATE_GUIDES = {
 };
 
 function planResponse({ strategy, userNeed, toneProfile, memory, ragContext }) {
-  const guide = TEMPLATE_GUIDES[strategy.template] || TEMPLATE_GUIDES.technical_response;
+  const guide = TEMPLATE_GUIDES[strategy.template] || TEMPLATE_GUIDES.companion_conversation_response;
   const memoryNotes = (memory || []).slice(0, 3).map((item) => `Memory: ${item.summary || item.value || item}`);
   const ragNotes = (ragContext || []).slice(0, 3).map((item) => `Context: ${item.summary || item.text || item}`);
 

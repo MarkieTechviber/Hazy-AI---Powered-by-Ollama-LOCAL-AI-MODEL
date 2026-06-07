@@ -31,6 +31,7 @@ function buildPublicReasoningTrace({ analysis = {}, toolRun = {} } = {}) {
   const code = analysis.codeAnalysis || {};
   const project = analysis.projectContext || {};
   const safety = analysis.safety || {};
+  const contextWindow = analysis.contextWindow || {};
   const toolResults = Array.isArray(toolRun.toolResults) ? toolRun.toolResults : [];
   const toolDecisions = Array.isArray(toolRun.decisions) ? toolRun.decisions : [];
 
@@ -48,8 +49,18 @@ function buildPublicReasoningTrace({ analysis = {}, toolRun = {} } = {}) {
 
   const steps = [
     {
+      label: 'Checked',
+      value: reasoning.publicSummary || 'Hazy checked the request before answering.'
+    },
+    {
       label: 'Route',
       value: `${reasoning.taskType || (isCoding ? 'coding' : 'general')} -> ${reasoning.userIntent || code.codeType || 'general'}`
+    },
+    {
+      label: 'Task analysis',
+      value: reasoning.reasoningTask
+        ? `${reasoning.reasoningTask.complexity} | confidence ${reasoning.reasoningTask.confidence}% | calculator ${reasoning.reasoningTask.shouldUseCalculator ? 'on' : 'off'}`
+        : 'general request'
     },
     {
       label: 'Agent enabled',
@@ -69,13 +80,19 @@ function buildPublicReasoningTrace({ analysis = {}, toolRun = {} } = {}) {
     },
     {
       label: 'Reasoning level',
-      value: `${reasoning.reasoningLevel || 'direct'} | risk ${reasoning.riskLevel || safety.riskLevel || 'low'}`
+      value: `${reasoning.reasoningLevel || 'direct'} | effort ${reasoning.effort || 'none'} | risk ${reasoning.riskLevel || safety.riskLevel || 'low'}`
     },
     {
       label: 'Model context',
       value: hasToolContext
         ? 'answering with tool context'
         : 'answering without successful tool result context'
+    },
+    {
+      label: 'Context window',
+      value: contextWindow.safeInputLimit
+        ? `${contextWindow.afterTokens || 0}/${contextWindow.safeInputLimit} input tokens | ${contextWindow.trimLog?.length || contextWindow.trimmedMessageCount || 0} packing action(s) | ${contextWindow.packedSlots?.retrievedChunks || 0} retrieved chunk(s)`
+        : 'context budget unavailable'
     },
     {
       label: 'Code intelligence',
@@ -100,10 +117,10 @@ function buildPublicReasoningTrace({ analysis = {}, toolRun = {} } = {}) {
   ];
 
   return {
-    title: 'HAZY DECISION TRACE',
+    title: 'HAZY REASONING SUMMARY',
     summary: hasToolContext
       ? 'Tool context was gathered before answering.'
-      : (reasoning.assumption || 'Request routed without successful tool result context.'),
+      : (reasoning.publicSummary || reasoning.assumption || 'Request routed without successful tool result context.'),
     steps,
     tools: toolResults.map((item) => ({
       tool: item.tool,
@@ -112,7 +129,7 @@ function buildPublicReasoningTrace({ analysis = {}, toolRun = {} } = {}) {
       resultCount: Array.isArray(item.results) ? item.results.length : 0,
       providersTried: item.providersTried || []
     })),
-    note: 'This is a public routing/decision summary, not private chain-of-thought.'
+    note: 'Safe public summary only. Private reasoning is not shown or stored.'
   };
 }
 

@@ -87,9 +87,22 @@ function selectEmpathyStrategy({ emotion, intent, intensity, safety }) {
     }
   };
 
+  const fallbackTemplate = {
+    general_conversation: "companion_conversation_response",
+    venting: "emotional_support_response",
+    emotional_support: "emotional_support_response",
+    celebration: "celebration_response",
+    planning: "planning_response",
+    decision_making: "decision_support_response",
+    expressing_confusion: "clarifying_response",
+    debugging: "debugging_response",
+    creative_help: "companion_conversation_response",
+    technical_question: "technical_response",
+    direct_answer: "technical_response"
+  };
   const fallback = {
     mode: intent === "direct_answer" || intent === "debugging" ? "direct_engineer" : "warm_clear",
-    template: intent === "planning" ? "planning_response" : "technical_response",
+    template: fallbackTemplate[intent] || "companion_conversation_response",
     empathyLead: intensity !== "low",
     validateFirst: ["venting", "emotional_support", "expressing_confusion", "debugging"].includes(intent),
     useAnalogy: emotion === "confused",

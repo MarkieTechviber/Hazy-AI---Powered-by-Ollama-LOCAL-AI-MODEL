@@ -3,7 +3,7 @@ set -e
 
 echo ""
 echo "  ╔══════════════════════════════════════╗"
-echo "  ║         Hazy AI Chatbot          ║"
+echo "  ║       Hazy Local Companion       ║"
 echo "  ╚══════════════════════════════════════╝"
 echo ""
 

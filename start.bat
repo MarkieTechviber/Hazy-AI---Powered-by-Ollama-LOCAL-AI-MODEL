@@ -1,8 +1,8 @@
 @echo off
-title Hazy AI Chatbot
+title Hazy Local Companion
 echo.
 echo  ╔══════════════════════════════════════╗
-echo  ║         Hazy AI Chatbot          ║
+echo  ║       Hazy Local Companion       ║
 echo  ╚══════════════════════════════════════╝
 echo.
 

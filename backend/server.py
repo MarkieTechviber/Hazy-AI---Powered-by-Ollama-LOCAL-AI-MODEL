@@ -29,9 +29,10 @@ try:
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
     from fastapi.staticfiles import StaticFiles
+    from openai import OpenAI
 except ImportError:
     print("\n❌  Missing dependencies. Please run:\n")
-    print("    pip install fastapi uvicorn httpx\n")
+    print("    pip install fastapi uvicorn httpx openai\n")
     sys.exit(1)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@ OLLAMA_BASE  = os.getenv("OLLAMA_URL", "http://localhost:11434")
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 PORT         = int(os.getenv("PORT", 8080))
 HOST         = os.getenv("HOST", "127.0.0.1")
+NVIDIA_BASE  = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # App
@@ -65,6 +68,29 @@ async def stream_ollama(url: str, body: dict) -> AsyncGenerator[bytes, None]:
             async for line in resp.aiter_lines():
                 if line:
                     yield (line + "\n").encode()
+
+
+def stream_nvidia_chat(api_key: str, body: dict):
+    client = OpenAI(base_url=NVIDIA_BASE, api_key=api_key)
+    completion = client.chat.completions.create(
+        model=body.get("model", NVIDIA_MODEL),
+        messages=body.get("messages", []),
+        temperature=body.get("temperature", 1),
+        top_p=body.get("top_p", 0.95),
+        max_tokens=body.get("max_tokens", 16384),
+        extra_body=body.get(
+            "extra_body",
+            {"chat_template_kwargs": {"enable_thinking": True}, "reasoning_budget": 16384},
+        ),
+        stream=True,
+    )
+
+    for chunk in completion:
+        if not getattr(chunk, "choices", None):
+            continue
+        delta = chunk.choices[0].delta
+        if delta.content is not None:
+            yield delta.content.encode()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -117,6 +143,24 @@ async def generate(request: Request):
         async with httpx.AsyncClient(timeout=120) as client:
             r = await client.post(f"{OLLAMA_BASE}/api/generate", json=body)
             return Response(content=r.content, media_type="application/json", status_code=r.status_code)
+
+
+@app.post("/api/nvidia/chat")
+async def nvidia_chat(request: Request):
+    """Stream chat responses from NVIDIA's OpenAI-compatible endpoint."""
+    body = await request.json()
+    api_key = body.get("apiKey") or os.getenv("NVIDIA_API_KEY")
+    if not api_key:
+        return Response(
+            content=json.dumps({"error": "NVIDIA API key not set. Set NVIDIA_API_KEY."}),
+            media_type="application/json",
+            status_code=401,
+        )
+
+    return StreamingResponse(
+        stream_nvidia_chat(api_key, body),
+        media_type="text/plain",
+    )
 
 
 @app.get("/api/status")

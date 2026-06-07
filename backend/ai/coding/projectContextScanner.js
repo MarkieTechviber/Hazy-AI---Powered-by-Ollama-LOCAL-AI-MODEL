@@ -102,6 +102,10 @@ function scanProjectContext({ attachments = [], messages = [] } = {}) {
       addScore(scoreboard, file.ext === 'ts' ? 'typescript' : 'javascript', 18, 'Vite config detected');
       frameworks.add('Vite');
     }
+    if (loweredName.endsWith('package.json') && /\b(workspaces|packages\/\*)\b/i.test(file.contentPreview)) {
+      frameworks.add('Monorepo');
+      evidence.push(file.name);
+    }
     if (preview.includes('<!doctype html') || preview.includes('<html')) {
       addScore(scoreboard, 'html', 12, 'HTML document detected');
     }
@@ -119,14 +123,17 @@ function scanProjectContext({ attachments = [], messages = [] } = {}) {
   const sorted = Object.entries(scoreboard).sort((a, b) => b[1].score - a[1].score);
   const primaryLanguage = sorted[0]?.[0] || null;
   const confidence = Math.min(sorted[0]?.[1]?.score || 0, 99);
+  const conflictingSignals = sorted.length > 1 && sorted[1][1].score >= Math.max(16, confidence * 0.5);
 
   let projectType = 'general-software-project';
   if (frameworks.has('Node.js') && (frameworks.has('React') || frameworks.has('Vite'))) {
     projectType = 'web-app';
-  } else if (frameworks.has('Python')) {
-    projectType = 'python-project';
+  } else if (frameworks.has('Monorepo')) {
+    projectType = 'monorepo';
   } else if (frameworks.has('Express.js')) {
     projectType = 'node-backend';
+  } else if (frameworks.has('Python')) {
+    projectType = 'python-project';
   }
 
   const detectedStack = frameworks.size
@@ -138,6 +145,7 @@ function scanProjectContext({ attachments = [], messages = [] } = {}) {
     primaryLanguage,
     frameworks: Array.from(frameworks),
     confidence,
+    conflictingSignals,
     evidence: Array.from(new Set(evidence)).slice(0, 10),
     projectType,
     languageSignals: sorted.map(([language, data]) => ({

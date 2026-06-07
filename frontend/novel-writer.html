@@ -229,6 +229,7 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%
     <option value="openai">OpenAI (GPT-4o)</option>
     <option value="groq">Groq (Fast)</option>
     <option value="gemini">Google Gemini</option>
+    <option value="nvidia">NVIDIA NIM</option>
   </select>
   <label style="margin-left:6px">MODEL</label>
   <select id="modelSelect" style="flex:1;background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12);color:var(--paper)">
@@ -673,7 +674,6 @@ Rules:
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: getModel(),
-        ...(getApiKey() ? {apiKey: getApiKey()} : {}),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user',   content: 'Story idea: ' + prompt }
@@ -903,18 +903,10 @@ const getModel = () => {
   return sel ? sel.value : (localStorage.getItem('hazyDefaultModel') || 'ollama/llama3.2');
 };
 
-// Get the API key for the current provider from localStorage
-const getApiKey = () => {
-  const model    = getModel();
-  const provider = model.split('/')[0];
-  if (provider === 'ollama') return null;
-  return localStorage.getItem('hazyKey_' + provider) || null;
-};
-
 // Check if current provider is cloud
 const isCloudProvider = () => {
   const prov = getModel().split('/')[0];
-  return ['anthropic','openai','groq','gemini'].includes(prov);
+  return ['anthropic','openai','groq','gemini','nvidia'].includes(prov);
 };
 
 // ── Unified fetch helper — always streams, collects full text ────────────
@@ -926,9 +918,7 @@ async function fetchText(messages, opts = {}) {
     : { temperature: opts.temperature || 0.3, num_predict: opts.num_predict || 1000,
         repeat_penalty: opts.repeat_penalty || 1.0, top_p: opts.top_p || 0.9 };
 
-  const apiKey = getApiKey();
   const body = { model: getModel(), messages, stream: true, options: baseOpts };
-  if (apiKey) body.apiKey = apiKey;
 
   const r = await fetch('/hazy/chat', {
     method: 'POST',
@@ -1254,7 +1244,6 @@ async function streamGen(messages, onChunk) {
 
   S.abortCtrl = new AbortController();
 
-  const apiKey   = getApiKey();
   const isCloud  = isCloudProvider();
 
   // Cloud providers don't support Ollama-specific options — send only standard ones
@@ -1268,8 +1257,6 @@ async function streamGen(messages, onChunk) {
     stream:  true,
     options: bodyOptions,
   };
-  if (apiKey) reqBody.apiKey = apiKey; // server uses this to call cloud API
-
   const r = await fetch('/hazy/chat', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1387,7 +1374,6 @@ async function checkPlotContradictions(n, newChapterText) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: getModel(),
-        ...(getApiKey() ? {apiKey: getApiKey()} : {}),
         messages: [{
           role: 'user',
           content: [
@@ -2489,6 +2475,9 @@ const PROVIDER_MODELS = {
     {id:'gemini/gemini-2.0-flash',   label:'Gemini 2.0 Flash — recommended'},
     {id:'gemini/gemini-2.5-flash',   label:'Gemini 2.5 Flash — latest'},
     {id:'gemini/gemini-1.5-pro',     label:'Gemini 1.5 Pro — 1M context'},
+  ],
+  nvidia: [
+    {id:'nvidia/nemotron-3-super-120b-a12b', label:'Nemotron 3 Super 120B A12B'},
   ],
 };
 

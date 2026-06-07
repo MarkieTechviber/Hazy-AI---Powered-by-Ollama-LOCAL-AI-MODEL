@@ -44,6 +44,8 @@
     <symbol id="icon-arrow-right" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8.5v4l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/></symbol>
+    <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M3.75 12s3-6 8.25-6 8.25 6 8.25 6-3 6-8.25 6-8.25-6-8.25-6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.75" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="icon-menu-lines" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   </svg>
 
   <div class="app-shell dream-layout">
@@ -243,10 +245,15 @@
         <div class="builder-toolbar">
           <div class="builder-meta"><span id="builderFileLabel">No file selected</span><span id="builderFileCount"></span></div>
           <div class="builder-actions">
-            <button id="builderPreviewToggle" type="button">Preview</button>
-            <button id="builderRefresh" type="button">Refresh</button>
-            <button id="builderCopyFile" type="button">Copy</button>
-            <button id="builderDownload" type="button">Download</button>
+            <button class="builder-view-btn" id="builderPreviewToggle" type="button" title="Preview website" aria-label="Preview website">
+              <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-eye"></use></svg>
+            </button>
+            <button class="builder-view-btn" id="builderFilesToggle" type="button" title="Show source files" aria-label="Show source files">
+              <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-menu-lines"></use></svg>
+            </button>
+            <button id="builderRefresh" type="button" title="Refresh preview">Refresh</button>
+            <button id="builderCopyFile" type="button" title="Copy current file">Copy</button>
+            <button id="builderDownload" type="button" title="Download ZIP">Download</button>
           </div>
         </div>
         <div class="builder-tabs" id="builderTabs"></div>
@@ -285,6 +292,10 @@
           <button class="composer-icon-btn" id="uploadBtn" type="button" title="Attach file"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-clipboard"></use></svg></button>
           <div class="composer-input-shell">
             <textarea id="chatInput" rows="1" placeholder="Ask Hazy anything..."></textarea>
+            <div class="reasoning-toggle" id="reasoningToggle" role="group" aria-label="Response reasoning mode">
+              <button class="reasoning-toggle-btn" id="reasoningInstantBtn" data-reasoning="off" type="button" title="Answer without extended thinking">Instant</button>
+              <button class="reasoning-toggle-btn" id="reasoningDeepBtn" data-reasoning="deep" type="button" title="Use extended thinking before answering">Deep Thinking</button>
+            </div>
             <button class="composer-secondary-btn" id="stopBtn" type="button">Stop</button>
           </div>
           <button class="send-btn" id="sendBtn" type="button" title="Send"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-send"></use></svg></button>
@@ -518,6 +529,7 @@
           <button class="snav-btn active" data-tab="sGeneral"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-settings"></use></svg>General</button>
           <button class="snav-btn" data-tab="sModels"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chart"></use></svg>Models</button>
           <button class="snav-btn" data-tab="sProviders"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-box"></use></svg>AI Providers</button>
+          <button class="snav-btn" data-tab="sMemory"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Memory</button>
           <button class="snav-btn" data-tab="sGeneration"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bolt"></use></svg>Generation</button>
           <button class="snav-btn" data-tab="sAppearance"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-sun"></use></svg>Appearance</button>
           <button class="snav-btn" data-tab="sNovelWriter"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Novel Writer</button>
@@ -577,6 +589,30 @@
             <div class="preview-list" id="installedModelsList"></div>
           </div>
 
+          <div class="stab" id="sMemory">
+            <div class="stab-section-title">Companion Memory</div>
+            <p class="stab-helper">Review and control durable facts Hazy may use across conversations. Credentials and passwords are never accepted as companion memories.</p>
+            <div class="memory-create-grid">
+              <select class="setting-input" id="memoryType">
+                <option value="explicit_fact">Fact</option>
+                <option value="preference">Preference</option>
+                <option value="boundary">Boundary</option>
+                <option value="ongoing_goal">Ongoing goal</option>
+                <option value="project_fact">Project fact</option>
+              </select>
+              <input class="setting-input" id="memoryKey" type="text" maxlength="120" placeholder="Short label, e.g. preferred_name" />
+              <input class="setting-input" id="memoryValue" type="text" maxlength="2000" placeholder="What should Hazy remember?" />
+              <button class="btn-primary" id="memoryAddBtn" type="button">Add memory</button>
+            </div>
+            <div class="memory-toolbar">
+              <label class="setting-label"><input id="memoryShowDisabled" type="checkbox" /> Show paused memories</label>
+              <button class="btn-secondary" id="memoryRefreshBtn" type="button">Refresh</button>
+            </div>
+            <div class="memory-list" id="memoryList">
+              <div class="memory-empty">Open this tab to load Hazy's memories.</div>
+            </div>
+          </div>
+
           <div class="stab" id="sGeneration">
             <div class="stab-section-title">Generation</div>
             <p class="stab-helper">Tune the model behavior for longer or more focused responses.</p>
@@ -599,6 +635,19 @@
             <div class="setting-group">
               <label class="setting-label" for="settingsContextSize">Context size</label>
               <input class="setting-input" id="settingsContextSize" type="number" min="512" step="512" value="4096" />
+            </div>
+            <div class="setting-grid two-column">
+              <div class="setting-group">
+                <label class="setting-label" for="settingsReasoningMode">Reasoning mode</label>
+                <select class="setting-input" id="settingsReasoningMode">
+                  <option value="auto" selected>Auto</option>
+                  <option value="deep">Deep</option>
+                  <option value="off">Off</option>
+                </select>
+              </div>
+              <div class="setting-group">
+                <label class="setting-label" for="settingsReasoningSummary"><input id="settingsReasoningSummary" type="checkbox" checked /> Show reasoning summary</label>
+              </div>
             </div>
           </div>
 
@@ -778,16 +827,9 @@
     }
   }
   </script>
-  <script type="module">
-    try {
-      const tts = await import('/piper/piper-tts-web.js');
-      window.PiperTTS = tts;
-      window.dispatchEvent(new Event('piper-ready'));
-    } catch (e) {
-      console.warn('[Piper] TTS library failed to load - browser voice still works:', e);
-      window.PiperTTS = null;
-      window.dispatchEvent(new Event('piper-ready'));
-    }
+  <script>
+    window.PiperTTS = null;
+    window.dispatchEvent(new Event('piper-ready'));
   </script>
 </body>
 </html>

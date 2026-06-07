@@ -1,4 +1,41 @@
 const { verifyCodeResponse } = require('./coding/codeVerifier');
+const { evaluateReasoningResponse } = require('./reasoning/qualityEvaluator');
+
+function stripPrivateReasoningBlocks(text) {
+  const input = String(text || "");
+  const tagPattern = /<\s*(\/?)\s*thinking\b[^>]*>/gi;
+  let output = "";
+  let depth = 0;
+  let cursor = 0;
+  let removed = false;
+  let match;
+
+  while ((match = tagPattern.exec(input)) !== null) {
+    if (depth === 0) {
+      output += input.slice(cursor, match.index);
+    }
+
+    const closing = Boolean(match[1]);
+    if (closing) {
+      if (depth > 0) depth -= 1;
+      removed = true;
+      cursor = tagPattern.lastIndex;
+    } else {
+      depth += 1;
+      removed = true;
+      cursor = tagPattern.lastIndex;
+    }
+  }
+
+  if (depth === 0) {
+    output += input.slice(cursor);
+  }
+
+  return {
+    text: output.trim(),
+    removed
+  };
+}
 
 function reviewResponse(response, context) {
   const issues = [];
@@ -6,6 +43,12 @@ function reviewResponse(response, context) {
 
   if (!revised.trim()) {
     issues.push("empty_response");
+  }
+
+  const strippedReasoning = stripPrivateReasoningBlocks(revised);
+  if (strippedReasoning.removed) {
+    issues.push("private_reasoning_exposed");
+    revised = strippedReasoning.text;
   }
 
   if (context.intent === "direct_answer" && revised.length > 900) {
@@ -47,12 +90,22 @@ function reviewResponse(response, context) {
     issues.push(...codeReview.issues);
   }
 
+  const reasoningQuality = evaluateReasoningResponse(revised, context.reasoningTask || {
+    taskType: context.taskType || 'general',
+    shouldUseReasoning: false,
+    shouldUseCalculator: context.taskType === 'math'
+  });
+  for (const issue of reasoningQuality.issues) {
+    if (!issues.includes(issue)) issues.push(issue);
+  }
+
   return {
     approved: issues.length === 0,
     issues,
     response: revised,
+    reasoningQuality,
     needsRewrite: issues.some((issue) => ["false_human_experience", "too_solution_heavy", "dependency_language", "self_ai_label"].includes(issue))
   };
 }
 
-module.exports = { reviewResponse };
+module.exports = { reviewResponse, stripPrivateReasoningBlocks };

@@ -764,6 +764,11 @@ function normalizeLanguageAlias(raw) {
   return aliases[raw] || (LANGUAGE_STYLES[raw] ? raw : null);
 }
 
+function keywordMatches(text, keyword) {
+  const escaped = String(keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text);
+}
+
 /**
  * Main multi-signal language inference.
  * Combines explicit, framework, domain, and conversation signals.
@@ -774,7 +779,7 @@ function inferLanguage(message, conversationHistory = []) {
 
   // 1. Explicit language mentions (highest priority)
   for (const [keyword, signal] of Object.entries(EXPLICIT_LANG_SIGNALS)) {
-    if (lowerMsg.includes(keyword)) {
+    if (keywordMatches(lowerMsg, keyword)) {
       signals.push({
         lang: signal.lang,
         weight: signal.weight,
@@ -787,7 +792,7 @@ function inferLanguage(message, conversationHistory = []) {
 
   // 2. Framework/library signals
   for (const [keyword, signal] of Object.entries(FRAMEWORK_SIGNALS)) {
-    if (lowerMsg.includes(keyword)) {
+    if (keywordMatches(lowerMsg, keyword)) {
       signals.push({
         lang: signal.lang,
         weight: signal.weight,
@@ -800,7 +805,7 @@ function inferLanguage(message, conversationHistory = []) {
 
   // 3. Domain/task signals
   for (const [keyword, signal] of Object.entries(DOMAIN_SIGNALS)) {
-    if (lowerMsg.includes(keyword)) {
+    if (keywordMatches(lowerMsg, keyword)) {
       signals.push({
         lang: signal.lang,
         weight: signal.weight,
@@ -817,6 +822,21 @@ function inferLanguage(message, conversationHistory = []) {
 
   // 5. If user-provided language hint from frontend override
   // (handled in the caller, passed as explicit signal)
+  const dedupedSignals = [];
+  const strongestExplicitByLang = new Map();
+  for (const signal of signals) {
+    if (signal.source !== 'explicit_mention') {
+      dedupedSignals.push(signal);
+      continue;
+    }
+    const existing = strongestExplicitByLang.get(signal.lang);
+    if (!existing || signal.weight > existing.weight) {
+      strongestExplicitByLang.set(signal.lang, signal);
+    }
+  }
+  dedupedSignals.push(...strongestExplicitByLang.values());
+  signals.length = 0;
+  signals.push(...dedupedSignals);
 
   if (signals.length === 0) {
     return { lang: null, confidence: 0, reason: 'no_signals', frameworks: [], signals: [] };
@@ -834,20 +854,35 @@ function inferLanguage(message, conversationHistory = []) {
   }
 
   // Normalize weights — explicit signals cap out the score
-  const winner = Object.entries(langScores)
+  const rankedLanguages = Object.entries(langScores)
     .sort((a, b) => b[1].totalWeight - a[1].totalWeight)[0];
 
-  const [lang, data] = winner;
-  const confidence = Math.min(Math.round(data.totalWeight / 1.5), 99);
+  const sortedLanguages = Object.entries(langScores)
+    .sort((a, b) => b[1].totalWeight - a[1].totalWeight);
+  const [lang, data] = rankedLanguages;
+  const runnerUp = sortedLanguages[1] || null;
+  const conflictingSignals = Boolean(runnerUp && runnerUp[1].totalWeight >= data.totalWeight * 0.65);
+  const confidence = conflictingSignals
+    ? Math.min(Math.round(data.totalWeight / 2.5), 74)
+    : Math.min(Math.round(data.totalWeight / 1.5), 99);
   const frameworks = [...data.frameworks];
   const topSignal = data.signals.sort((a, b) => b.weight - a.weight)[0];
+  const reason = buildInferenceReason(lang, topSignal, frameworks);
 
   return {
     lang,
     confidence,
     frameworks,
-    reason: buildInferenceReason(lang, topSignal, frameworks),
+    reason: conflictingSignals
+      ? `${reason}; conflicting ${runnerUp[0]} signal also detected`
+      : reason,
     signals: data.signals,
+    languageSignals: sortedLanguages.map(([language, scoreData]) => ({
+      language,
+      score: scoreData.totalWeight,
+      signalCount: scoreData.signals.length
+    })),
+    conflictingSignals,
     styleGuide: LANGUAGE_STYLES[lang] || null,
   };
 }
@@ -922,9 +957,10 @@ function isCodingRequest(message) {
   const codingVerbs = [
     'write', 'create', 'build', 'make', 'generate', 'implement', 'code',
     'develop', 'program', 'script', 'fix', 'debug', 'refactor', 'optimize',
-    'improve', 'add', 'modify', 'update', 'extend', 'review', 'explain',
+    'improve', 'add', 'modify', 'update', 'extend',
     'convert', 'translate', 'rewrite', 'deploy',
   ];
+  const contextVerbs = ['review', 'explain'];
   const codingNouns = [
     'function', 'class', 'method', 'api', 'algorithm', 'script', 'program',
     'app', 'application', 'module', 'library', 'package', 'component',
@@ -938,10 +974,11 @@ function isCodingRequest(message) {
     return regex.test(message);
   });
   const hasNoun = codingNouns.some(n => lower.includes(n));
+  const hasContextVerb = contextVerbs.some(v => new RegExp(`\\b${v}\\b`, 'i').test(message));
   const hasCodeBlock = message.includes('```');
   const hasFileExtension = /\.(py|js|ts|go|rs|java|cpp|cs|rb|php|swift|kt|dart|sh|sql)\b/.test(lower);
 
-  return hasVerb || hasNoun || hasCodeBlock || hasFileExtension;
+  return hasVerb || hasNoun || hasCodeBlock || hasFileExtension || (hasContextVerb && (hasNoun || hasCodeBlock || hasFileExtension));
 }
 
 // ============================================================================
@@ -1203,6 +1240,8 @@ function analyzeCodeRequest(message, conversationHistory = [], userHint = null, 
     confidence:    langResult.confidence,
     reason:        langResult.reason,
     frameworks:    langResult.frameworks,
+    conflictingSignals: Boolean(langResult.conflictingSignals),
+    languageSignals: langResult.languageSignals || [],
     codeType,
     complexity,
     systemPrompt,

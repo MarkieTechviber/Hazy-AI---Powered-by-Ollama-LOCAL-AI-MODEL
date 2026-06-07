@@ -1,5 +1,13 @@
-# Ignore config file — contains API keys
+# Legacy config may contain old plaintext API keys
 config/hazy-config.json
+
+# Encrypted local state and its master key
+cache/hazy-engine/hazy.db
+cache/hazy-engine/hazy.db-*
+cache/hazy-engine/.hazy-master-key
+cache/hazy-engine/memory/hazy.db
+cache/hazy-engine/memory/hazy.db-*
+cache/hazy-engine/memory/.hazy-master-key
 
 # OS files
 .DS_Store
@@ -13,3 +21,9 @@ npm-debug.log
 __pycache__/
 *.pyc
 .env
+
+# Hazy desktop controller runtime state
+cache/hazy-control/
+cache/hazy-engine/audit/
+cache/hazy-engine/confirmations/
+cache/hazy-engine/web-search/

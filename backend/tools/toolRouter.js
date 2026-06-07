@@ -1,10 +1,12 @@
 'use strict';
 
-const { webSearch } = require('./webSearchTool');
+const { compressToolContent } = require('../ai/context/contextWindowManager');
+const { detectSearchDecision } = require('../webSearch/searchRouter');
+const { resolveUserQuestion } = require('../webSearch/queryPlanner');
+const { defaultAgentRuntime, createToolContext } = require('../agent/agentRuntime');
 
 function latestUserMessage(messages = []) {
-  return [...(messages || [])]
-    .reverse()
+  return [...messages].reverse()
     .find((message) => message?.role === 'user' && typeof message.content === 'string')
     ?.content || '';
 }
@@ -18,133 +20,109 @@ function isAgentEnabled(body = {}) {
   );
 }
 
+function isBuildOrCodeRequest(body = {}) {
+  const mode = String(body.hazy?.mode || '').toLowerCase();
+  return mode === 'build'
+    || mode === 'code'
+    || body.hazy?.isBuild === true
+    || body.hazy?.isCode === true;
+}
+
 function wantsWebSearch(message = '') {
-  const text = String(message || '').toLowerCase();
-
-  // Avoid confusing programming/math phrases like "binary search" with web search.
-  const algorithmSearch = /\b(binary|linear|depth[-\s]?first|breadth[-\s]?first|graph|tree)\s+search\b/i.test(text);
-  const explicitWebWord = /\b(online|internet|web|browse|google|look\s*up|lookup|current|latest|recent|news|source|sources|cite|verify|fact\s*check)\b/i.test(text);
-  if (algorithmSearch && !explicitWebWord) return false;
-
-  const directSearchIntent = /\b(look\s*up|lookup|browse|google|internet|web\s*search|online)\b/i.test(text)
-    || /\bsearch\s+(?:online|on\s+the\s+web|the\s+internet|for|about)\b/i.test(text)
-    || /^\s*(?:can|could|would)?\s*(?:you)?\s*search\b/i.test(text);
-  const recencyIntent = /\b(current|latest|recent|today|this\s+week|this\s+month|new\s+release|release\s+date|news|price|schedule|score|weather)\b/i.test(text);
-  const sourceIntent = /\b(source|sources|cite|citation|link|links|verify|fact\s*check)\b/i.test(text);
-
-  return directSearchIntent || (recencyIntent && sourceIntent);
-}
-
-function normalizeSearchText(message = '') {
-  return String(message || '')
-    .replace(/[\u201c\u201d]/g, '"')
-    .replace(/[\u2018\u2019]/g, "'");
-}
-
-function polishSearchQuery(query = '') {
-  let clean = String(query || '')
-    .replace(/[?.!]+/g, ' ')
-    .replace(/\b(the|a|an)\b/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const songLikeToken = clean.match(/\b[A-Za-z0-9][A-Za-z0-9'_-]*-[A-Za-z0-9][A-Za-z0-9'_-]*\b/);
-  if (/\bsong\b/i.test(clean) && songLikeToken) {
-    clean = `${songLikeToken[0]} song`;
-  }
-
-  return clean;
+  return detectSearchDecision(message).mode !== 'none';
 }
 
 function extractSearchQuery(message = '') {
-  let query = normalizeSearchText(message).trim();
-
-  const quoted = query.match(/["']([^"']{2,160})["']/);
-  if (quoted?.[1]) {
-    const context = query
-      .replace(quoted[0], '')
-      .replace(/\b(can you|could you|please|search|look up|lookup|browse|online|internet|web|about|for|the|a|an)\b/gi, ' ')
-      .replace(/[?.!]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return polishSearchQuery([quoted[1], context].filter(Boolean).join(' '));
-  }
-
-  query = query
-    .replace(/^\s*(can|could|would)\s+you\s+/i, '')
-    .replace(/^\s*please\s+/i, '')
-    .replace(/\b(search|look\s*up|lookup|browse|google|find)\b/gi, ' ')
-    .replace(/\b(on|from|using)?\s*(the\s+)?(internet|web|online)\b/gi, ' ')
-    .replace(/\b(can you|could you|please|about|for)\b/gi, ' ')
-    .replace(/\b(the|a|an)\b/gi, ' ')
-    .replace(/[?.!]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return polishSearchQuery(query) || normalizeSearchText(message).trim();
+  return resolveUserQuestion(message);
 }
 
-function formatToolContext(toolResults = []) {
+function formatToolContext(toolResults = [], maxTokens = 12000) {
+  const result = toolResults.find((item) => item.tool === 'web_search');
+  if (!result) return '';
   const lines = [
-    'TOOL CONTEXT GATHERED BY HAZY BEFORE ANSWERING:',
-    'Use this context when relevant. If results are weak or empty, say that clearly instead of pretending certainty.',
-    'Important: because this tool context was already gathered, do not claim you cannot browse or search the internet for this turn.'
+    'WEB SEARCH EVIDENCE:',
+    'Use this evidence for current or external factual claims.',
+    'Cite inline with [SOURCE N]. Do not cite a source that is not listed.',
+    'If the evidence is insufficient or conflicting, say so clearly.',
+    '',
+    `Search mode: ${result.decision?.mode || 'quick_web'}`,
+    `Confidence: ${result.confidence || result.metrics?.confidence || 'low'}`,
+    `Search queries: ${(result.queries || []).map((query) => query.query).join(' | ') || result.query || 'none'}`,
+    `Search run ID: ${result.runId || 'not persisted'}`,
+    '',
+    result.contextText || ''
   ];
-
-  for (const item of toolResults) {
-    lines.push(`\n[${item.tool}] query: ${item.query || item.parameters?.query || 'n/a'}`);
-    if (!item.success) {
-      lines.push(`Status: failed or no useful results. ${item.error || item.note || ''}`.trim());
-      continue;
-    }
-    const results = item.results || [];
-    if (!results.length) {
-      lines.push('Status: no useful results returned.');
-      continue;
-    }
-    results.slice(0, 8).forEach((result, index) => {
-      lines.push(`${index + 1}. ${result.title || 'Untitled'}${result.source ? ` - ${result.source}` : ''}`);
-      if (result.snippet) lines.push(`   ${result.snippet}`);
-      if (result.url) lines.push(`   URL: ${result.url}`);
-    });
+  if (result.warnings?.length) {
+    lines.push('', 'Search warnings:', ...result.warnings.map((warning) => `- ${warning}`));
   }
-
-  return lines.join('\n');
+  return compressToolContent('web_search_evidence', lines.join('\n'), maxTokens).content;
 }
 
 async function runDeterministicTools({ body = {}, cfg = {} } = {}) {
   const originalMessages = Array.isArray(body.messages) ? body.messages : [];
   const message = latestUserMessage(originalMessages);
-  const agentEnabled = isAgentEnabled(body);
-  const decisions = [];
-  const toolResults = [];
+  const decision = detectSearchDecision(message, {
+    forceSearch: body.hazy?.forceWebSearch
+  });
+  const decisions = [{
+    tool: decision.mode === 'none' ? 'none' : 'web_search',
+    reason: decision.reason,
+    mode: decision.mode
+  }];
 
-  if (!agentEnabled) {
-    decisions.push({ tool: 'none', reason: 'Agent Mode is off.' });
-    return { body, toolResults, decisions, agentEnabled };
+  if (decision.mode === 'none') {
+    return {
+      body,
+      toolResults: [],
+      decisions,
+      agentEnabled: isAgentEnabled(body),
+      searchDecision: decision
+    };
   }
 
-  if (wantsWebSearch(message)) {
-    const query = extractSearchQuery(message);
-    decisions.push({ tool: 'web_search', reason: 'User requested web/current/online information.', query });
-    const searchResult = await webSearch({ query, cfg, limit: body.hazy?.searchLimit || 8 });
-    toolResults.push({
-      tool: 'web_search',
-      query,
-      parameters: { query },
-      ...searchResult
-    });
-  } else {
-    decisions.push({ tool: 'none', reason: 'No deterministic tool need detected.' });
-  }
-
-  if (!toolResults.length) {
-    return { body, toolResults, decisions, agentEnabled };
-  }
-
-  const toolContextMessage = {
+  const ctx = createToolContext(body, {
+    services: {
+      config: cfg,
+      messages: originalMessages,
+      searchDecision: decision,
+      testWebSearchResult: cfg.__testWebSearchResult
+    }
+  });
+  const gateResult = await defaultAgentRuntime.gatekeeper.validateAndMaybeRun({
+    ctx,
+    toolCall: {
+      id: `web-search:${ctx.requestId}`,
+      name: 'web.search',
+      arguments: {
+        query: message
+      }
+    }
+  });
+  const searchResult = gateResult.status === 'executed'
+    ? (gateResult.result.data || {})
+    : {
+        success: false,
+        decision,
+        query: resolveUserQuestion(message, originalMessages),
+        contextText: '',
+        citations: [],
+        warnings: [gateResult.error?.message || 'Search was blocked by backend policy.'],
+        metrics: { confidence: 'low' }
+      };
+  const toolResult = {
+    tool: 'web_search',
+    backendTool: 'web.search',
+    originalMessage: message,
+    gateStatus: gateResult.status,
+    ...searchResult
+  };
+  const contextMessage = {
     role: 'system',
-    content: formatToolContext(toolResults)
+    contextSlot: 'tool',
+    content: formatToolContext(
+      [toolResult],
+      body.hazy?.toolContextMaxTokens || body.hazy?.webContextMaxTokens || 12000
+    )
   };
 
   return {
@@ -152,15 +130,20 @@ async function runDeterministicTools({ body = {}, cfg = {} } = {}) {
       ...body,
       hazy: {
         ...(body.hazy || {}),
-        agentEnabled,
-        toolResults,
+        agentEnabled: true,
+        webSearchRunId: toolResult.runId,
+        webCitations: toolResult.citations || [],
+        webSearchMetrics: toolResult.metrics || {},
+        toolResults: [toolResult],
         toolDecisions: decisions
       },
-      messages: [toolContextMessage, ...originalMessages]
+      messages: [contextMessage, ...originalMessages]
     },
-    toolResults,
+    toolResults: [toolResult],
     decisions,
-    agentEnabled
+    agentEnabled: true,
+    searchDecision: decision,
+    citations: toolResult.citations || []
   };
 }
 
@@ -169,5 +152,7 @@ module.exports = {
   wantsWebSearch,
   extractSearchQuery,
   isAgentEnabled,
-  formatToolContext
+  isBuildOrCodeRequest,
+  formatToolContext,
+  latestUserMessage
 };

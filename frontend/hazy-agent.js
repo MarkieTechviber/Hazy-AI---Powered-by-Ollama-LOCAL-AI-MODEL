@@ -6,7 +6,8 @@
  * 
  * FEATURES:
  * - Function/Tool calling framework
- * - Built-in tools: web_search, calculator, code_executor, file_ops
+ * - Browser-local tools: calculator, code_executor, file_ops
+ * - Web search is owned by the backend search pipeline
  * - Agent reasoning loop
  * - Tool result display
  * - Custom tool registration
@@ -40,7 +41,7 @@
   }
 
   function isCloudProvider(provider) {
-    return ['anthropic', 'openai', 'groq', 'gemini'].includes(provider);
+    return ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(provider);
   }
 
   function buildAgentEndpoint() {
@@ -49,22 +50,22 @@
       : '/hazy/chat';
   }
 
-  function isSafeCodeExpression(code) {
-    if (typeof code !== 'string') return false;
-
-    const trimmed = code.trim();
-    if (!trimmed || trimmed.length > 400) return false;
-
-    const blockedPatterns = [
-      /\b(?:window|document|globalThis|self|parent|top|frames)\b/i,
-      /\b(?:Function|eval|fetch|XMLHttpRequest|WebSocket|Worker|import)\b/i,
-      /\b(?:localStorage|sessionStorage|indexedDB|navigator|location|history)\b/i,
-      /\b(?:constructor|prototype|__proto__|this|new)\b/i,
-      /[;={}]/,
-      /=>/
-    ];
-
-    return blockedPatterns.every(pattern => !pattern.test(trimmed));
+  async function callBackendTool(toolName, args) {
+    const response = await fetch('/hazy/tool-call', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: 'local-user',
+        conversationId: STATE.activeConvId || 'default',
+        toolName,
+        arguments: args
+      })
+    });
+    const result = await response.json();
+    if (!response.ok || result.status === 'blocked') {
+      throw new Error(result.error?.message || result.error || 'Tool call was rejected.');
+    }
+    return result.result;
   }
 
   // ============================================================================
@@ -72,63 +73,6 @@
   // ============================================================================
 
   const BUILTIN_TOOLS = {
-    web_search: {
-      name: 'web_search',
-      description: 'Search the web for current information. Use this when you need recent data, news, or information not in your training.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'The search query'
-          }
-        },
-        required: ['query']
-      },
-      execute: async (params) => {
-        // Use DuckDuckGo Instant Answer API (free, no key needed)
-        try {
-          const query = encodeURIComponent(params.query);
-          const response = await fetch(`https://api.duckduckgo.com/?q=${query}&format=json`);
-          const data = await response.json();
-          
-          if (data.AbstractText) {
-            return {
-              success: true,
-              result: data.AbstractText,
-              source: data.AbstractURL || 'DuckDuckGo'
-            };
-          }
-          
-          // Try related topics
-          if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-            const topics = data.RelatedTopics
-              .filter(t => t.Text)
-              .slice(0, 3)
-              .map(t => t.Text)
-              .join('\n\n');
-            
-            return {
-              success: true,
-              result: topics || 'No results found',
-              source: 'DuckDuckGo'
-            };
-          }
-
-          return {
-            success: true,
-            result: `Search performed for "${params.query}" but no direct results. Try rephrasing the query.`,
-            source: 'DuckDuckGo'
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: 'Web search failed: ' + error.message
-          };
-        }
-      }
-    },
-
     calculator: {
       name: 'calculator',
       description: 'Perform mathematical calculations. Supports basic arithmetic, algebra, and common functions.',
@@ -144,37 +88,12 @@
       },
       execute: async (params) => {
         try {
-          // Safe eval using Function constructor with math context
-          const mathContext = {
-            sqrt: Math.sqrt,
-            pow: Math.pow,
-            abs: Math.abs,
-            sin: Math.sin,
-            cos: Math.cos,
-            tan: Math.tan,
-            log: Math.log,
-            exp: Math.exp,
-            floor: Math.floor,
-            ceil: Math.ceil,
-            round: Math.round,
-            pi: Math.PI,
-            e: Math.E
-          };
-
-          // Sanitize expression
-          const sanitized = params.expression
-            .replace(/[^0-9+\-*/().a-z\s]/gi, '')
-            .toLowerCase();
-
-          // Create safe eval function
-          const keys = Object.keys(mathContext);
-          const values = Object.values(mathContext);
-          const func = new Function(...keys, 'return ' + sanitized);
-          const result = func(...values);
-
+          const result = await callBackendTool('calculator.evaluate', {
+            expression: params.expression
+          });
           return {
             success: true,
-            result: result,
+            result: result?.data?.value ?? result,
             expression: params.expression
           };
         } catch (error) {
@@ -199,43 +118,10 @@
         },
         required: ['code']
       },
-      execute: async (params) => {
-        try {
-          if (!isSafeCodeExpression(params.code)) {
-            return {
-              success: false,
-              error: 'Only simple JavaScript expressions are allowed in code_executor.'
-            };
-          }
-
-          const sandbox = {
-            Math,
-            Date,
-            JSON,
-            Array,
-            Object,
-            String,
-            Number,
-            Boolean
-          };
-
-          const func = new Function(
-            ...Object.keys(sandbox),
-            '"use strict"; return (' + params.code + ');'
-          );
-          const result = func(...Object.values(sandbox));
-
-          return {
-            success: true,
-            result: result !== undefined ? String(result) : 'Code executed (no return value)'
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: 'Execution error: ' + error.message
-          };
-        }
-      }
+      execute: async () => ({
+        success: false,
+        error: 'Browser code execution is disabled. A future isolated sandbox service is required.'
+      })
     },
 
     get_time: {
@@ -527,9 +413,6 @@ IMPORTANT:
 
     async getAIResponse(messageInput) {
       const savedModel = getActiveAgentModel();
-      const provider = getProviderFromModel(savedModel);
-      const isCloud = isCloudProvider(provider);
-      const apiKey = isCloud ? (localStorage.getItem('hazyKey_' + provider) || '') : '';
       const endpoint = buildAgentEndpoint();
       const messages = Array.isArray(messageInput)
         ? messageInput
@@ -537,7 +420,6 @@ IMPORTANT:
 
       const requestBody = {
         model: endpoint === '/hazy/chat' ? savedModel : STATE.model,
-        apiKey: apiKey || undefined,
         messages: [
           { role: 'system', content: STATE.systemPrompt },
           ...messages

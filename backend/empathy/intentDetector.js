@@ -1,6 +1,6 @@
 const INTENT_RULES = [
   { intent: "debugging", patterns: [/\berror\b/i, /\bbug\b/i, /\bstack trace\b/i, /\bcrash\b/i, /\bfailing\b/i, /won't work/i] },
-  { intent: "technical_question", patterns: [/how do/i, /what is/i, /why does/i, /difference between/i, /how does/i] },
+  { intent: "technical_question", patterns: [/how do/i, /what is/i, /why does/i, /difference between/i, /how does/i, /\b(?:can you|could you|please)\s+explain\b/i] },
   { intent: "planning", patterns: [/\bplan\b/i, /\broadmap\b/i, /\barchitecture\b/i, /how should I structure/i, /implementation order/i] },
   { intent: "creative_help", patterns: [/\bbrainstorm\b/i, /name ideas/i, /\bcopy\b/i, /design ideas/i, /creative help/i] },
   { intent: "decision_making", patterns: [/should I/i, /which is better/i, /choose between/i, /worth it/i, /decide/i] },
@@ -13,7 +13,7 @@ const INTENT_RULES = [
 
 function detectIntent(message = "") {
   const text = String(message);
-  let best = { primaryIntent: "technical_question", score: 0 };
+  let best = { primaryIntent: "general_conversation", score: 0 };
 
   for (const rule of INTENT_RULES) {
     const matched = rule.patterns.filter((pattern) => pattern.test(text));

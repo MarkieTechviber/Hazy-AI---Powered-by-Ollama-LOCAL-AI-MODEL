@@ -3,9 +3,7 @@
  * =====================================================
  * FIXES vs previous versions:
  *
- * 1. hazy-auto-continue.js callAIForContinuation() was a MOCK
- *    returning fake "[Continuation content would go here]" — 
- *    completely replaced with real streaming Ollama calls.
+ * 1. Continuation requests use the real Hazy streaming chat endpoint.
  *
  * 2. Build continuation (continueCodeGeneration) used
  *    num_predict: STATE.maxTokens (4096) but the prompt itself

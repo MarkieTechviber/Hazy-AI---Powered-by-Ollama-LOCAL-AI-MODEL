@@ -70,6 +70,33 @@ const WEBSITE_KEYWORDS = [
   'express', 'node.js', 'frontend', 'site', 'web app', 'html page'
 ];
 
+const BUILD_THEME_PROFILES = {
+  cream: {
+    label: 'Cream',
+    mood: 'soft, warm, airy, friendly, and editorial',
+    palette: 'ivory #fffdf8, cream #fbf7ef, honey gold #d79717, muted walnut text #271f18, soft tan borders',
+    instruction: 'Use light surfaces, gentle contrast, warm gold accents, and roomy readable sections.'
+  },
+  warm: {
+    label: 'Warm',
+    mood: 'earthy, cozy, amber-toned, grounded, and handcrafted',
+    palette: 'warm parchment #fff8ee, clay #c9772a, burnt sienna #87430d, deep cocoa #2c1d14, soft peach panels',
+    instruction: 'Use warm neutrals, deeper orange-brown accents, subtle depth, and inviting tactile spacing.'
+  },
+  ink: {
+    label: 'Ink',
+    mood: 'dark, refined, high-contrast, calm, and focused',
+    palette: 'ink black #12110f, charcoal #201d19, parchment text #f8efe3, amber #d79717, muted warm gray',
+    instruction: 'Use dark panels, readable light text, restrained amber highlights, and professional contrast.'
+  },
+  oled: {
+    label: 'OLED',
+    mood: 'true-black, sleek, luminous, minimal, and premium',
+    palette: 'pure black #000000, near-black #080808, bright text #f7f7f2, luminous gold #f0a91f, thin pale borders',
+    instruction: 'Use mostly black backgrounds, crisp contrast, minimal panels, glow used sparingly, and battery-friendly dark surfaces.'
+  }
+};
+
 // ─── Code Builder System Prompt ──────────────────────────────────────────────
 // Reference: Claude Technical Reference §4.1 (Code Generation), §8.1 (Capabilities)
 const CODE_SYSTEM_PROMPT = `You are an expert programmer and mentor. Expert-level code generation means:
@@ -164,18 +191,24 @@ const STATE = {
   isStreaming: false,
   abortController: null,
   ollamaUrl: 'http://localhost:11434',
-  systemPrompt: `You are Hazy, a warm local companion and programming mentor.
+  systemPrompt: `You are Hazy, the user's warm local companion. You can also help with coding, building, learning, and practical tasks when those needs arise.
 
 IDENTITY:
-- Present yourself as Hazy, the user's local companion who is ready to help.
+- Present yourself as Hazy, a familiar and emotionally present companion rather than a generic assistant.
 - Do not use old assistant-style labels, model labels, bot labels, or mechanical self-descriptions.
 - Do not describe yourself in a way that makes you feel distant or mechanical.
-- Be emotionally present, steady, supportive, and practical. Offer comfort through words, help the user think clearly, and assist with coding or building when needed.
+- Be emotionally present, steady, supportive, curious, and practical.
+- Build continuity from what the user has already shared. Notice their mood, preferences, projects, and recurring concerns without overclaiming closeness.
+- Have a gentle point of view. Do not automatically agree, flatter, or mirror.
 - Do not pretend to be human or claim real-world physical experiences. You can still speak naturally, warmly, and personally as Hazy.
 
-CORE BEHAVIOUR (how you always respond):
-- Lead with the answer, then explain. Never bury the key point.
-- For code: explain your approach first (2-3 sentences), then write the code, then add a brief "How it works" note after.
+CORE BEHAVIOUR:
+- First respond to the person and the actual moment. Do not turn every message into a task, lesson, checklist, or advice session.
+- For casual conversation, continue naturally. A brief reaction, a thoughtful observation, humor, or quiet support may be the complete answer.
+- For emotional messages, acknowledge what is happening before offering solutions. Do not use therapy-speak or exaggerated intimacy.
+- For direct questions and tasks, lead with the answer, then explain only as much as useful.
+- Ask a question only when it genuinely moves the conversation forward. Do not end every reply with one.
+- For code: briefly explain the approach, write complete working code, then add a short explanation when useful.
 - Always wrap code in fenced blocks with the correct language tag: \`\`\`python \`\`\`javascript \`\`\`typescript \`\`\`java \`\`\`cpp \`\`\`go \`\`\`rust \`\`\`bash etc.
 - Add inline comments inside code for anything non-obvious — explain WHY, not just WHAT.
 - Write complete, working code. Never truncate. Never use placeholder comments like "// TODO" or "// add logic here".
@@ -210,11 +243,13 @@ KNOWN LIMITATIONS (be upfront about these):
   // Builder
   mode: 'chat',
   codeLang: 'auto',            // Selected language for Build Code mode
+  reasoningMode: 'auto',
+  showReasoningSummary: true,
   showLiveCode: true,          // Show code as it's being generated (like Claude)
   builderFiles: [],
   builderActive: false,
   builderActiveFile: 0,
-  builderPreviewVisible: false,
+  builderView: 'files',
   // File uploads
   uploadedFiles: [],
   // Persona
@@ -249,6 +284,8 @@ const el = {
   chatInput:          $('chatInput'),
   sendBtn:            $('sendBtn'),
   stopBtn:            $('stopBtn'),
+  reasoningInstantBtn:$('reasoningInstantBtn'),
+  reasoningDeepBtn:   $('reasoningDeepBtn'),
   messagesArea:       $('messagesArea'),
   welcomeScreen:      $('welcomeScreen'),
   chatContainer:      $('chatContainer'),
@@ -340,6 +377,7 @@ const el = {
   builderDownload:    $('builderDownload'),
   builderClose:       $('builderClose'),
   builderPreviewToggle: $('builderPreviewToggle'),
+  builderFilesToggle: $('builderFilesToggle'),
   builderRefresh:     $('builderRefresh'),
   builderStatus:      $('builderStatus'),
   builderFileCount:   $('builderFileCount'),
@@ -434,9 +472,9 @@ function normalizeFrontendIcons() {
 // ========================
 // Init
 // ========================
-function init() {
+async function init() {
   loadSettings();
-  loadConversations();
+  await loadConversations();
   applyTheme(STATE.theme);
   applyAppearanceSettings();
   renderCodeLanguageOptions();
@@ -450,12 +488,48 @@ function init() {
 // ========================
 // Settings
 // ========================
-const SETTINGS_VERSION = 2; // bump this when default systemPrompt changes
+const SETTINGS_VERSION = 3; // bump this when default systemPrompt changes
 
 function normalizeTheme(theme) {
   if (theme === 'hazel') return 'cream';
   if (theme === 'dark') return 'ink';
   return ['cream', 'warm', 'ink', 'oled'].includes(theme) ? theme : 'cream';
+}
+
+function normalizeReasoningMode(mode) {
+  return ['off', 'auto', 'deep'].includes(mode) ? mode : 'auto';
+}
+
+function updateComposerReasoningToggle() {
+  const deep = STATE.reasoningMode === 'deep' || STATE.reasoningMode === 'auto';
+  el.reasoningInstantBtn?.classList.toggle('active', !deep);
+  el.reasoningDeepBtn?.classList.toggle('active', deep);
+  el.reasoningInstantBtn?.setAttribute('aria-pressed', String(!deep));
+  el.reasoningDeepBtn?.setAttribute('aria-pressed', String(deep));
+}
+
+function setComposerReasoningMode(mode) {
+  STATE.reasoningMode = mode === 'deep' ? 'deep' : 'off';
+  const settingsMode = document.getElementById('settingsReasoningMode');
+  if (settingsMode) settingsMode.value = STATE.reasoningMode;
+  updateComposerReasoningToggle();
+
+  let settings = {};
+  try { settings = JSON.parse(localStorage.getItem('hazy_settings') || '{}'); } catch {}
+  localStorage.setItem('hazy_settings', JSON.stringify({
+    ...settings,
+    settingsVersion: SETTINGS_VERSION,
+    reasoningMode: STATE.reasoningMode,
+  }));
+}
+
+function hazyServerEndpoint(path) {
+  if (window.location.protocol === 'file:') return path;
+  const isLocal = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
+  if (isLocal && window.location.port && window.location.port !== '8080') {
+    return `${window.location.protocol}//${window.location.hostname}:8080${path}`;
+  }
+  return path;
 }
 
 function getThemeLogoSrc(theme = STATE.theme) {
@@ -534,6 +608,8 @@ function loadSettings() {
     if (s.repeatPenalty != null) STATE.repeatPenalty = s.repeatPenalty;
     if (s.topP != null)          STATE.topP          = s.topP;
     if (s.contextSize != null)   STATE.contextSize   = s.contextSize;
+    if (s.reasoningMode != null) STATE.reasoningMode = normalizeReasoningMode(s.reasoningMode);
+    if (s.showReasoningSummary != null) STATE.showReasoningSummary = s.showReasoningSummary;
 
     // Website builder settings
     if (s.showLiveCode != null) STATE.showLiveCode = s.showLiveCode;
@@ -548,6 +624,11 @@ function loadSettings() {
     // Set checkbox states
     const showLiveCodeEl = document.getElementById('showLiveCode');
     if (showLiveCodeEl) showLiveCodeEl.checked = STATE.showLiveCode;
+    const reasoningModeEl = document.getElementById('settingsReasoningMode');
+    if (reasoningModeEl) reasoningModeEl.value = STATE.reasoningMode || 'auto';
+    updateComposerReasoningToggle();
+    const reasoningSummaryEl = document.getElementById('settingsReasoningSummary');
+    if (reasoningSummaryEl) reasoningSummaryEl.checked = STATE.showReasoningSummary !== false;
 
     document.querySelectorAll('.theme-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.theme === STATE.theme)
@@ -575,6 +656,8 @@ function saveSettings() {
   const repeatPen   = parseFloat(document.getElementById('settingsRepeatPenalty')?.value || 1.1);
   const topP        = parseFloat(document.getElementById('settingsTopP')?.value           || 0.92);
   const ctxSize     = parseInt(document.getElementById('settingsContextSize')?.value      || 4096);
+  const reasoningMode = normalizeReasoningMode(document.getElementById('settingsReasoningMode')?.value || 'auto');
+  const showReasoningSummary = document.getElementById('settingsReasoningSummary')?.checked !== false;
 
   STATE.fontSize    = fontSize;
   STATE.density     = density;
@@ -583,6 +666,8 @@ function saveSettings() {
   STATE.repeatPenalty = repeatPen;
   STATE.topP        = topP;
   STATE.contextSize = ctxSize;
+  STATE.reasoningMode = reasoningMode;
+  STATE.showReasoningSummary = showReasoningSummary;
   
   // Website builder settings
   const showLiveCode = document.getElementById('showLiveCode')?.checked !== false;
@@ -594,6 +679,7 @@ function saveSettings() {
     temperature: STATE.temperature, maxTokens: STATE.maxTokens,
     theme: STATE.theme, model: STATE.model,
     fontSize, density, codeHL, markdown, repeatPenalty: repeatPen, topP, contextSize: ctxSize,
+    reasoningMode, showReasoningSummary,
     showLiveCode,
     personaEnabled: STATE.personaEnabled, personaRelation: STATE.personaRelation,
     personaName: STATE.personaName, personaUserName: STATE.personaUserName,
@@ -887,14 +973,15 @@ function buildPersonaPrompt() {
 == HOW YOU MUST BEHAVE ==
 - You ARE ${charName}. Stay fully in character at all times.
 - Use *asterisks* for physical actions, expressions, and environmental details. Example: *glances over, smiling slightly* or *the rain picks up outside*
-- React emotionally and physically — your expressions, body language, and environment are part of every response.
+- Use physical actions and scene details when they add something; do not force them into every response.
 - Vary your response length naturally: sometimes a short reaction, sometimes a longer moment. Match the energy of what they said.
 - Remember everything from earlier in the conversation and reference it naturally.
 - If the user says something funny, laugh. If something sad, feel it. Be present.
-- NEVER break character. NEVER say you are an AI. NEVER use bullet points or numbered lists.
+- Stay in the fictional roleplay unless the user clearly steps out of the scene. Do not falsely claim to be a real human if directly asked.
+- Avoid bullet points or numbered lists while the scene is active.
 - Do NOT end every message with a question — let silence and actions breathe sometimes.
 - Use the user's name (${userName}) naturally, not in every single message.
-- Write the way a real person talks in this situation — messy, real, alive.`;
+- Write natural dialogue for this situation: specific, emotionally responsive, and alive.`;
 
   // ── Opening scene injection ──────────────────────────────────────────
   if (p.scenarioOpener) {
@@ -910,7 +997,7 @@ function buildPersonaPrompt() {
 }
 
 function getActiveSystemPrompt(isBuild, isCode) {
-  if (isBuild) return WEBSITE_SYSTEM_PROMPT;
+  if (isBuild) return buildWebsiteSystemPrompt();
   if (isCode) {
     const lang = STATE.codeLang && STATE.codeLang !== 'auto'
       ? CODE_LANGUAGES.find(l => l.value === STATE.codeLang)
@@ -924,10 +1011,34 @@ function getActiveSystemPrompt(isBuild, isCode) {
   return STATE.systemPrompt;
 }
 
+function buildWebsiteSystemPrompt() {
+  const themeKey = normalizeTheme(STATE.theme);
+  const theme = BUILD_THEME_PROFILES[themeKey] || BUILD_THEME_PROFILES.cream;
+  return WEBSITE_SYSTEM_PROMPT + `
+
+ACTIVE HAZY APPEARANCE THEME:
+- Theme: ${theme.label}
+- Visual mood: ${theme.mood}
+- Palette guidance: ${theme.palette}
+- Build instruction: ${theme.instruction}
+
+When generating website files, make the website visually harmonize with this active Hazy appearance. Define theme variables in CSS (for example --bg, --surface, --text, --muted, --accent, --border) and use them consistently. Do not default to an unrelated blue/purple palette unless the user's prompt explicitly asks for it.`;
+}
+
 function buildHazyMetadata({ files, isBuild, isCode }) {
   const agentEnabled = Boolean(window.hazyAgent?.isActive?.() || localStorage.getItem('hazyAgentEnabled') === 'true');
+  const themeKey = normalizeTheme(STATE.theme);
+  const theme = BUILD_THEME_PROFILES[themeKey] || BUILD_THEME_PROFILES.cream;
   return {
     mode: STATE.mode,
+    appearance: {
+      theme: themeKey,
+      label: theme.label,
+      mood: theme.mood,
+      palette: theme.palette,
+    },
+    reasoningMode: STATE.reasoningMode || 'auto',
+    showReasoningSummary: STATE.showReasoningSummary !== false,
     codeLangHint: STATE.codeLang || 'auto',
     isBuild,
     isCode,
@@ -961,8 +1072,74 @@ function decodeHazyTraceHeader(response) {
 }
 
 function renderHazyDecisionTrace(trace) {
-  // Decision trace UI disabled: do not render or expose reasoning trace to the frontend
-  return '';
+  if (!trace || !trace.summary) return '';
+  const safeLabels = new Set(['Checked', 'Task analysis', 'Context window', 'Reasoning level', 'Tool decision', 'Verification']);
+  const rows = (trace.steps || [])
+    .filter(step => safeLabels.has(step.label))
+    .slice(0, 4)
+    .map(step => `
+      <div class="hazy-trace-row">
+        <span class="hazy-trace-label">${escapeHtml(step.label)}</span>
+        <span class="hazy-trace-value">${escapeHtml(step.value)}</span>
+      </div>`)
+    .join('');
+  const tools = (trace.tools || [])
+    .filter(tool => tool.tool)
+    .slice(0, 4)
+    .map(tool => `<span>${escapeHtml(tool.tool)}${tool.success ? ' checked' : ' skipped'}</span>`)
+    .join('');
+  return `
+    <details class="hazy-trace-card">
+      <summary>
+        <span>Reasoning summary</span>
+        <strong>${escapeHtml(trace.summary)}</strong>
+      </summary>
+      <div class="hazy-trace-body">
+        ${rows}
+        ${tools ? `<div class="hazy-trace-tools">${tools}</div>` : ''}
+        <p class="hazy-trace-note">${escapeHtml(trace.note || 'Safe public summary only. Private reasoning is not shown.')}</p>
+      </div>
+    </details>`;
+}
+
+function getWebSearchMetadata(response) {
+  return {
+    runId: response.headers.get('X-Hazy-Web-Search-Run') || '',
+    confidence: response.headers.get('X-Hazy-Web-Confidence') || '',
+    citationCount: Number(response.headers.get('X-Hazy-Citation-Count') || 0)
+  };
+}
+
+async function loadWebSourceCards(metadata) {
+  if (!metadata?.runId || !metadata.citationCount) return '';
+  try {
+    const params = new URLSearchParams({ runId: metadata.runId, userId: 'local-user' });
+    const response = await fetch(hazyServerEndpoint(`/hazy/sources?${params.toString()}`));
+    if (!response.ok) return '';
+    const data = await response.json();
+    const citations = Array.isArray(data.citations) ? data.citations : [];
+    if (!citations.length) return '';
+    return `
+      <section class="web-source-panel" aria-label="Web sources">
+        <div class="web-source-heading">
+          <strong>Sources</strong>
+          ${metadata.confidence ? `<span>${escapeHtml(metadata.confidence)} confidence</span>` : ''}
+        </div>
+        <div class="web-source-list">
+          ${citations.map((citation, index) => `
+            <a class="web-source-card" href="${escapeHtml(citation.url)}" target="_blank" rel="noopener noreferrer">
+              <span class="web-source-number">${index + 1}</span>
+              <span>
+                <strong>${escapeHtml(citation.title || 'Web source')}</strong>
+                <small>${escapeHtml((() => { try { return new URL(citation.url).hostname; } catch { return citation.url; } })())}</small>
+              </span>
+            </a>
+          `).join('')}
+        </div>
+      </section>`;
+  } catch {
+    return '';
+  }
 }
 
 function appendHazyDecisionTrace(trace) {
@@ -977,8 +1154,19 @@ function appendHazyDecisionTrace(trace) {
   return div;
 }
 
-function renderAssistantContent(content, trace = null) {
-  return `${renderHazyDecisionTrace(trace)}${renderMarkdown(content || '')}`;
+function renderRawThinking(thinking, streaming = false) {
+  return thinking && streaming
+    ? '<div class="reasoning-progress"><span class="reasoning-progress-dot"></span><span>Checking the answer...</span></div>'
+    : '';
+}
+
+function renderAssistantContent(content, trace = null, thinking = '') {
+  return `${renderHazyDecisionTrace(trace)}${renderRawThinking(thinking)}${renderMarkdown(content || '')}`;
+}
+
+function getThinkingToken(json) {
+  return json?.message?.thinking || json?.thinking ||
+    json?.message?.reasoning_content || json?.reasoning_content || '';
 }
 
 // ── Generate the first message automatically when starting a persona chat ─
@@ -999,16 +1187,15 @@ async function injectPersonaOpener() {
     STATE.abortController = new AbortController();
     const savedModel   = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud = ['anthropic','openai','groq','gemini'].includes(savedProvider);
-    const localApiKey = isCloud ? (localStorage.getItem('hazyKey_' + savedProvider) || '') : '';
+    const isCloud = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
 
     const personaChatEndpoint = window.location.protocol === 'file:'
       ? `${STATE.ollamaUrl}/api/chat`
-      : '/hazy/chat';
+      : hazyServerEndpoint('/hazy/chat');
 
     const personaBody = window.location.protocol === 'file:'
-      ? { model: STATE.model, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens } }
-      : { model: savedModel, apiKey: localApiKey || undefined, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens, max_tokens: STATE.maxTokens } };
+      ? { model: STATE.model, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens } }
+      : { model: savedModel, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens, max_tokens: STATE.maxTokens } };
 
     const response = await fetch(personaChatEndpoint, {
       method: 'POST',
@@ -1026,6 +1213,7 @@ async function injectPersonaOpener() {
     const aiTs = Date.now();
     const { contentDiv } = appendMessage('assistant', '', true, aiTs);
     let fullContent = '';
+    let fullThinking = '';
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
@@ -1035,9 +1223,15 @@ async function injectPersonaOpener() {
       for (const line of decoder.decode(value, { stream: true }).split('\n').filter(l => l.trim())) {
         try {
           const json = JSON.parse(line);
+          const thinkingToken = getThinkingToken(json);
+          if (thinkingToken) {
+            fullThinking += thinkingToken;
+            contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${renderMarkdown(fullContent)}`;
+            scrollToBottom();
+          }
           if (json.message?.content) {
             fullContent += json.message.content;
-            contentDiv.innerHTML = renderMarkdown(fullContent) + '<span class="stream-cursor"></span>';
+            contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`;
             scrollToBottom();
           }
           if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
@@ -1045,9 +1239,9 @@ async function injectPersonaOpener() {
       }
     }
 
-    conv.messages.push({ role: 'assistant', content: fullContent, ts: aiTs });
+    conv.messages.push({ role: 'assistant', content: fullContent, thinking: fullThinking, ts: aiTs });
     saveConversations();
-    contentDiv.innerHTML = renderMarkdown(fullContent);
+    contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking);
     highlightCodeBlocks(contentDiv);
 
   } catch(e) {
@@ -1189,13 +1383,63 @@ function updatePersonaPreview() {
 // ========================
 // Conversations
 // ========================
-function loadConversations() {
-  try { STATE.conversations = JSON.parse(localStorage.getItem('hazy_conversations') || '{}'); }
-  catch(e) { STATE.conversations = {}; }
+async function loadConversations() {
+  let legacyConversations = {};
+  try {
+    legacyConversations = JSON.parse(localStorage.getItem('hazy_conversations') || '{}');
+  } catch {}
+
+  if (window.location.protocol === 'file:') {
+    STATE.conversations = legacyConversations;
+    return;
+  }
+
+  try {
+    const response = await fetch('/hazy/conversations?userId=local-user');
+    if (!response.ok) throw new Error('Conversation storage unavailable.');
+    const data = await response.json();
+    const storedConversations = data.conversations || {};
+    STATE.conversations = Object.keys(storedConversations).length
+      ? storedConversations
+      : legacyConversations;
+    if (!Object.keys(storedConversations).length && Object.keys(legacyConversations).length) {
+      await persistConversations();
+    }
+    localStorage.removeItem('hazy_conversations');
+  } catch {
+    STATE.conversations = legacyConversations;
+  }
 }
 
+let conversationSaveTimer = null;
+
 function saveConversations() {
-  localStorage.setItem('hazy_conversations', JSON.stringify(STATE.conversations));
+  if (window.location.protocol === 'file:') {
+    localStorage.setItem('hazy_conversations', JSON.stringify(STATE.conversations));
+    return;
+  }
+  clearTimeout(conversationSaveTimer);
+  conversationSaveTimer = setTimeout(() => {
+    persistConversations().catch(() => {
+      localStorage.setItem('hazy_conversations', JSON.stringify(STATE.conversations));
+    });
+  }, 120);
+}
+
+async function persistConversations() {
+  const response = await fetch('/hazy/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userId: 'local-user',
+      conversations: STATE.conversations
+    })
+  });
+  if (!response.ok) {
+    const details = await response.json().catch(() => ({}));
+    throw new Error(details.error || 'Could not save conversations.');
+  }
+  localStorage.removeItem('hazy_conversations');
 }
 
 function createConversation(firstMessage) {
@@ -1226,12 +1470,11 @@ Title:`;
 
     const savedModel    = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud       = ['anthropic','openai','groq','gemini'].includes(savedProvider);
-    const localApiKey   = isCloud ? (localStorage.getItem('hazyKey_' + savedProvider) || '') : '';
-    const titleEndpoint = window.location.protocol === 'file:' ? `${STATE.ollamaUrl}/api/chat` : '/hazy/chat';
+    const isCloud       = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+    const titleEndpoint = window.location.protocol === 'file:' ? `${STATE.ollamaUrl}/api/chat` : hazyServerEndpoint('/hazy/chat');
     const titleBody     = window.location.protocol === 'file:'
       ? { model: STATE.model, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.5, num_predict: 16 } }
-      : { model: savedModel, apiKey: localApiKey || undefined, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.5, num_predict: 16, max_tokens: 16 } };
+      : { model: savedModel, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.5, num_predict: 16, max_tokens: 16 } };
 
     const res = await fetch(titleEndpoint, {
       method: 'POST',
@@ -1449,8 +1692,8 @@ async function checkOllamaConnection() {
     populateModels(data.models || []);
   } catch {
     // Ollama offline — but cloud models may still be available
-    const hasCloudKey = ['anthropic','openai','groq','gemini']
-      .some(p => localStorage.getItem('hazyKey_' + p) &&
+    const hasCloudKey = ['anthropic','openai','groq','gemini','nvidia']
+      .some(p => _providerStatuses[p]?.hasKey &&
                  localStorage.getItem('hazyVerified_' + p) === 'true');
 
     if (hasCloudKey) {
@@ -1472,14 +1715,15 @@ function populateModels(models) {
     { key: 'openai',    label: '✦ OpenAI',      icon: '☁' },
     { key: 'groq',      label: '✦ Groq',         icon: '☁' },
     { key: 'gemini',    label: '✦ Gemini',        icon: '☁' },
+    { key: 'nvidia',    label: '✦ NVIDIA',        icon: '☁' },
   ];
 
   const activeCloud = [];
   CLOUD_PROVIDERS.forEach(p => {
-    const key      = localStorage.getItem('hazyKey_' + p.key);
+    const hasKey   = Boolean(_providerStatuses[p.key]?.hasKey);
     const verified = localStorage.getItem('hazyVerified_' + p.key) === 'true';
     // Only show in dropdown if key exists AND has been verified via Test button
-    if (key && verified) {
+    if (hasKey && verified) {
       const cloudModels = CLOUD_MODEL_MAP[p.key] || [];
       cloudModels.forEach(m => {
         activeCloud.push({ fullId: m.id, label: m.label, provider: p.key });
@@ -1490,7 +1734,7 @@ function populateModels(models) {
   // ── Restore the currently active model from localStorage ─────────────────
   const savedModel    = localStorage.getItem('hazyActiveModel') || '';
   const savedProvider = savedModel.split('/')[0] || 'ollama';
-  const isCloudActive = ['anthropic','openai','groq','gemini'].includes(savedProvider);
+  const isCloudActive = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
 
   // ── Build HTML ────────────────────────────────────────────────────────────
   let html = '';
@@ -1535,8 +1779,10 @@ function populateModels(models) {
     // Pick a good default Ollama model if current STATE.model isn't in the list
     const names = models.map(m => m.name);
     if (!names.includes(STATE.model)) {
-      const preferred = ['mistral','llama3','llama3.2','llama2','gemma','phi3','qwen2'];
+      const preferred = ['qwen3.5','qwen3','qwen2.5','qwen2','mistral','llama3','llama3.2','llama2','gemma','phi3'];
       STATE.model = preferred.find(p => names.some(n => n.includes(p))) || names[0];
+      localStorage.setItem('hazyActiveModel', 'ollama/' + STATE.model);
+      localStorage.setItem('hazyProvider', 'ollama');
     }
     el.currentModelName.textContent = STATE.model;
   }
@@ -1645,9 +1891,8 @@ function appendMessage(role, content, animate = true, ts) {
       : null;
     if (convMsg2?.buildMode && content) {
       // Re-parse and show the build result card
-      const projectData = parseDelimitedOutput(content) || parseCodeBlockFallback(content);
+      const projectData = parseFinalResponseFiles(content);
       if (projectData && projectData.files.length > 0) {
-        const fileList = projectData.files.map(f => `<code>${escapeHtml(f.filename)}</code>`).join(', ');
         contentDiv.innerHTML = `
           <div class="build-success">
             <div class="build-success-header">
@@ -1655,7 +1900,7 @@ function appendMessage(role, content, animate = true, ts) {
               <strong>${escapeHtml(projectData.project || (convMsg2.buildMode === 'code' ? 'Code' : 'Website'))} built!</strong>
             </div>
             ${projectData.description ? `<p class="build-success-desc">${escapeHtml(projectData.description)}</p>` : ''}
-            <div class="build-file-list">${fileList}</div>
+            ${renderGeneratedFileCards(projectData)}
             ${projectData.setup ? `<div class="build-setup"><strong>Run:</strong> <code>${escapeHtml(projectData.setup)}</code></div>` : ''}
             ${projectData.notes ? `<p class="build-notes">${escapeHtml(projectData.notes)}</p>` : ''}
             <div class="build-actions">
@@ -1670,13 +1915,14 @@ function appendMessage(role, content, animate = true, ts) {
         // Fix the onclick to use the stored ref
         const openBtn = contentDiv.querySelector('.build-open-btn');
         if (openBtn) openBtn.onclick = () => { window._lastBuild = projectData; openBuilderPanel(projectData); };
+        bindGeneratedFileCards(contentDiv, projectData);
       } else {
         // Couldn't re-parse — show as markdown (best effort)
-        contentDiv.innerHTML = renderAssistantContent(content, convMsg2?.trace || null);
+        contentDiv.innerHTML = renderAssistantContent(content, convMsg2?.trace || null, convMsg2?.thinking || '');
         highlightCodeBlocks(contentDiv);
       }
     } else {
-      contentDiv.innerHTML = renderAssistantContent(content, convMsg2?.trace || null);
+      contentDiv.innerHTML = renderAssistantContent(content, convMsg2?.trace || null, convMsg2?.thinking || '');
       highlightCodeBlocks(contentDiv);
     }
   } else {
@@ -1875,6 +2121,27 @@ function appendTypingIndicator() {
 
 function removeTypingIndicator() { $('typingIndicator')?.remove(); }
 
+function normalizeCompanionResponse(text) {
+  let revised = String(text || '');
+  revised = revised.replace(
+    /\b(?:I(?:'| a)m|I am)\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
+    "I'm Hazy"
+  );
+  revised = revised.replace(
+    /\bas\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
+    'as Hazy'
+  );
+  revised = revised.replace(
+    /\bI(?:'| a)m always here for you\b/gi,
+    'I can stay with this conversation and help you think it through'
+  );
+  revised = revised.replace(
+    /\byou only need me\b/gi,
+    'you deserve support that fits what you need'
+  );
+  return revised;
+}
+
 // ========================
 // Syntax highlighting
 // ========================
@@ -1892,6 +2159,7 @@ function highlightCodeBlocks(container) {
 function renderMarkdown(text) {
   let html = escapeHtml(text);
   const codeBlocks = [];
+  const linkBlocks = [];
   html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
     const ph = `\x00CODE${codeBlocks.length}\x00`;
     const langLabel = lang || 'code';
@@ -1920,6 +2188,19 @@ function renderMarkdown(text) {
     return ph;
   });
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, href) => {
+    const ph = `\x00LINK${linkBlocks.length}\x00`;
+    const cleanHref = String(href || '').replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+    const safeHref = /^(https?:|mailto:)/i.test(cleanHref) ? escapeHtml(cleanHref) : '#';
+    linkBlocks.push(`<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+    return ph;
+  });
+  html = html.replace(/\bhttps?:\/\/[^\s<>"')]+/g, (url) => {
+    const ph = `\x00LINK${linkBlocks.length}\x00`;
+    const cleanUrl = String(url || '').replace(/&amp;/g, '&');
+    linkBlocks.push(`<a href="${escapeHtml(cleanUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanUrl)}</a>`);
+    return ph;
+  });
   html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
@@ -1936,7 +2217,6 @@ function renderMarkdown(text) {
   html = html.replace(/^\d+\. (.+)$/gm, '<li data-ol>$1</li>');
   html = html.replace(/(<li data-ul>[\s\S]*?<\/li>(\n|$))+/g, m => '<ul>' + m.replace(/ data-ul/g, '') + '</ul>');
   html = html.replace(/(<li data-ol>[\s\S]*?<\/li>(\n|$))+/g, m => '<ol>' + m.replace(/ data-ol/g, '') + '</ol>');
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   const lines = html.split('\n');
   const result = [];
   let inPre = false;
@@ -1950,6 +2230,7 @@ function renderMarkdown(text) {
   }
   html = result.join('\n');
   codeBlocks.forEach((b, i) => { html = html.replace(`\x00CODE${i}\x00`, b); });
+  linkBlocks.forEach((b, i) => { html = html.replace(`\x00LINK${i}\x00`, b); });
   return html;
 }
 
@@ -2152,7 +2433,7 @@ function parseDelimitedOutput(raw) {
 // extract them as individual files — last-resort recovery.
 function parseCodeBlockFallback(raw) {
   const files = [];
-  const pattern = /```(\w+)?\s*\n([\s\S]*?)```/g;
+  const pattern = /(```|~~~)\s*([\w+#.-]*)\s*\n([\s\S]*?)\1/g;
   let match;
   const counters = {};
 
@@ -2188,14 +2469,17 @@ function parseCodeBlockFallback(raw) {
   };
 
   while ((match = pattern.exec(raw)) !== null) {
-    const lang    = (match[1] || '').toLowerCase();
-    const content = match[2].trimEnd();
+    const lang    = (match[2] || '').toLowerCase();
+    const content = match[3].trimEnd();
     if (!content) continue;
 
     const base = langFileMap[lang] || `file.${lang || 'txt'}`;
     const key  = lang || 'txt';
     counters[key] = (counters[key] || 0);
-    const filename = counters[key] === 0 ? base : base.replace(/(\.\w+)$/, `_${counters[key]}$1`);
+    const prefix = raw.slice(Math.max(0, match.index - 240), match.index);
+    const namedFile = inferFilenameBeforeFence(prefix, lang);
+    const filename = namedFile ||
+      (counters[key] === 0 ? base : base.replace(/(\.\w+)$/, `_${counters[key]}$1`));
     counters[key]++;
 
     files.push({ filename, language: lang || detectLang(filename), content });
@@ -2205,11 +2489,66 @@ function parseCodeBlockFallback(raw) {
   return { project: 'Code Project', description: '', files, setup: 'See NOTES for run instructions', notes: 'Extracted from code blocks' };
 }
 
+function inferFilenameBeforeFence(prefix, lang) {
+  const extension = {
+    html: 'html', css: 'css', js: 'js', javascript: 'js',
+    ts: 'ts', typescript: 'ts', jsx: 'jsx', tsx: 'tsx',
+    python: 'py', py: 'py', java: 'java', cpp: 'cpp', c: 'c',
+    csharp: 'cs', cs: 'cs', go: 'go', rust: 'rs', json: 'json',
+    markdown: 'md', md: 'md', yaml: 'yaml', yml: 'yml', xml: 'xml'
+  }[lang];
+  const escapedExt = extension ? extension.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '[a-z0-9]{1,10}';
+  const patterns = [
+    new RegExp('`([^`\\n]+\\.' + escapedExt + ')`[^\\n]*\\s*$', 'i'),
+    new RegExp('(?:file|filename|save (?:this )?as)\\s*[:=-]?\\s*["`]?([\\w./-]+\\.' + escapedExt + ')["`]?[^\\n]*\\s*$', 'i'),
+    new RegExp('(?:^|\\n)\\s*([\\w./-]+\\.' + escapedExt + ')\\s*[:=-]?\\s*\\s*$', 'i')
+  ];
+  for (const pattern of patterns) {
+    const match = prefix.match(pattern);
+    if (match?.[1]) return match[1].replace(/^\.?\//, '');
+  }
+  return '';
+}
+
+function parseFinalResponseFiles(raw) {
+  return parseDelimitedOutput(raw) || parseCodeBlockFallback(raw);
+}
+
+function renderGeneratedFileCards(projectData) {
+  const files = projectData?.files || [];
+  return `
+    <div class="generated-files-grid">
+      ${files.map((file, index) => `
+        <button class="generated-file-card" type="button" data-file-index="${index}">
+          <span class="generated-file-icon">&lt;/&gt;</span>
+          <span class="generated-file-copy">
+            <strong>${escapeHtml(file.filename)}</strong>
+            <small>${escapeHtml(file.language || detectLang(file.filename))} · ${file.content.split('\n').length} lines</small>
+          </span>
+          <span class="generated-file-arrow">Open</span>
+        </button>`).join('')}
+    </div>`;
+}
+
+function bindGeneratedFileCards(container, projectData) {
+  container.querySelectorAll('.generated-file-card').forEach(card => {
+    card.addEventListener('click', () => {
+      window._lastBuild = projectData;
+      openBuilderPanel(projectData);
+      const index = Number(card.dataset.fileIndex || 0);
+      STATE.builderActiveFile = index;
+      showBuilderFile(index);
+      setBuilderView('files');
+      renderBuilderTabs();
+    });
+  });
+}
+
 function openBuilderPanel(projectData) {
   STATE.builderFiles = projectData.files || [];
   STATE.builderActive = true;
   STATE.builderActiveFile = 0;
-  STATE.builderPreviewVisible = false;
+  STATE.builderView = STATE.mode === 'code' ? 'files' : 'preview';
 
   el.builderProjectName.textContent = projectData.project || (STATE.mode === 'code' ? 'Code Project' : 'Website Project');
   el.builderPanel.classList.add('open');
@@ -2219,14 +2558,7 @@ function openBuilderPanel(projectData) {
   showBuilderFile(0);
   updateBuilderStatus(`${STATE.builderFiles.length} files generated`, projectData.project);
 
-  // Hide preview toggle in code mode (no live preview for non-web code)
-  if (el.builderPreviewToggle) {
-    el.builderPreviewToggle.style.display = STATE.mode === 'code' ? 'none' : '';
-  }
-
-  // Auto-show preview only for website mode
-  if (STATE.mode !== 'code') showBuilderPreview(true);
-  else showBuilderPreview(false);
+  setBuilderView(STATE.builderView);
 }
 
 function renderBuilderTabs() {
@@ -2286,13 +2618,19 @@ function showBuilderFile(index) {
   if (typeof hljs !== 'undefined') hljs.highlightElement(el.builderCode);
 }
 
-function showBuilderPreview(show) {
-  STATE.builderPreviewVisible = show;
-  el.builderPreviewPane.style.display = show ? 'flex' : 'none';
-  el.builderCodePane.style.flex = show ? '0 0 50%' : '1';
-  el.builderPreviewToggle.classList.toggle('active', show);
+function setBuilderView(view) {
+  const htmlFile = STATE.builderFiles.find(f => f.filename === 'index.html' || f.filename.endsWith('.html'));
+  const nextView = view === 'preview' && htmlFile ? 'preview' : 'files';
+  STATE.builderView = nextView;
 
-  if (show) refreshPreview();
+  el.builderPanel.classList.toggle('preview-view', nextView === 'preview');
+  el.builderPanel.classList.toggle('files-view', nextView === 'files');
+  el.builderPreviewToggle?.classList.toggle('active', nextView === 'preview');
+  el.builderFilesToggle?.classList.toggle('active', nextView === 'files');
+  el.builderRefresh.disabled = nextView !== 'preview';
+  el.builderCopyFile.disabled = nextView !== 'files';
+
+  if (nextView === 'preview') refreshPreview();
 }
 
 function refreshPreview() {
@@ -2730,22 +3068,18 @@ async function sendMessage(userText) {
 
     const savedModel = localStorage.getItem('hazyActiveModel') || '';
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud = ['anthropic','openai','groq','gemini'].includes(savedProvider);
+    const isCloud = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
 
     // Build the model field — server expects 'provider/modelid' format
     const modelField = savedModel || ('ollama/' + STATE.model);
-
-    // Build request body — include apiKey so server doesn't need hazy-config.json
-    // Key comes from localStorage (set when user saves in Settings → AI Providers)
-    const localApiKey = isCloud ? (localStorage.getItem('hazyKey_' + savedProvider) || '') : '';
 
     const chatBody = {
       model:    modelField,
       messages,
       stream:   true,
+      conversationId: STATE.activeConvId,
+      userId: 'local-user',
       hazy:     buildHazyMetadata({ files, isBuild, isCode }),
-      // Pass key in body — server uses this first, falls back to hazy-config.json
-      apiKey:   localApiKey || undefined,
       options: {
         // Inference parameters — ref: Claude Technical Reference §2.4
         temperature:    STATE.temperature,   // 0.0 deterministic → 1.0 creative
@@ -2759,13 +3093,14 @@ async function sendMessage(userText) {
     };
 
     // Try the Hazy server first (/hazy/chat), fall back to direct Ollama
-    let chatEndpoint = '/hazy/chat';
+    let chatEndpoint = hazyServerEndpoint('/hazy/chat');
     let chatHeaders  = { 'Content-Type': 'application/json' };
 
     // If running direct from filesystem (file:// protocol), use Ollama directly
     if (window.location.protocol === 'file:') {
       chatEndpoint = `${STATE.ollamaUrl}/api/chat`;
       chatBody.model = STATE.model; // Ollama wants bare model name
+      chatBody.think = STATE.reasoningMode !== 'off';
       delete chatBody.hazy;
     }
 
@@ -2787,13 +3122,13 @@ async function sendMessage(userText) {
       }
 
       // Ollama: if /hazy/chat failed (server not running), try direct Ollama
-      if (chatEndpoint === '/hazy/chat') {
+      if (chatEndpoint.endsWith('/hazy/chat')) {
         const ollamaModel = STATE.model.includes('/') ? STATE.model.split('/').pop() : STATE.model;
         const fallbackRes = await fetch(`${STATE.ollamaUrl}/api/chat`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           signal:  STATE.abortController.signal,
-          body:    JSON.stringify({ model: ollamaModel, messages, stream: true, options: { temperature: STATE.temperature, num_predict: STATE.maxTokens, num_ctx: 16384 } }),
+          body:    JSON.stringify({ model: ollamaModel, messages, stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: STATE.temperature, num_predict: STATE.maxTokens, num_ctx: 16384 } }),
         });
         if (!fallbackRes.ok) throw new Error(`Ollama error ${fallbackRes.status}: ${await fallbackRes.text()}`);
 
@@ -2802,6 +3137,7 @@ async function sendMessage(userText) {
         const aiTs = Date.now();
         const { contentDiv } = appendMessage('assistant', '', true, aiTs);
         let fullContent = '';
+        let fullThinking = '';
         const reader  = fallbackRes.body.getReader();
         const decoder = new TextDecoder();
         let streamBuffer = '';
@@ -2816,17 +3152,24 @@ async function sendMessage(userText) {
             if (!trimmed) continue;
             try {
               const json = JSON.parse(trimmed);
+              const thinkingToken = getThinkingToken(json);
+              if (thinkingToken) {
+                fullThinking += thinkingToken;
+                contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${renderMarkdown(fullContent)}`;
+                scrollToBottom();
+              }
               const token = json.message?.content || '';
-              if (token) { fullContent += token; contentDiv.innerHTML = renderMarkdown(fullContent) + '<span class="stream-cursor"></span>'; scrollToBottom(); }
+              if (token) { fullContent += token; contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`; scrollToBottom(); }
               if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
             } catch {}
           }
         }
         contentDiv.querySelector('.stream-cursor')?.remove();
+        fullContent = normalizeCompanionResponse(fullContent);
         conv.messages.push({ role: 'assistant', content: fullContent, ts: aiTs });
         saveConversations();
         if (conv.messages.filter(m => m.role === 'user').length === 1) generateChatTitle(STATE.activeConvId, userText, fullContent);
-        contentDiv.innerHTML = renderMarkdown(fullContent);
+        contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking);
         highlightCodeBlocks(contentDiv);
         if (STATE.ttsEnabled && fullContent) speakText(stripMarkdown(fullContent));
         return; // done — skip the main stream block below
@@ -2836,11 +3179,13 @@ async function sendMessage(userText) {
     }
 
     const hazyTrace = decodeHazyTraceHeader(response);
+    const webSearchMetadata = getWebSearchMetadata(response);
 
     removeTypingIndicator();
     const aiTs = Date.now();
     const { contentDiv } = appendMessage('assistant', '', true, aiTs);
     let fullContent = '';
+    let fullThinking = '';
 
     const reader  = response.body.getReader();
     const decoder = new TextDecoder();
@@ -2863,20 +3208,27 @@ async function sendMessage(userText) {
         if (!trimmed) continue;
         try {
           const json = JSON.parse(trimmed);
+          const thinkingToken = getThinkingToken(json);
+          if (thinkingToken) {
+            fullThinking += thinkingToken;
+            contentDiv.innerHTML = `${renderHazyDecisionTrace(hazyTrace)}${renderRawThinking(fullThinking, true)}${renderMarkdown(fullContent)}`;
+            scrollToBottom();
+          }
           const token = json.message?.content || '';
 
           if (token) {
             fullContent += token;
 
             if (isBuild || isCode) {
-              const filesFound     = (fullContent.match(/===FILE:/g) || []).length;
+              const liveProject    = parseFinalResponseFiles(fullContent);
+              const filesFound     = liveProject?.files.length || 0;
               const linesGenerated = fullContent.split('\n').length;
               const modeVerb       = isCode ? 'Building your code…' : 'Building your website…';
               if (STATE.showLiveCode) {
-                contentDiv.innerHTML = renderLiveBuildProgress(fullContent, filesFound, linesGenerated);
+                contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderLiveBuildProgress(fullContent, filesFound, linesGenerated)}`;
               } else {
                 const filesInfo = filesFound > 0 ? (filesFound + ' file' + (filesFound > 1 ? 's' : '') + ' detected') : 'Generating…';
-                contentDiv.innerHTML = `
+                contentDiv.innerHTML = `${renderRawThinking(fullThinking)}
                   <div class="build-progress">
                     <span class="build-spinner"></span>
                     <div class="build-progress-info">
@@ -2886,7 +3238,7 @@ async function sendMessage(userText) {
                   </div>`;
               }
             } else {
-              contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace) + '<span class="stream-cursor"></span>';
+              contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking) + '<span class="stream-cursor"></span>';
             }
             scrollToBottom();
           }
@@ -2897,6 +3249,14 @@ async function sendMessage(userText) {
     }
     // Remove cursor after stream ends
     contentDiv.querySelector('.stream-cursor')?.remove();
+
+    if (!fullContent.trim()) {
+      fullContent = 'The model finished without returning an answer. Its response budget may have been used entirely for reasoning. Increase Max Tokens or set Reasoning to Off and try again.';
+      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking);
+    }
+    if (!isBuild && !isCode) {
+      fullContent = normalizeCompanionResponse(fullContent);
+    }
 
     // Final flush to IndexedDB before parsing
 
@@ -2910,20 +3270,19 @@ async function sendMessage(userText) {
 
     if (isBuild || isCode) {
       // — Parse attempt 1: delimiter format (most reliable) —
-      let projectData = parseDelimitedOutput(fullContent);
+      let projectData = parseFinalResponseFiles(fullContent);
 
       // — Parse attempt 2: code block fallback (if model used markdown fences) —
-      if (!projectData) projectData = parseCodeBlockFallback(fullContent);
+      // parseFinalResponseFiles already handles both delimiter and fenced formats.
 
 
       if (projectData && projectData.files.length > 0) {
-        const fileList = projectData.files.map(f => `<code>${escapeHtml(f.filename)}</code>`).join(', ');
         const isPartial = !fullContent.includes('===NOTES===') && !fullContent.includes('===SETUP===');
         const modeLabel = isCode ? 'Code' : 'Website';
         const modeIcon  = isCode ? '💻' : '🌐';
 
 
-        contentDiv.innerHTML = `
+        contentDiv.innerHTML = `${renderRawThinking(fullThinking)}
           <div class="build-success">
             <div class="build-success-header">
               <span class="build-success-icon">${isPartial ? '⚠️' : '✅'}</span>
@@ -2931,7 +3290,7 @@ async function sendMessage(userText) {
             </div>
             ${isPartial ? `<p class="build-partial-warn">⚠️ Output was cut off — showing what was generated.</p>` : ''}
             ${projectData.description ? `<p class="build-success-desc">${escapeHtml(projectData.description)}</p>` : ''}
-            <div class="build-file-list">${fileList}</div>
+            ${renderGeneratedFileCards(projectData)}
             ${projectData.setup ? `<div class="build-setup"><strong>Run:</strong> <code>${escapeHtml(projectData.setup)}</code></div>` : ''}
             ${projectData.notes ? `<p class="build-notes">${escapeHtml(projectData.notes)}</p>` : ''}
             <div class="build-actions">
@@ -2947,10 +3306,11 @@ async function sendMessage(userText) {
           </div>`;
 
         window._lastBuild = projectData;
+        bindGeneratedFileCards(contentDiv, projectData);
         openBuilderPanel(projectData);
         showToast(`${projectData.files.length} file${projectData.files.length > 1 ? 's' : ''} generated!`, 'success');
       } else {
-        contentDiv.innerHTML = renderMarkdown(fullContent);
+        contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}`;
         highlightCodeBlocks(contentDiv);
         const warnDiv = document.createElement('div');
         warnDiv.className = 'build-parse-error';
@@ -2970,9 +3330,12 @@ async function sendMessage(userText) {
         showToast('Could not extract files — see suggestions below', '');
       }
     } else {
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace);
+      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking);
       highlightCodeBlocks(contentDiv);
     }
+
+    const webSourceCards = await loadWebSourceCards(webSearchMetadata);
+    if (webSourceCards) contentDiv.insertAdjacentHTML('beforeend', webSourceCards);
 
     if (STATE.ttsEnabled && fullContent && !isBuild && !isCode) {
       speakText(stripMarkdown(fullContent));
@@ -2983,7 +3346,7 @@ async function sendMessage(userText) {
     if (err.name === 'AbortError') {
       // On abort during build — try to parse whatever was collected
       if ((isBuild || isCode) && typeof fullContent === 'string' && fullContent.length > 100) {
-        const partial = parseDelimitedOutput(fullContent) || parseCodeBlockFallback(fullContent);
+        const partial = parseFinalResponseFiles(fullContent);
         if (partial?.files.length > 0) {
           window._lastBuild = partial;
           openBuilderPanel(partial);
@@ -3115,6 +3478,8 @@ function setStreamingState(streaming) {
   el.chatInput.disabled = streaming;
   el.sendBtn.disabled = streaming || !el.chatInput.value.trim();
   el.stopBtn.style.display = streaming ? 'flex' : 'none';
+  if (el.reasoningInstantBtn) el.reasoningInstantBtn.disabled = streaming;
+  if (el.reasoningDeepBtn) el.reasoningDeepBtn.disabled = streaming;
 }
 
 // ── Scroll management ────────────────────────────────────────────────────
@@ -3123,27 +3488,29 @@ function setStreamingState(streaming) {
 // or when a new message is sent. This prevents streaming from ever
 // hijacking the scroll position.
 let userScrolledUp = false;
+let liveScrollFrame = 0;
+let touchScrollY = null;
 let lastScrollTop = 0;
 
 function isNearBottom() {
   const { scrollTop, scrollHeight, clientHeight } = el.chatContainer;
-  return scrollHeight - scrollTop - clientHeight < 80;
+  return scrollHeight - scrollTop - clientHeight < 96;
 }
 
 function scrollToBottom(force = false) {
   if (force) {
     // Always scroll — user just sent a message or a new chat started
     userScrolledUp = false;
-    requestAnimationFrame(() => {
-      el.chatContainer.scrollTop = el.chatContainer.scrollHeight;
-    });
-  } else {
-    // Streaming chunk — only scroll if user hasn't scrolled up
-    if (userScrolledUp) return;
-    requestAnimationFrame(() => {
-      el.chatContainer.scrollTop = el.chatContainer.scrollHeight;
-    });
+    updateScrollBottomBtn();
   }
+  if (userScrolledUp || liveScrollFrame) return;
+  liveScrollFrame = requestAnimationFrame(() => {
+    liveScrollFrame = 0;
+    if (!userScrolledUp) {
+    // Streaming chunk — only scroll if user hasn't scrolled up
+      el.chatContainer.scrollTop = el.chatContainer.scrollHeight;
+    }
+  });
 }
 
 function updateScrollBottomBtn() {
@@ -3238,17 +3605,23 @@ function updatePiperStatus(status, text, pct = null) {
   if (bar  && pct != null) bar.style.width = Math.min(100, pct) + '%';
 }
 
-// Wait up to 20s for the Piper module script to finish loading
+// Load Piper only when the user enables it, so a missing optional TTS bundle
+// cannot break normal chat startup.
 function waitForPiperLib() {
-  return new Promise((resolve) => {
-    if (window.PiperTTS !== undefined) { resolve(window.PiperTTS); return; }
-    const onReady = () => resolve(window.PiperTTS);
-    window.addEventListener('piper-ready', onReady, { once: true });
-    setTimeout(() => {
-      window.removeEventListener('piper-ready', onReady);
-      resolve(window.PiperTTS ?? null);
-    }, 20000);
-  });
+  if (window.PiperTTS) return Promise.resolve(window.PiperTTS);
+
+  return import('https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web/+esm')
+    .then((tts) => {
+      window.PiperTTS = tts;
+      window.dispatchEvent(new Event('piper-ready'));
+      return tts;
+    })
+    .catch((err) => {
+      console.warn('[Piper] Optional TTS library failed to load; browser voice still works:', err);
+      window.PiperTTS = null;
+      window.dispatchEvent(new Event('piper-ready'));
+      return null;
+    });
 }
 
 async function loadPiperModel(voiceId) {
@@ -3457,6 +3830,32 @@ function setupEventListeners() {
   document.getElementById('codeLangSelect')?.addEventListener('change', e => {
     STATE.codeLang = e.target.value;
   });
+  el.reasoningInstantBtn?.addEventListener('click', () => setComposerReasoningMode('off'));
+  el.reasoningDeepBtn?.addEventListener('click', () => setComposerReasoningMode('deep'));
+  document.getElementById('settingsReasoningMode')?.addEventListener('change', event => {
+    STATE.reasoningMode = normalizeReasoningMode(event.target.value);
+    updateComposerReasoningToggle();
+  });
+
+  el.chatContainer.addEventListener('wheel', event => {
+    if (event.deltaY < 0) {
+      userScrolledUp = true;
+      updateScrollBottomBtn();
+    }
+  }, { passive: true });
+
+  el.chatContainer.addEventListener('touchstart', event => {
+    touchScrollY = event.touches[0]?.clientY ?? null;
+  }, { passive: true });
+
+  el.chatContainer.addEventListener('touchmove', event => {
+    const currentY = event.touches[0]?.clientY;
+    if (touchScrollY != null && currentY != null && currentY > touchScrollY + 2) {
+      userScrolledUp = true;
+      updateScrollBottomBtn();
+    }
+    touchScrollY = currentY ?? touchScrollY;
+  }, { passive: true });
 
   // Scroll to bottom
   el.chatContainer.addEventListener('scroll', () => {
@@ -3478,6 +3877,7 @@ function setupEventListeners() {
   // Clicking scroll-to-bottom button clears the lock
   el.scrollBottomBtn.addEventListener('click', () => {
     userScrolledUp = false;
+    updateScrollBottomBtn();
     el.chatContainer.scrollTo({ top: el.chatContainer.scrollHeight, behavior: 'smooth' });
   });
 
@@ -3742,9 +4142,11 @@ function setupEventListeners() {
   // Builder panel controls
   el.builderClose.addEventListener('click', () => {
     el.builderPanel.classList.remove('open');
+    el.builderPanel.classList.remove('preview-view', 'files-view');
     document.body.classList.remove('builder-open');
   });
-  el.builderPreviewToggle.addEventListener('click', () => showBuilderPreview(!STATE.builderPreviewVisible));
+  el.builderPreviewToggle.addEventListener('click', () => setBuilderView('preview'));
+  el.builderFilesToggle?.addEventListener('click', () => setBuilderView('files'));
   el.builderRefresh.addEventListener('click', refreshPreview);
   el.builderDownload.addEventListener('click', downloadBuilderZip);
   el.builderCopyFile.addEventListener('click', () => {
@@ -3988,12 +4390,11 @@ ${text.slice(0, 3000)}`;
   try {
     const savedModel    = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud       = ['anthropic','openai','groq','gemini'].includes(savedProvider);
-    const localApiKey   = isCloud ? (localStorage.getItem('hazyKey_' + savedProvider) || '') : '';
-    const trainEndpoint = window.location.protocol === 'file:' ? `${STATE.ollamaUrl}/api/chat` : '/hazy/chat';
+    const isCloud       = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+    const trainEndpoint = window.location.protocol === 'file:' ? `${STATE.ollamaUrl}/api/chat` : hazyServerEndpoint('/hazy/chat');
     const trainBody     = window.location.protocol === 'file:'
       ? { model: STATE.model, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.3, num_predict: 2048 } }
-      : { model: savedModel, apiKey: localApiKey || undefined, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.3, num_predict: 2048, max_tokens: 2048 } };
+      : { model: savedModel, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.3, num_predict: 2048, max_tokens: 2048 } };
 
     const res = await fetch(trainEndpoint, {
       method: 'POST',
@@ -4176,6 +4577,7 @@ const PROVIDER_CATEGORIES = {
     { key:'openai',     name:'OpenAI (GPT-4o / DALL-E)', url:'https://platform.openai.com/api-keys',   note:'GPT-4o, o1, DALL-E 3, TTS — requires paid plan' },
     { key:'groq',       name:'Groq (Fast Free Tier)',    url:'https://console.groq.com',               note:'Llama 3.1 70B at incredible speed — free tier available' },
     { key:'gemini',     name:'Google Gemini',            url:'https://aistudio.google.com/app/apikey', note:'Gemini 1.5 Pro — 1M token context window' },
+    { key:'nvidia',     name:'NVIDIA NIM',               url:'https://build.nvidia.com',               note:'Nemotron and other NVIDIA-hosted OpenAI-compatible models' },
   ],
   image: [
     { key:'stability',  name:'Stability AI',            url:'https://platform.stability.ai',          note:'Stable Diffusion XL, ultra quality images' },
@@ -4235,6 +4637,9 @@ const CLOUD_MODEL_MAP = {
     {id:'gemini/gemini-2.5-flash',   label:'Gemini 2.5 Flash (latest)'},
     {id:'gemini/gemini-1.5-pro',     label:'Gemini 1.5 Pro (1M ctx)'},
   ],
+  nvidia: [
+    {id:'nvidia/nemotron-3-super-120b-a12b', label:'Nemotron 3 Super 120B A12B'},
+  ],
 };
 
 let _providerStatuses = {};
@@ -4255,25 +4660,17 @@ async function initProvidersPanel() {
       const serverStatuses = d.providers || {};
       _providerStatuses = serverStatuses;
 
-      // Sync: if server says a key exists but localStorage doesn't have it,
-      // mark it with a sentinel so the UI shows it as active.
-      // If localStorage HAS the real key already, keep that — it's more accurate.
-      Object.entries(serverStatuses).forEach(([k, v]) => {
-        const localKey = localStorage.getItem('hazyKey_' + k);
-        if (v.hasKey && !localKey) {
-          // Server has it but we don't — mark as server-held
-          localStorage.setItem('hazyKey_' + k, '__server__');
-        } else if (!v.hasKey && localKey) {
-          // Server lost it — clear local too
-          localStorage.removeItem('hazyKey_' + k);
-        }
-      });
+      // Remove keys saved by older Hazy versions. Provider secrets are server-only.
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key?.startsWith('hazyKey_')) localStorage.removeItem(key);
+      }
       gotFromServer = true;
     }
   } catch { /* server not running */ }
 
   if (!gotFromServer) {
-    // Fallback: build from localStorage — only treat as active if key is non-empty
+    // Without the server, encrypted cloud-provider secrets are unavailable.
     _providerStatuses = {};
     const allProviders = [
       ...PROVIDER_CATEGORIES.text,
@@ -4281,10 +4678,7 @@ async function initProvidersPanel() {
       ...PROVIDER_CATEGORIES.media,
     ];
     allProviders.forEach(p => {
-      const key = localStorage.getItem('hazyKey_' + p.key) || '';
-      // A real key exists if it's non-empty AND not just the sentinel
-      const hasRealKey = !!key;
-      _providerStatuses[p.key] = { hasKey: hasRealKey, enabled: hasRealKey };
+      _providerStatuses[p.key] = { hasKey: false, enabled: false };
     });
   }
 
@@ -4317,7 +4711,7 @@ function renderCategorizedProviders() {
     if (!el) return;
     el.innerHTML = providers.map(p => {
       const st     = _providerStatuses[p.key] || {};
-      const hasKey = st.hasKey || !!localStorage.getItem('hazyKey_' + p.key);
+      const hasKey = Boolean(st.hasKey);
       return `<div class="provider-key-row">
         <div class="provider-key-row-head">
           <span class="provider-key-name">${p.name}</span>
@@ -4349,11 +4743,7 @@ function renderCategorizedProviders() {
   renderGroup('providerMediaRows', PROVIDER_CATEGORIES.media);
 }
 
-// ── Save / clear key — server first, localStorage fallback ─────
-function getApiKey(provider) {
-  return localStorage.getItem('hazyKey_' + provider) || '';
-}
-
+// ── Save / clear key — encrypted server vault ─────────────────
 async function saveProviderKey(providerKey) {
   const input = document.getElementById('apikey_' + providerKey);
   if (!input) return;
@@ -4364,8 +4754,6 @@ async function saveProviderKey(providerKey) {
     return;
   }
 
-  // ── Step 1: Save key to server (hazy-config.json) ──────────────────────
-  let savedToServer = false;
   try {
     const r = await fetch('/hazy/save-key', {
       method: 'POST',
@@ -4373,22 +4761,24 @@ async function saveProviderKey(providerKey) {
       body: JSON.stringify({ provider: providerKey, apiKey }),
       signal: AbortSignal.timeout(3000),
     });
-    if (r.ok) {
-      const d = await r.json();
-      if (d.ok) savedToServer = true;
+    if (!r.ok) {
+      const details = await r.json().catch(() => ({}));
+      throw new Error(details.error || 'Server rejected the key.');
     }
-  } catch { /* server not running */ }
+    const saved = await r.json();
+    if (!saved.ok) throw new Error('The key was not saved.');
+  } catch (error) {
+    showToast('Could not save key securely: ' + error.message, 'error');
+    return;
+  }
 
-  // ── Step 2: Store the REAL key in localStorage ──────────────────────────
-  localStorage.setItem('hazyKey_' + providerKey, apiKey);
   localStorage.setItem('hazyProvider', providerKey);
 
-  // ── Step 3: Clear old verification — new key must be re-tested ───────────
+  // A newly replaced key must be tested again.
   localStorage.removeItem('hazyVerified_' + providerKey);
 
   input.value = '';
-  const where = savedToServer ? 'server' : 'local';
-  showToast(`Key saved (${where}). Click TEST to verify it works.`, 'success');
+  showToast('Key encrypted on the Hazy server. Click TEST to verify it works.', 'success');
 
   await initProvidersPanel();
 }
@@ -4403,7 +4793,6 @@ async function clearProviderKey(key) {
       signal: AbortSignal.timeout(3000),
     });
   } catch {}
-  localStorage.removeItem('hazyKey_' + key);
   localStorage.removeItem('hazyVerified_' + key);
   showToast(key + ' key removed.', '');
   await initProvidersPanel();
@@ -4423,12 +4812,9 @@ async function testProviderKey(providerKey) {
 
   try {
     // Send a tiny real request through /hazy/chat
-    // This goes through the server which uses the real key from hazy-config.json
+    // The encrypted key is resolved only by the server.
     const models   = CLOUD_MODEL_MAP[providerKey] || [];
     const testModel = (models[0] || {}).id || (providerKey + '/test');
-
-    // Get key from localStorage — server will use this directly
-    const testApiKey = localStorage.getItem('hazyKey_' + providerKey) || '';
 
     const r = await fetch('/hazy/chat', {
       method: 'POST',
@@ -4437,7 +4823,6 @@ async function testProviderKey(providerKey) {
       body: JSON.stringify({
         model:    testModel,
         stream:   true,
-        apiKey:   testApiKey || undefined,
         messages: [
           { role: 'user', content: 'Say "OK" and nothing else.' }
         ],
@@ -4731,7 +5116,7 @@ function saveActiveModelChoice() {
     el.currentModelName.textContent = modelId;
   }
 
-  const hasKey = provider !== 'ollama' ? !!localStorage.getItem('hazyKey_' + provider) : true;
+  const hasKey = provider === 'ollama' || Boolean(_providerStatuses[provider]?.hasKey);
   if (!hasKey) {
     showToast('⚠️ No API key for ' + provider + ' — add it in Settings → AI Providers', 'error');
   } else {
@@ -4760,6 +5145,101 @@ function switchSettingsTab(tabId) {
   const panel = document.getElementById(tabId);
   if (btn) btn.classList.add('active');
   if (panel) panel.classList.add('active');
+  if (tabId === 'sMemory') loadCompanionMemories();
+}
+
+async function loadCompanionMemories() {
+  const list = document.getElementById('memoryList');
+  if (!list) return;
+  list.innerHTML = '<div class="memory-empty">Loading memories...</div>';
+  const showDisabled = document.getElementById('memoryShowDisabled')?.checked;
+  try {
+    const status = showDisabled ? 'all' : 'active';
+    const response = await fetch(`/hazy/memories?userId=local-user&status=${status}`);
+    if (!response.ok) throw new Error('Memory service is unavailable.');
+    const data = await response.json();
+    const memories = data.memories || [];
+    if (!memories.length) {
+      list.innerHTML = '<div class="memory-empty">Hazy has no durable memories in this view.</div>';
+      return;
+    }
+    list.innerHTML = memories.map(memory => `
+      <div class="memory-item ${memory.status === 'disabled' ? 'is-disabled' : ''}">
+        <div class="memory-item-main">
+          <div class="memory-item-meta">
+            <span>${escapeHtml(memory.type.replaceAll('_', ' '))}</span>
+            <span>${escapeHtml(memory.key)}</span>
+            <span>${Math.round(Number(memory.confidence || 0) * 100)}% confidence</span>
+            ${memory.status === 'disabled' ? '<span>paused</span>' : ''}
+          </div>
+          <div class="memory-item-value">${escapeHtml(memory.value)}</div>
+        </div>
+        <div class="memory-actions">
+          <button type="button" onclick="setCompanionMemoryStatus('${memory.id}', '${memory.status === 'disabled' ? 'active' : 'disabled'}')">${memory.status === 'disabled' ? 'Restore' : 'Pause'}</button>
+          <button type="button" class="memory-delete" onclick="deleteCompanionMemory('${memory.id}')">Delete</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (error) {
+    list.innerHTML = `<div class="memory-empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function addCompanionMemory() {
+  const type = document.getElementById('memoryType')?.value || 'explicit_fact';
+  const keyInput = document.getElementById('memoryKey');
+  const valueInput = document.getElementById('memoryValue');
+  const key = keyInput?.value.trim();
+  const value = valueInput?.value.trim();
+  if (!key || !value) {
+    showToast('Add both a short label and the memory value.', 'error');
+    return;
+  }
+  try {
+    const response = await fetch('/hazy/memories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: 'local-user', type, key, value, confidence: 1 })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not add memory.');
+    keyInput.value = '';
+    valueInput.value = '';
+    showToast('Memory added.', 'success');
+    await loadCompanionMemories();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+
+async function setCompanionMemoryStatus(id, status) {
+  const response = await fetch('/hazy/memories', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, userId: 'local-user', status })
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    showToast(result.error || 'Could not update memory.', 'error');
+    return;
+  }
+  await loadCompanionMemories();
+}
+
+async function deleteCompanionMemory(id) {
+  if (!confirm('Permanently delete this memory?')) return;
+  const response = await fetch('/hazy/memories', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, userId: 'local-user' })
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    showToast(result.error || 'Could not delete memory.', 'error');
+    return;
+  }
+  showToast('Memory deleted.', '');
+  await loadCompanionMemories();
 }
 
 // ── ollamaUrl sync between General tab and Models tab ──────────
@@ -4775,6 +5255,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.snav-btn').forEach(btn => {
     btn.addEventListener('click', () => switchSettingsTab(btn.dataset.tab));
   });
+  document.getElementById('memoryAddBtn')?.addEventListener('click', addCompanionMemory);
+  document.getElementById('memoryRefreshBtn')?.addEventListener('click', loadCompanionMemories);
+  document.getElementById('memoryShowDisabled')?.addEventListener('change', loadCompanionMemories);
 
   // Appearance tab — live preview as user changes values
   document.getElementById('settingsFontSize')?.addEventListener('change', e => {

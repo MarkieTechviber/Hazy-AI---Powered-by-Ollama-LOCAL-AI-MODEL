@@ -26,3 +26,19 @@ test('analyzeCodeRequest falls back to project context language', () => {
   assert.equal(result.language, 'javascript');
   assert.match(result.reason, /project context/i);
 });
+
+test('analyzeCodeRequest lowers confidence when language signals conflict', () => {
+  const result = analyzeCodeRequest('Build this utility in Python and JavaScript.');
+
+  assert.equal(result.isCodingRequest, true);
+  assert.equal(result.conflictingSignals, true);
+  assert.ok(result.confidence < 90);
+  assert.ok(result.languageSignals.length >= 2);
+  assert.match(result.reason, /conflicting/i);
+});
+
+test('analyzeCodeRequest stays non-coding below intent threshold', () => {
+  const result = analyzeCodeRequest('Maybe search my notes and explain what they mean.');
+
+  assert.equal(result.isCodingRequest, false);
+});

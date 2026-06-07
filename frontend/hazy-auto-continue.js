@@ -308,16 +308,56 @@
 
     // Call AI for continuation
     async callAIForContinuation(prompt, originalMessages, sendMessageFunction) {
-      // This should integrate with your existing sendMessage function
-      // For now, return a placeholder
-      // In production, this would call your Ollama API
-      
-      return new Promise((resolve) => {
-        // Mock implementation - replace with actual API call
-        setTimeout(() => {
-          resolve(' [Continuation content would go here]');
-        }, 1000);
+      if (typeof sendMessageFunction === 'function') {
+        const result = await sendMessageFunction(prompt, originalMessages);
+        if (typeof result === 'string') return result;
+      }
+
+      const activeModel = localStorage.getItem('hazyActiveModel')
+        || `ollama/${window.STATE?.model || 'llama3.2'}`;
+      const response = await fetch('/hazy/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: activeModel,
+          stream: true,
+          userId: 'local-user',
+          conversationId: window.STATE?.activeConvId || 'default',
+          messages: [
+            ...(Array.isArray(originalMessages) ? originalMessages : []),
+            { role: 'user', content: prompt }
+          ],
+          options: {
+            temperature: window.STATE?.temperature ?? 0.7,
+            max_tokens: window.STATE?.maxTokens || 2048,
+            num_predict: window.STATE?.maxTokens || 2048
+          }
+        })
       });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(details.error || `Continuation failed (${response.status}).`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let content = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line);
+          if (event.error) throw new Error(event.error);
+          if (event.message?.content) content += event.message.content;
+        }
+      }
+      return content.trim();
     }
 
     // UI Methods
