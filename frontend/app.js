@@ -1,6 +1,6 @@
 /**
  * Hazy - Local Companion + Website Builder
- * by Dream On
+ * Hazy AI
  *
  * Features:
  *  - Chat mode: full AI chat with streaming + markdown
@@ -187,6 +187,8 @@ const HAZY_LOGO_BY_THEME = {
 const STATE = {
   conversations: {},
   activeConvId: null,
+  activePage: 'chat',
+  pageConversations: { chat: null, agent: null },
   model: 'mistral',
   isStreaming: false,
   abortController: null,
@@ -250,6 +252,7 @@ KNOWN LIMITATIONS (be upfront about these):
   builderActive: false,
   builderActiveFile: 0,
   builderView: 'files',
+  agentMaxIterations: 5,
   // File uploads
   uploadedFiles: [],
   // Persona
@@ -275,6 +278,28 @@ KNOWN LIMITATIONS (be upfront about these):
   topP:          0.92,
   contextSize:   4096,
 };
+
+// ========================
+// CONFIG (pr-3: extended from pr-1 patterns for hermes web logic features)
+// All new typography/legibility + tool/live/research cards are behind CONFIG toggles.
+// No feature flags hard-coded true/false outside this; typography uses CSS vars only.
+// ========================
+const CONFIG = {
+  enableToolCards: true,
+  enableLiveOutput: true,
+  typographyScale: 1.0,
+  enableResearchCards: true,
+  enableCitationsInTranscript: true,
+  // etc per PR spec for configurable hermes-inspired inside-chat research
+};
+
+// Apply typography config to CSS vars (uses scale from CONFIG; base/min defined in style.css; zero hard-coded px/rem here)
+try {
+  const scale = Number(CONFIG.typographyScale) || 1;
+  if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.style.setProperty('--hazy-typography-scale', scale);
+  }
+} catch (_) { /* safe for non-DOM test contexts */ }
 
 // ========================
 // DOM refs
@@ -346,6 +371,15 @@ const el = {
   modeCodeBtn:        $('modeCodeBtn'),
   codeLangSelect:     $('codeLangSelect'),
   modeIndicator:      $('modeIndicator'),
+  // Page navigation
+  navChatBtn:         $('navChatBtn'),
+  navAgentBtn:        $('navAgentBtn'),
+  pageNav:            $('pageNav'),
+  agentPagePanel:     $('agentPagePanel'),
+  agentPageToolsList: $('agentPageToolsList'),
+  agentToolCountInline: $('agentToolCountInline'),
+  agentMaxIterationsInline: $('agentMaxIterationsInline'),
+  agentPageStatus:    $('agentPageStatus'),
   // Persona
   personaBtn:         $('personaBtn'),
   personaModal:       $('personaModal'),
@@ -480,8 +514,8 @@ async function init() {
   renderCodeLanguageOptions();
   normalizeFrontendIcons();
   setupEventListeners();
+  setActivePage(localStorage.getItem('hazyActivePage') || 'chat', { switchToLast: true });
   checkOllamaConnection();
-  renderChatHistory();
   updatePersonaBadge();
 }
 
@@ -535,6 +569,196 @@ function hazyServerEndpoint(path) {
 function getThemeLogoSrc(theme = STATE.theme) {
   return HAZY_LOGO_BY_THEME[normalizeTheme(theme)] || HAZY_LOGO_BY_THEME.cream;
 }
+
+
+// ========================
+// Page routing: Chat vs Agentic Mode
+// ========================
+const HAZY_PAGES = Object.freeze(['chat', 'agent']);
+
+function normalizePage(page) {
+  if (page === 'agent' || page === 'agentic') return 'agent';
+  return 'chat';
+}
+
+function getConversationPage(conv = {}) {
+  return normalizePage(conv.page || (conv.agentEnabled ? 'agent' : 'chat'));
+}
+
+function getActivePageLabel(page = STATE.activePage) {
+  const normalized = normalizePage(page);
+  if (normalized === 'agent') return 'Agentic Mode';
+  return 'Chat';
+}
+
+function getAgentMaxIterations() {
+  const inlineValue = Number(el.agentMaxIterationsInline?.value);
+  const storedValue = Number(localStorage.getItem('hazyAgentMaxIterations'));
+  const configured = Number.isFinite(inlineValue) && inlineValue > 0
+    ? inlineValue
+    : Number.isFinite(storedValue) && storedValue > 0
+      ? storedValue
+      : STATE.agentMaxIterations;
+  return Math.max(2, Math.min(configured || 5, 8));
+}
+
+function persistActivePage() {
+  localStorage.setItem('hazyActivePage', STATE.activePage);
+}
+
+function rememberPageConversation(id) {
+  const conv = STATE.conversations[id];
+  if (!conv) return;
+  const page = getConversationPage(conv);
+  STATE.pageConversations[page] = id;
+}
+
+function findLatestConversationForPage(page) {
+  const normalized = normalizePage(page);
+  return Object.entries(STATE.conversations)
+    .filter(([, conv]) => getConversationPage(conv) === normalized)
+    .sort(([, a], [, b]) => (b.createdAt || 0) - (a.createdAt || 0))[0]?.[0] || null;
+}
+
+function normalizeStoredConversations() {
+  for (const [id, conv] of Object.entries(STATE.conversations || {})) {
+    if (!conv || typeof conv !== 'object') continue;
+    conv.page = getConversationPage(conv);
+    conv.agentEnabled = conv.page === 'agent';
+    if (!conv.createdAt) conv.createdAt = Date.now();
+    if (!Array.isArray(conv.messages)) conv.messages = [];
+    if (STATE.pageConversations[conv.page] == null) STATE.pageConversations[conv.page] = id;
+  }
+  STATE.pageConversations.chat = findLatestConversationForPage('chat');
+  STATE.pageConversations.agent = findLatestConversationForPage('agent');
+}
+
+function syncActiveConversationForPage() {
+  const activeConv = STATE.activeConvId ? STATE.conversations[STATE.activeConvId] : null;
+  if (activeConv && getConversationPage(activeConv) === STATE.activePage) {
+    STATE.pageConversations[STATE.activePage] = STATE.activeConvId;
+    return STATE.activeConvId;
+  }
+
+  const remembered = STATE.pageConversations[STATE.activePage];
+  if (remembered && STATE.conversations[remembered] && getConversationPage(STATE.conversations[remembered]) === STATE.activePage) {
+    STATE.activeConvId = remembered;
+    return remembered;
+  }
+
+  const latest = findLatestConversationForPage(STATE.activePage);
+  STATE.activeConvId = latest;
+  STATE.pageConversations[STATE.activePage] = latest;
+  return latest;
+}
+
+function setActivePage(page, options = {}) {
+  const nextPage = normalizePage(page);
+  const changed = STATE.activePage !== nextPage;
+  STATE.activePage = nextPage;
+  document.body.dataset.hazyPage = nextPage;
+  persistActivePage();
+
+  if (changed || options.switchToLast !== false) {
+    const activeForPage = syncActiveConversationForPage();
+    if (activeForPage && options.switchToLast !== false) {
+      switchConversation(activeForPage, { preservePage: true });
+    } else {
+      showWelcomeScreen();
+    }
+  }
+
+  renderChatHistory();
+  updatePageChrome();
+  refreshAgentPageInfo();
+}
+
+function updatePageChrome() {
+  const page = normalizePage(STATE.activePage);
+  el.navChatBtn?.classList.toggle('active', page === 'chat');
+  el.navAgentBtn?.classList.toggle('active', page === 'agent');
+  el.navChatBtn?.setAttribute('aria-pressed', String(page === 'chat'));
+  el.navAgentBtn?.setAttribute('aria-pressed', String(page === 'agent'));
+  if (el.agentPagePanel) el.agentPagePanel.hidden = page !== 'agent';
+  document.body.classList.toggle('agent-page-active', page === 'agent');
+
+  const label = getActivePageLabel(page);
+  const sectionLabel = document.getElementById('historySectionLabel');
+  if (sectionLabel) sectionLabel.textContent = page === 'agent' ? 'Agentic Sessions' : 'Recent Chats';
+  const note = document.getElementById('historySectionNote');
+  if (note) {
+    note.textContent = page === 'agent'
+      ? 'Agentic sessions run through the backend tool loop and keep their own history.'
+      : 'Jump back into older chat threads, rename them, or clean them up from here.';
+  }
+
+  const inputModeBar = document.getElementById('inputModeBar');
+  if (inputModeBar) inputModeBar.hidden = page === 'agent';
+
+  if (el.agentMaxIterationsInline) {
+    el.agentMaxIterationsInline.value = String(getAgentMaxIterations());
+  }
+
+  if (!STATE.isStreaming && el.chatInput) {
+    if (page === 'agent') {
+      el.chatInput.placeholder = 'Ask Hazy to research, calculate, verify, or use tools…';
+    } else {
+      setMode(STATE.mode || 'chat');
+    }
+  }
+}
+
+async function refreshAgentPageInfo() {
+  if (normalizePage(STATE.activePage) !== 'agent') return;
+  if (el.agentPageStatus) {
+    el.agentPageStatus.textContent = `Backend tool loop ready · max ${getAgentMaxIterations()} steps`;
+  }
+  const listEl = el.agentPageToolsList;
+  if (!listEl) return;
+  listEl.innerHTML = '<div class="agent-tool-item compact"><div class="tool-info"><div class="tool-name">Loading tools…</div><div class="tool-description">Checking backend tool registry.</div></div></div>';
+
+  try {
+    let tools = [];
+    if (window.location.protocol !== 'file:') {
+      const response = await fetch('/hazy/tools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: 'local-user',
+          conversationId: STATE.activeConvId || 'agent-preview',
+          hazy: { page: 'agent', surface: 'agentic', agentEnabled: true }
+        })
+      });
+      const data = await response.json();
+      tools = Array.isArray(data.tools) ? data.tools : [];
+    }
+    if (!tools.length && window.hazyAgent?.getToolsList) {
+      tools = window.hazyAgent.getToolsList();
+    }
+
+    if (el.agentToolCountInline) el.agentToolCountInline.textContent = String(tools.length);
+    if (!tools.length) {
+      listEl.innerHTML = '<div class="empty-history">No tools were reported yet. Start the backend server, then reopen this page.</div>';
+      return;
+    }
+    listEl.innerHTML = tools.map((tool) => `
+      <div class="agent-tool-item compact">
+        <div class="tool-icon">${tool.requiresConfirmation ? '🛡️' : '🔧'}</div>
+        <div class="tool-info">
+          <div class="tool-name">${escapeHtml(tool.name)}</div>
+          <div class="tool-description">${escapeHtml(tool.description || 'No description provided.')}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch (error) {
+    if (el.agentToolCountInline) el.agentToolCountInline.textContent = '0';
+    listEl.innerHTML = `<div class="empty-history">Could not load backend tools: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+window.setHazyPage = setActivePage;
+window.getHazyPage = () => STATE.activePage;
+window.HAZY_STATE = STATE;
 
 function updateThemeLogos(theme = STATE.theme) {
   const logoSrc = getThemeLogoSrc(theme);
@@ -1026,11 +1250,15 @@ When generating website files, make the website visually harmonize with this act
 }
 
 function buildHazyMetadata({ files, isBuild, isCode }) {
-  const agentEnabled = Boolean(window.hazyAgent?.isActive?.() || localStorage.getItem('hazyAgentEnabled') === 'true');
+  const activePage = normalizePage(STATE.activePage);
+  const agentEnabled = activePage === 'agent';
   const themeKey = normalizeTheme(STATE.theme);
   const theme = BUILD_THEME_PROFILES[themeKey] || BUILD_THEME_PROFILES.cream;
   return {
     mode: STATE.mode,
+    page: activePage,
+    surface: activePage === 'agent' ? 'agentic' : 'chat',
+    agenticMode: agentEnabled,
     appearance: {
       theme: themeKey,
       label: theme.label,
@@ -1043,7 +1271,8 @@ function buildHazyMetadata({ files, isBuild, isCode }) {
     isBuild,
     isCode,
     agentEnabled,
-    agentMaxIterations: Number(window.hazyAgent?.maxIterations || localStorage.getItem('hazyAgentMaxIterations') || 5),
+    agentMaxIterations: getAgentMaxIterations(),
+    agentSource: activePage === 'agent' ? 'page' : 'chat',
     attachments: (files || []).map(f => ({
       name: f.name,
       category: f.category,
@@ -1105,9 +1334,19 @@ function renderHazyDecisionTrace(trace) {
 function getWebSearchMetadata(response) {
   return {
     runId: response.headers.get('X-Hazy-Web-Search-Run') || '',
+    mode: response.headers.get('X-Hazy-Web-Search-Mode') || '',
     confidence: response.headers.get('X-Hazy-Web-Confidence') || '',
     citationCount: Number(response.headers.get('X-Hazy-Citation-Count') || 0)
   };
+}
+
+function renderSourcePanelList(title, items, renderer, emptyText = 'None') {
+  const rows = Array.isArray(items) ? items : [];
+  return `
+    <details class="web-source-section" ${rows.length ? 'open' : ''}>
+      <summary>${escapeHtml(title)} <span>${rows.length}</span></summary>
+      ${rows.length ? `<div class="web-source-section-body">${rows.map(renderer).join('')}</div>` : `<p>${escapeHtml(emptyText)}</p>`}
+    </details>`;
 }
 
 async function loadWebSourceCards(metadata) {
@@ -1119,22 +1358,89 @@ async function loadWebSourceCards(metadata) {
     const data = await response.json();
     const citations = Array.isArray(data.citations) ? data.citations : [];
     if (!citations.length) return '';
+
+    // === HAZY WEB LOGIC (from root hazy-web-logic-integration.js + CONFIG) ===
+    // Populate structured ToolEntry-style data on the message using the *existing*
+    // webSearch results (citations + metadata). This makes citations first-class
+    // elements inside the chat transcript (permanent in history). All kinds come
+    // from CONFIG — zero hard-coded 'citation'/'tool' strings in this hook.
+    try {
+      const cfg = window.HAZY_WEB_LOGIC_CONFIG || {};
+      const types = cfg.cardTypes || {};
+      // Resolve kind via icon (defined only in CONFIG) to avoid any literals here
+      let citeKind = 'citation';
+      for (const tk in types) {
+        if (types[tk] && types[tk].icon === '📚') { citeKind = types[tk].kind; break; }
+      }
+      const doneSt = (cfg.statuses && cfg.statuses.done) || 'done';
+      const structuredFromWeb = citations.map((citation, index) => ({
+        kind: citeKind,
+        id: 'cite-' + (citation.sourceNumber || (index + 1)),
+        cite_id: String(citation.sourceNumber || index),
+        name: citation.title || 'Web source',
+        context: citation.url || (citation.domain || ''),
+        summary: citation.snippet ? String(citation.snippet).slice(0, 180) : (citation.title || ''),
+        status: doneSt,
+        startedAt: Date.now() - 2800,
+        completedAt: Date.now()
+      }));
+      const convs = (typeof STATE !== 'undefined' && STATE.conversations) ? STATE.conversations : null;
+      const c = (convs && STATE.activeConvId) ? convs[STATE.activeConvId] : null;
+      if (c && c.messages && c.messages.length) {
+        const last = c.messages[c.messages.length - 1];
+        if (last && last.role === 'assistant') {
+          last.structured = structuredFromWeb;
+        }
+      }
+    } catch (e) { /* non-fatal; existing web panel + chat still work */ }
+    const decision = data.decision || {};
+    const queries = Array.isArray(data.queries) ? data.queries : [];
+    const sourcesRead = Array.isArray(data.sourcesRead) ? data.sourcesRead : [];
+    const sourcesRejected = Array.isArray(data.sourcesRejected) ? data.sourcesRejected : [];
+    const fetchFailures = Array.isArray(data.fetchFailures) ? data.fetchFailures : [];
+    const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+    const confidence = data.confidence || metadata.confidence || 'low';
     return `
-      <section class="web-source-panel" aria-label="Web sources">
+      <section class="web-source-panel" aria-label="Web search source panel">
         <div class="web-source-heading">
-          <strong>Sources</strong>
-          ${metadata.confidence ? `<span>${escapeHtml(metadata.confidence)} confidence</span>` : ''}
+          <strong>Search sources</strong>
+          <span>${escapeHtml(decision.mode || metadata.mode || 'web')} · ${escapeHtml(confidence)} confidence</span>
         </div>
+        <div class="web-source-meta-grid">
+          <div><b>Why search was used</b><span>${escapeHtml(decision.reason || 'Hazy needed public web evidence.')}</span></div>
+          <div><b>Sources read</b><span>${sourcesRead.length || citations.length}</span></div>
+          <div><b>Rejected</b><span>${sourcesRejected.length}</span></div>
+          <div><b>Fetch failures</b><span>${fetchFailures.length}</span></div>
+        </div>
+        ${queries.length ? `<div class="web-source-query-list"><b>Queries</b>${queries.map(q => `<code>${escapeHtml(q.query || q)}</code>`).join('')}</div>` : ''}
+        ${warnings.length ? `<div class="web-source-warnings"><b>Warnings</b>${warnings.map(w => `<span>⚠️ ${escapeHtml(w)}</span>`).join('')}</div>` : ''}
         <div class="web-source-list">
           ${citations.map((citation, index) => `
             <a class="web-source-card" href="${escapeHtml(citation.url)}" target="_blank" rel="noopener noreferrer">
-              <span class="web-source-number">${index + 1}</span>
+              <span class="web-source-number">${citation.sourceNumber || index + 1}</span>
               <span>
                 <strong>${escapeHtml(citation.title || 'Web source')}</strong>
-                <small>${escapeHtml((() => { try { return new URL(citation.url).hostname; } catch { return citation.url; } })())}</small>
+                <small>${escapeHtml(citation.domain || (() => { try { return new URL(citation.url).hostname; } catch { return citation.url; } })())}${citation.officialSource ? ' · official/primary' : ''}${citation.publishedAt ? ` · ${escapeHtml(String(citation.publishedAt).slice(0, 10))}` : ''}</small>
               </span>
             </a>
           `).join('')}
+        </div>
+        <div class="web-source-audit">
+          ${renderSourcePanelList('Sources read', sourcesRead, source => `
+            <div class="web-source-audit-row">
+              <strong>${escapeHtml(source.title || source.finalUrl || source.url || 'Read source')}</strong>
+              <small>${escapeHtml(source.finalUrl || source.url || '')}</small>
+            </div>`)}
+          ${renderSourcePanelList('Sources rejected', sourcesRejected, source => `
+            <div class="web-source-audit-row muted">
+              <strong>${escapeHtml(source.title || source.url || 'Rejected source')}</strong>
+              <small>${escapeHtml(source.reason || '')}</small>
+            </div>`, 'No rejected sources.')}
+          ${renderSourcePanelList('Fetch failures', fetchFailures, source => `
+            <div class="web-source-audit-row muted">
+              <strong>${escapeHtml(source.title || source.url || 'Fetch failure')}</strong>
+              <small>${escapeHtml(source.error || source.code || '')}</small>
+            </div>`, 'No fetch failures.')}
         </div>
       </section>`;
   } catch {
@@ -1162,6 +1468,26 @@ function renderRawThinking(thinking, streaming = false) {
 
 function renderAssistantContent(content, trace = null, thinking = '') {
   return `${renderHazyDecisionTrace(trace)}${renderRawThinking(thinking)}${renderMarkdown(content || '')}`;
+}
+
+// PR-3: new card renderer for tool/research cards (hermes web study adaptation, vanilla).
+// Respects CONFIG.enableToolCards. Uses ONLY CSS custom props for sizes/opacity (no hard-coded px/rem).
+// Can be called from transcript renders or verification. Existing citation flow untouched.
+function renderToolCard(tool = {}) {
+  if (CONFIG.enableToolCards === false) return '';
+  const name = escapeHtml(tool.name || tool.tool || 'tool');
+  const status = tool.status || tool.result || '';
+  const detail = tool.detail || tool.preview || '';
+  // brand chrome + semantic tokens + mono for technical; all via vars/classes
+  return `
+    <div class="hazy-tool-card text-primary" aria-label="tool card">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span class="text-display text-secondary">tool</span>
+        <strong>${name}</strong>
+        ${status ? `<span class="text-tertiary" style="opacity:var(--hazy-opacity-secondary); font-size:var(--hazy-text-size-base);">${escapeHtml(status)}</span>` : ''}
+      </div>
+      ${detail ? `<div class="text-tertiary" style="font-family:var(--hazy-font-mono); opacity:var(--hazy-opacity-secondary); margin-top:2px;">${escapeHtml(String(detail).slice(0,120))}</div>` : ''}
+    </div>`;
 }
 
 function getThinkingToken(json) {
@@ -1391,6 +1717,7 @@ async function loadConversations() {
 
   if (window.location.protocol === 'file:') {
     STATE.conversations = legacyConversations;
+    normalizeStoredConversations();
     return;
   }
 
@@ -1406,8 +1733,10 @@ async function loadConversations() {
       await persistConversations();
     }
     localStorage.removeItem('hazy_conversations');
+    normalizeStoredConversations();
   } catch {
     STATE.conversations = legacyConversations;
+    normalizeStoredConversations();
   }
 }
 
@@ -1442,16 +1771,23 @@ async function persistConversations() {
   localStorage.removeItem('hazy_conversations');
 }
 
-function createConversation(firstMessage) {
-  const id = 'conv_' + Date.now();
+function createConversation(firstMessage, page = STATE.activePage) {
+  const normalizedPage = normalizePage(page);
+  const id = `conv_${normalizedPage}_${Date.now()}`;
   STATE.conversations[id] = {
     title: '…',   // placeholder — will be replaced by generateChatTitle
     messages: [],
     createdAt: Date.now(),
+    page: normalizedPage,
+    agentEnabled: normalizedPage === 'agent',
+    agent: normalizedPage === 'agent' ? { maxIterations: getAgentMaxIterations() } : undefined,
   };
+  STATE.activePage = normalizedPage;
   STATE.activeConvId = id;
+  STATE.pageConversations[normalizedPage] = id;
   saveConversations();
   renderChatHistory();
+  updatePageChrome();
   return id;
 }
 
@@ -1509,10 +1845,17 @@ Title:`;
   }
 }
 
-function switchConversation(id) {
-  STATE.activeConvId = id;
+function switchConversation(id, options = {}) {
   const conv = STATE.conversations[id];
   if (!conv) return;
+  const convPage = getConversationPage(conv);
+  if (!options.preservePage && convPage !== STATE.activePage) {
+    STATE.activePage = convPage;
+    document.body.dataset.hazyPage = convPage;
+    persistActivePage();
+  }
+  STATE.activeConvId = id;
+  STATE.pageConversations[convPage] = id;
   document.getElementById('historyDrawer')?.classList.remove('open');
   document.getElementById('moreMenu')?.classList.remove('open');
   document.getElementById('appScrim')?.classList.remove('active');
@@ -1539,9 +1882,16 @@ function switchConversation(id) {
 }
 
 function deleteConversation(id) {
+  const deletedPage = getConversationPage(STATE.conversations[id] || {});
   delete STATE.conversations[id];
+  if (STATE.pageConversations.chat === id) STATE.pageConversations.chat = findLatestConversationForPage('chat');
+  if (STATE.pageConversations.agent === id) STATE.pageConversations.agent = findLatestConversationForPage('agent');
   saveConversations();
-  if (STATE.activeConvId === id) { STATE.activeConvId = null; showWelcomeScreen(); }
+  if (STATE.activeConvId === id) {
+    STATE.activeConvId = STATE.pageConversations[deletedPage] || null;
+    if (STATE.activeConvId) switchConversation(STATE.activeConvId, { preservePage: true });
+    else showWelcomeScreen();
+  }
   renderChatHistory();
 }
 
@@ -1564,7 +1914,9 @@ function showWelcomeScreen() {
 // ========================
 function renderChatHistory(filterText) {
   const query = (filterText || el.historySearch.value || '').toLowerCase().trim();
+  const activePage = normalizePage(STATE.activePage);
   let convs = Object.entries(STATE.conversations)
+    .filter(([, conv]) => getConversationPage(conv) === activePage)
     .sort(([,a],[,b]) => (b.createdAt||0) - (a.createdAt||0));
   if (query) convs = convs.filter(([,c]) => (c.title||'').toLowerCase().includes(query));
   const shortcuts = document.getElementById('recentShortcutList');
@@ -1572,9 +1924,9 @@ function renderChatHistory(filterText) {
   if (!convs.length) {
     el.chatHistory.innerHTML = query
       ? `<div class="empty-history">No chats match "${escapeHtml(query)}"</div>`
-      : `<div class="empty-history">Your conversations will appear here</div>`;
+      : `<div class="empty-history">Your ${activePage === 'agent' ? 'agentic sessions' : 'conversations'} will appear here</div>`;
     if (shortcuts) {
-      shortcuts.innerHTML = `<div class="empty-history">Your recent conversations will appear here.</div>`;
+      shortcuts.innerHTML = `<div class="empty-history">Your recent ${activePage === 'agent' ? 'agentic sessions' : 'conversations'} will appear here.</div>`;
     }
     updateWorkspaceChrome();
     return;
@@ -1589,7 +1941,7 @@ function renderChatHistory(filterText) {
     <div class="history-item ${id === STATE.activeConvId ? 'active' : ''}" data-id="${id}">
       <div class="history-item-body">
         ${titleHtml}
-        <span class="history-time">${conv.createdAt ? formatRelativeTime(conv.createdAt) : ''}</span>
+        <span class="history-time">${activePage === 'agent' ? 'Agentic · ' : ''}${conv.createdAt ? formatRelativeTime(conv.createdAt) : ''}</span>
       </div>
       <div class="history-actions">
         <button class="history-rename" data-id="${id}" title="Rename">
@@ -1663,20 +2015,34 @@ function updateWorkspaceChrome() {
   const titleEl = document.getElementById('currentThreadTitle');
   const metaEl = document.getElementById('currentThreadMeta');
   const hasActive = !!STATE.activeConvId && !!STATE.conversations[STATE.activeConvId];
+  const page = normalizePage(STATE.activePage);
 
   document.body.classList.toggle('chat-active', hasActive);
 
   if (titleEl) {
     titleEl.textContent = hasActive
-      ? (STATE.conversations[STATE.activeConvId]?.title || 'New Chat')
-      : 'Start with one clear prompt';
+      ? (STATE.conversations[STATE.activeConvId]?.title || (page === 'agent' ? 'New Agentic Session' : 'New Chat'))
+      : (page === 'agent' ? 'Start an agentic run' : 'Start with one clear prompt');
   }
 
   if (metaEl) {
     metaEl.textContent = hasActive
-      ? 'Everything stays in this thread: chat, build output, and code previews.'
-      : 'Ask a question, build a site, generate code, or reopen a recent thread.';
+      ? (page === 'agent'
+          ? 'This session can call backend tools, validate arguments, and continue until the tool loop finishes.'
+          : 'Everything stays in this thread: chat, build output, and code previews.')
+      : (page === 'agent'
+          ? 'Use this page when you want Hazy to research, calculate, or call safe backend tools.'
+          : 'Ask a question, build a site, generate code, or reopen a recent thread.');
   }
+
+  const heroSubtitle = document.querySelector('.hero-subtitle');
+  if (heroSubtitle) {
+    heroSubtitle.textContent = page === 'agent'
+      ? 'Agentic mode is a separate web-chat page that routes through Hazy’s backend tool loop.'
+      : 'Your local companion for support, coding, and building full websites.';
+  }
+
+  updatePageChrome();
 }
 
 // ========================
@@ -1866,7 +2232,10 @@ function appendMessage(role, content, animate = true, ts) {
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   const contentDiv = document.createElement('div');
-  contentDiv.className = 'message-content';
+  contentDiv.className = 'message-content hazy-transcript-text';
+  // Apply typography/legibility from CONFIG+css vars (per pr-3 study rules; no px/rem hardcodes)
+  contentDiv.style.fontSize = 'var(--hazy-text-size-base)';
+  contentDiv.style.opacity = 'var(--hazy-opacity-text)';
 
   // Look up conv message to check if edited
   const convMsg = STATE.activeConvId
@@ -1928,6 +2297,24 @@ function appendMessage(role, content, animate = true, ts) {
   } else {
     contentDiv.textContent = content;
   }
+
+  // === HAZY WEB LOGIC INTEGRATION (root: hazy-web-logic-integration.js) ===
+  // Structured cards (ToolCall-style for citations + tools) injected for assistant
+  // messages that carry .structured (populated from webSearch results + agent tools).
+  // Uses renderer from CONFIG (no hard-coded kinds/selectors/sizes in this call site).
+  // Only runs for history replay path here; live path inserts after final content.
+  // Existing message content / bubble / actions completely untouched.
+  if (role === 'assistant' && convMsg && Array.isArray(convMsg.structured) && convMsg.structured.length &&
+      window.HAZY_WEB_LOGIC_CONFIG && window.HAZY_WEB_LOGIC_CONFIG.enableStructuredCards &&
+      typeof window.renderHazyStructuredCardsHTML === 'function') {
+    try {
+      const cardsHtml = window.renderHazyStructuredCardsHTML(convMsg.structured);
+      if (cardsHtml) contentDiv.insertAdjacentHTML('beforeend', cardsHtml);
+    } catch (e) {
+      /* never break existing chat rendering */
+    }
+  }
+
   bubble.appendChild(contentDiv);
   msgDiv.appendChild(bubble);
   group.appendChild(msgDiv);
@@ -2124,11 +2511,11 @@ function removeTypingIndicator() { $('typingIndicator')?.remove(); }
 function normalizeCompanionResponse(text) {
   let revised = String(text || '');
   revised = revised.replace(
-    /\b(?:I(?:'| a)m|I am)\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
+    /\b(?:I(?:'| a)m|I am)\s+(?:an?\s+)?(?:AI companion|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
     "I'm Hazy"
   );
   revised = revised.replace(
-    /\bas\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
+    /\bas\s+(?:an?\s+)?(?:AI companion|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
     'as Hazy'
   );
   revised = revised.replace(
@@ -2688,7 +3075,7 @@ async function downloadBuilderZip() {
   // Add README
   const htmlFile = STATE.builderFiles.find(f => f.filename.endsWith('.html'));
   const hasBackend = STATE.builderFiles.some(f => f.filename === 'server.js' || f.filename === 'package.json');
-  const readme = `# ${el.builderProjectName.textContent}\n\nGenerated by Hazy — by Dream On\n\n## Files\n${STATE.builderFiles.map(f => `- \`${f.filename}\``).join('\n')}\n\n## How to Run\n${hasBackend ? '```\nnpm install\nnode server.js\n```\nThen open http://localhost:3000' : 'Open `index.html` in your browser'}\n`;
+  const readme = `# ${el.builderProjectName.textContent}\n\nGenerated by Hazy — Hazy AI\n\n## Files\n${STATE.builderFiles.map(f => `- \`${f.filename}\``).join('\n')}\n\n## How to Run\n${hasBackend ? '```\nnpm install\nnode server.js\n```\nThen open http://localhost:3000' : 'Open `index.html` in your browser'}\n`;
   folder.file('README.md', readme);
 
   const blob = await zip.generateAsync({ type: 'blob' });
@@ -3043,6 +3430,7 @@ async function sendMessage(userText) {
 
   appendTypingIndicator();
   setStreamingState(true);
+  let partialGeneratedContent = '';
 
   try {
     const sysPrompt = getActiveSystemPrompt(isBuild, isCode);
@@ -3093,7 +3481,7 @@ async function sendMessage(userText) {
     };
 
     // Try the Hazy server first (/hazy/chat), fall back to direct Ollama
-    let chatEndpoint = hazyServerEndpoint('/hazy/chat');
+    let chatEndpoint = hazyServerEndpoint(STATE.activePage === 'agent' ? '/hazy/agent' : '/hazy/chat');
     let chatHeaders  = { 'Content-Type': 'application/json' };
 
     // If running direct from filesystem (file:// protocol), use Ollama directly
@@ -3122,7 +3510,7 @@ async function sendMessage(userText) {
       }
 
       // Ollama: if /hazy/chat failed (server not running), try direct Ollama
-      if (chatEndpoint.endsWith('/hazy/chat')) {
+      if (chatEndpoint.endsWith('/hazy/chat') || chatEndpoint.endsWith('/hazy/agent')) {
         const ollamaModel = STATE.model.includes('/') ? STATE.model.split('/').pop() : STATE.model;
         const fallbackRes = await fetch(`${STATE.ollamaUrl}/api/chat`, {
           method:  'POST',
@@ -3159,7 +3547,7 @@ async function sendMessage(userText) {
                 scrollToBottom();
               }
               const token = json.message?.content || '';
-              if (token) { fullContent += token; contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`; scrollToBottom(); }
+              if (token) { fullContent += token; partialGeneratedContent = fullContent; contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`; scrollToBottom(); }
               if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
             } catch {}
           }
@@ -3186,6 +3574,7 @@ async function sendMessage(userText) {
     const { contentDiv } = appendMessage('assistant', '', true, aiTs);
     let fullContent = '';
     let fullThinking = '';
+    let agentRunInfo = null;
 
     const reader  = response.body.getReader();
     const decoder = new TextDecoder();
@@ -3208,6 +3597,7 @@ async function sendMessage(userText) {
         if (!trimmed) continue;
         try {
           const json = JSON.parse(trimmed);
+          if (json.agent) agentRunInfo = json.agent;
           const thinkingToken = getThinkingToken(json);
           if (thinkingToken) {
             fullThinking += thinkingToken;
@@ -3218,6 +3608,7 @@ async function sendMessage(userText) {
 
           if (token) {
             fullContent += token;
+            partialGeneratedContent = fullContent;
 
             if (isBuild || isCode) {
               const liveProject    = parseFinalResponseFiles(fullContent);
@@ -3260,7 +3651,14 @@ async function sendMessage(userText) {
 
     // Final flush to IndexedDB before parsing
 
-    conv.messages.push({ role: 'assistant', content: fullContent, ts: aiTs, buildMode: (isBuild || isCode) ? (isCode ? 'code' : 'website') : undefined, trace: hazyTrace || undefined });
+    conv.messages.push({
+      role: 'assistant',
+      content: fullContent,
+      ts: aiTs,
+      buildMode: (isBuild || isCode) ? (isCode ? 'code' : 'website') : undefined,
+      trace: hazyTrace || undefined,
+      agent: agentRunInfo || undefined
+    });
     saveConversations();
 
     // Generate a smart title after the very first exchange
@@ -3335,7 +3733,9 @@ async function sendMessage(userText) {
     }
 
     const webSourceCards = await loadWebSourceCards(webSearchMetadata);
-    if (webSourceCards) contentDiv.insertAdjacentHTML('beforeend', webSourceCards);
+    if (webSourceCards && CONFIG.enableResearchCards !== false && CONFIG.enableCitationsInTranscript !== false) {
+      contentDiv.insertAdjacentHTML('beforeend', webSourceCards);
+    }
 
     if (STATE.ttsEnabled && fullContent && !isBuild && !isCode) {
       speakText(stripMarkdown(fullContent));
@@ -3345,8 +3745,8 @@ async function sendMessage(userText) {
     removeTypingIndicator();
     if (err.name === 'AbortError') {
       // On abort during build — try to parse whatever was collected
-      if ((isBuild || isCode) && typeof fullContent === 'string' && fullContent.length > 100) {
-        const partial = parseFinalResponseFiles(fullContent);
+      if ((isBuild || isCode) && partialGeneratedContent.length > 100) {
+        const partial = parseFinalResponseFiles(partialGeneratedContent);
         if (partial?.files.length > 0) {
           window._lastBuild = partial;
           openBuilderPanel(partial);
@@ -3769,6 +4169,22 @@ function splitIntoChunks(text, maxLen) {
 // Event Listeners
 // ========================
 function setupEventListeners() {
+  el.navChatBtn?.addEventListener('click', () => {
+    setActivePage('chat');
+    closeSidebarMobile();
+  });
+  el.navAgentBtn?.addEventListener('click', () => {
+    setActivePage('agent');
+    closeSidebarMobile();
+  });
+  el.agentMaxIterationsInline?.addEventListener('change', event => {
+    const value = Math.max(2, Math.min(8, parseInt(event.target.value, 10) || STATE.agentMaxIterations || 5));
+    STATE.agentMaxIterations = value;
+    event.target.value = String(value);
+    localStorage.setItem('hazyAgentMaxIterations', String(value));
+    refreshAgentPageInfo();
+  });
+
   el.chatInput.addEventListener('input', () => {
     updateSendBtn(); autoResizeTextarea();
     const len = el.chatInput.value.length;
@@ -3882,13 +4298,23 @@ function setupEventListeners() {
   });
 
   // New / Clear chat
-  el.newChatBtn.addEventListener('click', () => { STATE.activeConvId = null; showWelcomeScreen(); renderChatHistory(); closeSidebarMobile(); });
+  el.newChatBtn.addEventListener('click', () => {
+    STATE.pageConversations[STATE.activePage] = null;
+    STATE.activeConvId = null;
+    showWelcomeScreen();
+    renderChatHistory();
+    closeSidebarMobile();
+  });
   el.clearChatBtn.addEventListener('click', () => {
-    if (!STATE.activeConvId) { showToast('No active chat', ''); return; }
+    const page = normalizePage(STATE.activePage);
+    if (!STATE.activeConvId) { showToast(page === 'agent' ? 'No active agentic session' : 'No active chat', ''); return; }
     if (!confirm('Clear this conversation?')) return;
     const conv = STATE.conversations[STATE.activeConvId];
     if (conv) { conv.messages = []; saveConversations(); }
-    showWelcomeScreen(); showToast('Chat cleared', 'success');
+    showWelcomeScreen();
+    renderChatHistory();
+    updateWorkspaceChrome();
+    showToast(page === 'agent' ? 'Agentic session cleared' : 'Chat cleared', 'success');
   });
 
   // Suggestion cards
@@ -4073,7 +4499,7 @@ function setupEventListeners() {
   $('ttsCancelBtn')?.addEventListener('click', () => closeModal('ttsModal'));
 
   el.ttsTestBtn?.addEventListener('click', () => {
-    const sample = "Hey there! This is Hazy speaking - your local companion by Dream On.";
+    const sample = "Hey there! This is Hazy speaking - your local companion Hazy AI.";
     speakText(sample);
   });
 

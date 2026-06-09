@@ -27,11 +27,214 @@
   --bg-hover:var(--panel-soft);
   --text-primary:var(--text);
   --text-secondary:var(--text-soft);
+  --hazy-text-primary:var(--text-primary);
+  --hazy-text-secondary:var(--text-secondary);
+  --hazy-text-tertiary:var(--text-muted);
+  --hazy-text-disabled:var(--text-muted);
+  --hazy-text-on-accent:#fff;
+  --hazy-text-size-base:calc(0.75rem * var(--hazy-typography-scale, 1));
+  --hazy-opacity-text:1;
+  --hazy-opacity-secondary:0.85;
+  --hazy-opacity-min:0.7;
+  --hazy-typography-scale:1;
+  --hazy-font-mono:var(--font-mono);
+  --hazy-letter-spacing-brand:0.08em;
   --border:var(--line);
   --radius-sm:10px;
   --shadow-lg:var(--shadow);
   --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   font-family:"Space Grotesk",Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+
+/* Browser automation dashboard */
+.browser-page-panel {
+  width: 100%;
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.browser-toolbar,
+.browser-preview,
+.browser-observation,
+.browser-timeline,
+.browser-history {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.browser-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(280px, 1.4fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.browser-status-card h3 {
+  margin: 2px 0 4px;
+  font-size: 18px;
+}
+
+.browser-status-card p,
+.browser-panel-heading span,
+.browser-timeline-item p,
+.browser-history-item span,
+.browser-history-item small {
+  color: var(--text-muted);
+}
+
+.browser-url-form,
+.browser-control-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.browser-url-form input {
+  min-width: 240px;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.browser-url-form button,
+.browser-control-row button,
+.browser-confirmation button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  cursor: pointer;
+}
+
+.browser-control-row button {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.browser-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.25fr) minmax(280px, .9fr);
+  gap: 16px;
+}
+
+.browser-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.browser-panel-heading span {
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.browser-screenshot-frame {
+  min-height: 280px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.browser-screenshot-frame img {
+  width: 100%;
+  height: 100%;
+  max-height: 520px;
+  object-fit: contain;
+}
+
+.browser-observation-panel,
+.browser-timeline-list,
+.browser-history-list {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.browser-observation-section {
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+.browser-observation-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.browser-observation-section p {
+  margin: 4px 0 0;
+  line-height: 1.45;
+}
+
+.browser-observation-section.warning p {
+  color: var(--warning, #9a5b00);
+}
+
+.browser-timeline-item,
+.browser-history-item {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.browser-timeline-item span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.browser-confirmation {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  max-width: 420px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--bg-primary);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .18);
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.browser-confirmation[hidden] {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .browser-toolbar,
+  .browser-grid,
+  .browser-confirmation {
+    grid-template-columns: 1fr;
+  }
+
+  .browser-confirmation {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+  }
 }
 
 *{box-sizing:border-box}
@@ -206,6 +409,44 @@ svg{flex:none}
 .history-actions button:hover{background:rgba(215,151,23,.12);color:var(--accent-2)}
 .empty-history{padding:14px;color:var(--text-muted);font-size:13px;border:1px dashed var(--line);border-radius:10px;background:rgba(255,253,248,.45)}
 .sidebar-card{height:42px;border-radius:10px;padding:0 13px;display:flex;align-items:center;gap:10px;text-align:left}
+
+.workspace-section-label{margin-top:4px}
+.page-nav{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.page-nav-btn{
+  min-height:42px;border:1px solid var(--line);border-radius:12px;
+  background:rgba(255,253,248,.72);color:var(--text-soft);
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  font-size:13px;font-weight:700;transition:transform .16s ease,border-color .16s ease,background .16s ease,color .16s ease,box-shadow .16s ease;
+}
+.page-nav-btn:hover{transform:translateY(-1px);border-color:rgba(215,151,23,.3);box-shadow:0 10px 24px rgba(96,63,11,.06)}
+.page-nav-btn.active{color:#fff;background:linear-gradient(180deg,#dfa532,#c78506);border-color:rgba(199,133,6,.35);box-shadow:0 12px 26px rgba(199,133,6,.16)}
+.page-nav-btn .icon-svg{width:16px;height:16px}
+.agent-page-panel{
+  margin:16px 18px 0;padding:18px;border:1px solid rgba(215,151,23,.22);border-radius:18px;
+  background:linear-gradient(180deg,rgba(255,253,248,.88),rgba(255,247,232,.68));
+  box-shadow:0 12px 34px rgba(96,63,11,.06);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:start;
+}
+.agent-page-copy h3{margin:4px 0 5px;font-size:18px;letter-spacing:-.03em}
+.agent-page-copy p{margin:0;color:var(--text-soft);font-size:13px;line-height:1.45}
+.agent-page-controls{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.agent-step-control,.agent-tool-counter{
+  min-height:50px;border:1px solid var(--line);border-radius:13px;background:rgba(255,253,248,.72);
+  padding:8px 11px;display:flex;align-items:center;gap:9px;color:var(--text-soft);font-size:12px;font-weight:700;
+}
+.agent-step-control input{width:58px;height:30px;border:1px solid var(--line);border-radius:9px;background:rgba(255,253,248,.9);text-align:center;font-weight:800;color:var(--text)}
+.agent-tool-counter strong{font-size:19px;color:var(--accent-2);line-height:1}
+.agent-page-tools{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;max-height:150px;overflow:auto;padding-right:2px}
+.agent-page-tools .agent-tool-item{margin:0;border:1px solid var(--line);border-radius:12px;background:rgba(255,253,248,.62);padding:10px 11px;display:flex;gap:9px;align-items:flex-start}
+.agent-page-tools .agent-tool-item.compact .tool-name{font-size:13px;font-weight:750;color:var(--text)}
+.agent-page-tools .tool-description{font-size:12px;line-height:1.35;color:var(--text-soft);margin-top:3px}
+.agent-page-active .main-stage{border-color:rgba(215,151,23,.25)}
+.agent-page-active .composer-footer span:first-child::after{content:' · Agentic page';color:var(--accent-2);font-weight:700}
+@media (max-width: 860px){
+  .agent-page-panel{grid-template-columns:1fr;margin:12px;padding:14px}
+  .agent-page-controls{justify-content:flex-start}
+  .agent-page-tools{max-height:120px}
+}
+
 .sidebar-card span:not(.chevron):not(.model-selector-copy){font-weight:650;font-size:14px}
 .model-selector-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
 .model-selector-copy strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -878,3 +1119,225 @@ body.builder-open .input-area{
   font-size: 11px;
   font-weight: 700;
 }
+
+.web-source-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin: 8px 0 10px;
+}
+.web-source-meta-grid div,
+.web-source-query-list,
+.web-source-warnings,
+.web-source-section {
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.24));
+  border-radius: 10px;
+  background: var(--bg-secondary, rgba(128, 128, 128, 0.07));
+  padding: 8px 10px;
+}
+.web-source-meta-grid b,
+.web-source-query-list b,
+.web-source-warnings b {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted, #8b8b8b);
+  margin-bottom: 3px;
+}
+.web-source-meta-grid span,
+.web-source-warnings span {
+  display: block;
+  font-size: 12px;
+}
+.web-source-query-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.web-source-query-list b { flex-basis: 100%; }
+.web-source-query-list code {
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(128,128,128,.14);
+}
+.web-source-warnings {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.web-source-audit {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.web-source-section summary {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+}
+.web-source-section summary span {
+  color: var(--text-muted, #8b8b8b);
+}
+.web-source-section-body {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.web-source-audit-row {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.web-source-audit-row small {
+  color: var(--text-muted, #8b8b8b);
+}
+.web-source-audit-row.muted {
+  opacity: .78;
+}
+
+/* PR-3: Hermes web logic typography/legibility rules applied to transcript via CSS custom props.
+   Min body: var base (0.75rem), never <0.7 opacity on text, semantic tokens, brand chrome, mono for tech.
+   All new application sites use ONLY the vars; no px/rem hardcodes added in this scope. Scoped to transcript/cards.
+   See CONFIG.typographyScale etc in app.js for runtime control. */
+.messages-area,
+.message-content,
+.message-bubble,
+.web-source-panel,
+.web-source-card,
+.web-source-section,
+.hazy-tool-card,
+.hazy-trace-card,
+.hazy-trace-wrap {
+  font-size: var(--hazy-text-size-base);
+}
+.text-primary { color: var(--hazy-text-primary); }
+.text-secondary { color: var(--hazy-text-secondary); }
+.text-tertiary { color: var(--hazy-text-tertiary); }
+.text-disabled { color: var(--hazy-text-disabled); }
+.text-on-accent { color: var(--hazy-text-on-accent); }
+.text-display {
+  text-transform: uppercase;
+  letter-spacing: var(--hazy-letter-spacing-brand);
+  font-weight: 700;
+}
+.message-meta,
+.web-source-card small,
+.web-source-section summary,
+.web-source-audit-row,
+.reasoning-progress,
+.raw-thinking-card summary,
+.hazy-tool-card small {
+  opacity: var(--hazy-opacity-secondary);
+}
+.hazy-tool-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  background: var(--bg-secondary, rgba(128,128,128,0.06));
+}
+
+/* ======================================================================
+   HAZY WEB LOGIC: Structured ToolCall-style cards (citations + tools)
+   Added for PR-1. All presentation driven from HAZY_WEB_LOGIC_CONFIG in
+   the root integration file (hazy-web-logic-integration.js at Hazy root +
+   loadable copy in frontend/). Collapsible via <details>, auto-open on
+   error, header (icon, name, context, elapsed, status), body (preview,
+   summary, error). Matches existing transcript patterns exactly
+   (details/summary, web-source/hazy-trace styling language, opacity floors,
+   no new magic px in the JS side — sizes live in these rules + CSS vars).
+   ====================================================================== */
+.hazy-structured-cards {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+.hazy-structured-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.65);
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.hazy-structured-card summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+.hazy-structured-card summary::-webkit-details-marker { display: none; }
+.hazy-card-icon { flex: none; font-size: 13px; }
+.hazy-card-name { flex: none; font-weight: 700; }
+.hazy-card-context {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+  opacity: 0.85;
+}
+.hazy-card-elapsed {
+  flex: none;
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  color: var(--text-muted);
+  background: rgba(0,0,0,0.04);
+  padding: 1px 5px;
+  border-radius: 999px;
+}
+.hazy-card-status {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  font-size: 13px;
+}
+.hazy-structured-card[data-status="running"] .hazy-card-status {
+  animation: hazy-pulse 1.2s ease-in-out infinite;
+}
+@keyframes hazy-pulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+.hazy-card-body {
+  padding: 0 10px 9px 32px;
+  border-top: 1px solid rgba(128,128,128,0.12);
+  color: var(--text-soft);
+  font-size: 11px;
+}
+.hazy-card-context-full,
+.hazy-card-summary,
+.hazy-card-error,
+.hazy-card-preview {
+  margin: 6px 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(128,128,128,0.06);
+}
+.hazy-card-error {
+  background: rgba(180, 40, 40, 0.08);
+  color: #a33;
+  border: 1px solid rgba(180,40,40,0.2);
+}
+.hazy-card-preview .hazy-preview-caret { color: var(--accent, #d79717); }
+.hazy-card-timing {
+  margin-top: 6px;
+  font-size: 9px;
+  opacity: 0.6;
+  font-family: ui-monospace, monospace;
+}
+.hazy-structured-card[open] .hazy-card-header { border-bottom: 1px solid rgba(128,128,128,0.1); }
+
+/* Theme adjustments (follow existing pattern) */
+[data-theme="dark"] .hazy-structured-card { background: rgba(33,27,21,.92); }
+[data-theme="dark"] .hazy-card-body { border-top-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .hazy-card-error { background: rgba(120,30,30,.25); color: #f88; }
