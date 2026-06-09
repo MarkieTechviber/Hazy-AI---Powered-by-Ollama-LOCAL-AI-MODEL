@@ -47,7 +47,7 @@
   function buildAgentEndpoint() {
     return window.location.protocol === 'file:'
       ? `${STATE.ollamaUrl}/api/chat`
-      : '/hazy/chat';
+      : '/hazy/agent';
   }
 
   async function callBackendTool(toolName, args) {
@@ -253,14 +253,24 @@
     enable() {
       this.isEnabled = true;
       localStorage.setItem('hazyAgentEnabled', 'true');
+      if (document.getElementById('pageNav') && typeof window.setHazyPage === 'function') {
+        window.setHazyPage('agent');
+      }
     }
 
     disable() {
       this.isEnabled = false;
       localStorage.setItem('hazyAgentEnabled', 'false');
+      if (document.getElementById('pageNav') && typeof window.setHazyPage === 'function' && this.isActive()) {
+        window.setHazyPage('chat');
+      }
     }
 
     isActive() {
+      if (document.getElementById('pageNav')) {
+        if (typeof window.getHazyPage === 'function') return window.getHazyPage() === 'agent';
+        return document.body?.dataset?.hazyPage === 'agent';
+      }
       return this.isEnabled;
     }
 
@@ -548,6 +558,14 @@ IMPORTANT:
     }
 
     createUI() {
+      // Hazy is page-driven now: the sidebar owns Chat vs Agentic Mode.
+      // Keep this module only as a tool registry/legacy compatibility layer.
+      if (document.getElementById('pageNav')) {
+        const legacyIndicator = document.getElementById('agentIndicator');
+        if (legacyIndicator) legacyIndicator.remove();
+        return;
+      }
+
       const mountTarget = document.querySelector('.header-right')
         || document.querySelector('.input-mode-bar')
         || document.querySelector('.conversation-header')
@@ -662,13 +680,17 @@ IMPORTANT:
     }
 
     openModal() {
-      this.modal.classList.add('open');
+      if (!this.modal && typeof window.setHazyPage === 'function') {
+        window.setHazyPage('agent');
+        return;
+      }
+      this.modal?.classList.add('open');
       this.refreshToolsList();
       this.refreshHistory();
     }
 
     closeModal() {
-      this.modal.classList.remove('open');
+      this.modal?.classList.remove('open');
     }
 
     refreshToolsList() {
@@ -719,7 +741,8 @@ IMPORTANT:
     }
 
     loadState() {
-      const enabled = localStorage.getItem('hazyAgentEnabled') === 'true';
+      const pageDriven = Boolean(document.getElementById('pageNav'));
+      const enabled = pageDriven ? this.agent.isActive() : localStorage.getItem('hazyAgentEnabled') === 'true';
       const maxIterations = localStorage.getItem('hazyAgentMaxIterations') || '5';
       
       const toggle = this.modal?.querySelector('#agentEnableToggle');
@@ -728,8 +751,8 @@ IMPORTANT:
       if (toggle) toggle.checked = enabled;
       if (iterInput) iterInput.value = maxIterations;
       
-      if (enabled) this.agent.enable();
-      this.agent.maxIterations = parseInt(maxIterations);
+      if (!pageDriven && enabled) this.agent.enable();
+      this.agent.maxIterations = parseInt(maxIterations, 10) || 5;
       
       this.updateIndicator();
     }

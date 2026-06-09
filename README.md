@@ -1,5 +1,5 @@
 # Hazy - Local Companion
-### by Dream On
+### Hazy AI
 
 A feature-rich local companion that runs **100% on your machine** using [Ollama](https://ollama.com).
 Fully private — no cloud, no subscriptions, no data leaving your device.
@@ -382,5 +382,5 @@ GPU / CPU Inference
 
 MIT License — do whatever you want with it.
 
-Built with ❤️ by **Dream On** using [Ollama](https://ollama.com), Piper TTS,
+Built with ❤️ by **Hazy AI** using [Ollama](https://ollama.com), Piper TTS,
 Node.js/FastAPI, and vanilla HTML/CSS/JS.

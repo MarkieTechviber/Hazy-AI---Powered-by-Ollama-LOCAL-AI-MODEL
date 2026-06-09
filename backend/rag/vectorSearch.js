@@ -2,8 +2,22 @@
 
 const fs = require('fs');
 const path = require('path');
-const { buildTokenSet, tokenize } = require('./embeddingService');
-const { estimateTokens } = require('../ai/context/contextWindowManager');
+const {
+  buildTokenSet,
+  tokenize,
+  tokenFrequency,
+  buildLexicalVector,
+  sparseCosineSimilarity,
+  denseCosineSimilarity,
+  normalizeDenseVector
+} = require('./embeddingService');
+
+let estimateTokens;
+try {
+  ({ estimateTokens } = require('../ai/context/contextWindowManager'));
+} catch {
+  estimateTokens = (value = '') => Math.max(1, Math.ceil(String(value || '').split(/\s+/).filter(Boolean).length * 1.3));
+}
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, Number(value) || 0));
@@ -26,6 +40,20 @@ function keywordScore(queryTokens, entryTokens) {
   return clamp01(matches / queryTokens.length);
 }
 
+function phraseScore(query = '', text = '') {
+  const cleanQuery = String(query || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!cleanQuery || cleanQuery.length < 4) return 0;
+  const cleanText = String(text || '').toLowerCase().replace(/\s+/g, ' ');
+  if (cleanText.includes(cleanQuery)) return 1;
+  const queryTokens = tokenize(cleanQuery, { keepStopWords: true });
+  if (queryTokens.length < 2) return 0;
+  let phraseHits = 0;
+  for (let index = 0; index < queryTokens.length - 1; index += 1) {
+    if (cleanText.includes(`${queryTokens[index]} ${queryTokens[index + 1]}`)) phraseHits += 1;
+  }
+  return clamp01(phraseHits / Math.max(1, queryTokens.length - 1));
+}
+
 function recencyScore(createdAt) {
   const timestamp = Date.parse(createdAt || '');
   if (!Number.isFinite(timestamp)) return 0.5;
@@ -33,10 +61,57 @@ function recencyScore(createdAt) {
   return clamp01(Math.exp(-ageDays / 365));
 }
 
+function contentSimilarity(left, right) {
+  const leftTokens = new Set(Array.isArray(left.tokenSet) ? left.tokenSet : tokenize(left.text));
+  const rightTokens = new Set(Array.isArray(right.tokenSet) ? right.tokenSet : tokenize(right.text));
+  return jaccardSimilarity(leftTokens, rightTokens);
+}
+
+function mmrDiversify(entries, limit, lambda = 0.82) {
+  const pool = [...entries];
+  const selected = [];
+  while (pool.length && selected.length < limit) {
+    let bestIndex = 0;
+    let bestScore = -Infinity;
+    for (let index = 0; index < pool.length; index += 1) {
+      const candidate = pool[index];
+      const redundancy = selected.length
+        ? Math.max(...selected.map((item) => contentSimilarity(candidate, item)))
+        : 0;
+      const sameFilePenalty = selected.some((item) => item.fileId === candidate.fileId) ? 0.03 : 0;
+      const score = lambda * candidate.finalScore - (1 - lambda) * redundancy - sameFilePenalty;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+    selected.push(pool.splice(bestIndex, 1)[0]);
+  }
+  return selected;
+}
+
+function normalizeEntry(chunk, id) {
+  const text = String(chunk.text || '').trim();
+  const tokenSet = Array.from(buildTokenSet(text));
+  return {
+    ...chunk,
+    id,
+    userId: chunk.userId || 'default',
+    tokenCount: chunk.tokenCount || estimateTokens(text),
+    tokenSet,
+    tokenFrequency: tokenFrequency(text),
+    lexicalVector: buildLexicalVector(text),
+    embedding: Array.isArray(chunk.embedding) ? normalizeDenseVector(chunk.embedding) : undefined,
+    createdAt: chunk.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
 class VectorSearch {
-  constructor(baseDir) {
+  constructor(baseDir, options = {}) {
     this.baseDir = baseDir;
-    this.filePath = path.join(baseDir, 'rag-index.json');
+    this.filePath = options.filePath || path.join(baseDir, 'rag-index.json');
+    this.embeddingService = options.embeddingService || null;
   }
 
   ensureFile() {
@@ -46,93 +121,172 @@ class VectorSearch {
 
   readIndex() {
     this.ensureFile();
+    const raw = fs.readFileSync(this.filePath, 'utf8');
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
+      const parsed = JSON.parse(raw || '[]');
       return Array.isArray(parsed) ? parsed : [];
     } catch {
+      const backupPath = `${this.filePath}.corrupt.${Date.now()}.bak`;
+      fs.writeFileSync(backupPath, raw);
+      fs.writeFileSync(this.filePath, JSON.stringify([], null, 2));
       return [];
     }
   }
 
   writeIndex(entries) {
     this.ensureFile();
-    fs.writeFileSync(this.filePath, JSON.stringify(entries, null, 2));
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    const tmpPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(safeEntries, null, 2));
+    fs.renameSync(tmpPath, this.filePath);
   }
 
-  addDocuments(chunks = []) {
-    const byId = new Map(this.readIndex().map((entry) => [entry.id, entry]));
+  addDocuments(chunks = [], options = {}) {
+    const replaceFile = options.replaceFile !== false;
+    const current = this.readIndex();
+    const incomingFileIds = new Set(chunks.map((chunk) => chunk?.fileId).filter(Boolean).map(String));
+    const byId = new Map(
+      current
+        .filter((entry) => !replaceFile || !incomingFileIds.has(String(entry.fileId)))
+        .map((entry) => [entry.id, entry])
+    );
+
     for (const chunk of chunks) {
       if (!chunk?.text) continue;
-      const id = chunk.id || `chunk_${chunk.fileId || 'document'}_${chunk.chunkIndex ?? byId.size}`;
-      byId.set(id, {
-        ...chunk,
-        id,
-        userId: chunk.userId || 'default',
-        tokenCount: chunk.tokenCount || estimateTokens(chunk.text),
-        tokenSet: Array.from(buildTokenSet(chunk.text)),
-        createdAt: chunk.createdAt || new Date().toISOString()
-      });
+      const id = chunk.id || chunk.chunkId || `chunk_${chunk.fileId || 'document'}_${chunk.chunkIndex ?? byId.size}`;
+      byId.set(id, normalizeEntry(chunk, id));
     }
     this.writeIndex([...byId.values()]);
+  }
+
+  async addDocumentsAsync(chunks = [], options = {}) {
+    const embeddingService = options.embeddingService || this.embeddingService;
+    const withEmbeddings = [...chunks];
+    if (embeddingService && typeof embeddingService.embedMany === 'function') {
+      const missing = withEmbeddings.filter((chunk) => chunk?.text && !Array.isArray(chunk.embedding));
+      const embeddings = await embeddingService.embedMany(missing.map((chunk) => chunk.text));
+      missing.forEach((chunk, index) => { chunk.embedding = embeddings[index]; });
+    }
+    this.addDocuments(withEmbeddings, options);
+  }
+
+  deleteFile(fileId, userId = null) {
+    const before = this.readIndex();
+    const after = before.filter((entry) => {
+      if (String(entry.fileId) !== String(fileId)) return true;
+      if (userId && String(entry.userId || 'default') !== String(userId)) return true;
+      return false;
+    });
+    if (after.length !== before.length) this.writeIndex(after);
+    return before.length - after.length;
+  }
+
+  scoreEntry(entry, query, queryTokens, querySet, queryLexicalVector, queryEmbedding = null) {
+    const entryTokens = Array.isArray(entry.tokenSet) ? entry.tokenSet : tokenize(entry.text);
+    const entrySet = new Set(entryTokens);
+    const lexicalVector = entry.lexicalVector || buildLexicalVector(entry.text);
+    const lexicalCosine = sparseCosineSimilarity(queryLexicalVector, lexicalVector);
+    const lexicalJaccard = jaccardSimilarity(querySet, entrySet);
+    const lexicalScore = clamp01((0.65 * lexicalCosine) + (0.35 * lexicalJaccard));
+    const exactKeywordScore = keywordScore(queryTokens, tokenize(entry.text));
+    const exactPhraseScore = phraseScore(query, entry.text);
+    const semanticScore = queryEmbedding && Array.isArray(entry.embedding)
+      ? denseCosineSimilarity(queryEmbedding, entry.embedding)
+      : 0;
+
+    const relevanceScore = semanticScore > 0
+      ? clamp01(0.48 * semanticScore + 0.22 * lexicalScore + 0.20 * exactKeywordScore + 0.10 * exactPhraseScore)
+      : clamp01(0.45 * lexicalScore + 0.38 * exactKeywordScore + 0.17 * exactPhraseScore);
+
+    const freshness = recencyScore(entry.createdAt);
+    const documentTrustScore = clamp01(entry.documentTrustScore ?? 0.8);
+    const finalScore = clamp01(
+      0.90 * relevanceScore
+      + 0.06 * documentTrustScore
+      + 0.04 * freshness
+    );
+
+    return {
+      ...entry,
+      semanticScore,
+      lexicalScore,
+      vectorScore: semanticScore || lexicalScore,
+      keywordScore: exactKeywordScore,
+      phraseScore: exactPhraseScore,
+      relevanceScore,
+      recencyScore: freshness,
+      documentTrustScore,
+      finalScore
+    };
+  }
+
+  getCandidates(query = '', options = {}) {
+    const settings = typeof options === 'number' ? { limit: options } : options;
+    const queryTokens = tokenize(query);
+    if (!queryTokens.length && !settings.allowEmptyQuery) return [];
+
+    const selectedFileIds = new Set((settings.fileIds || []).map(String));
+    const querySet = new Set(queryTokens);
+    const queryLexicalVector = buildLexicalVector(query);
+    const queryEmbedding = Array.isArray(settings.queryEmbedding) ? normalizeDenseVector(settings.queryEmbedding) : null;
+    const minimumRelevance = Number(settings.minimumRelevance ?? 0.05);
+    const minimumScore = Number(settings.minimumScore ?? 0.08);
+
+    return this.readIndex()
+      .filter((entry) => !settings.userId || String(entry.userId || 'default') === String(settings.userId))
+      .filter((entry) => !selectedFileIds.size || selectedFileIds.has(String(entry.fileId)))
+      .map((entry) => this.scoreEntry(entry, query, queryTokens, querySet, queryLexicalVector, queryEmbedding))
+      .filter((entry) => settings.allowEmptyQuery || entry.relevanceScore >= minimumRelevance)
+      .filter((entry) => entry.finalScore >= minimumScore)
+      .sort((a, b) => b.finalScore - a.finalScore);
+  }
+
+  formatResult(entry) {
+    const filename = entry.filename || path.basename(entry.source || 'document');
+    return {
+      id: entry.id,
+      userId: entry.userId || 'default',
+      fileId: entry.fileId,
+      filename,
+      source: entry.source,
+      sourceType: entry.sourceType || 'txt',
+      pageNumber: entry.pageNumber,
+      headingPath: entry.headingPath || [],
+      sectionTitle: entry.sectionTitle,
+      chunkIndex: entry.chunkIndex,
+      contentHash: entry.contentHash,
+      text: entry.text,
+      tokenCount: entry.tokenCount || estimateTokens(entry.text),
+      semanticScore: entry.semanticScore,
+      lexicalScore: entry.lexicalScore,
+      vectorScore: entry.vectorScore,
+      keywordScore: entry.keywordScore,
+      phraseScore: entry.phraseScore,
+      relevanceScore: entry.relevanceScore,
+      recencyScore: entry.recencyScore,
+      finalScore: entry.finalScore,
+      score: entry.finalScore,
+      citation: `[source: ${entry.id}]`,
+      summary: `[${filename}] ${String(entry.text || '').slice(0, 220).replace(/\s+/g, ' ')}`
+    };
   }
 
   search(query = '', options = {}) {
     const settings = typeof options === 'number' ? { limit: options } : options;
     const limit = Math.max(1, Number(settings.limit || settings.topK || 8));
     const candidateLimit = Math.max(limit, Number(settings.candidateLimit || 30));
-    const minimumScore = Number(settings.minimumScore ?? 0.12);
-    const queryTokens = tokenize(query);
-    const querySet = new Set(queryTokens);
-    const selectedFileIds = new Set((settings.fileIds || []).map(String));
+    const candidates = this.getCandidates(query, settings).slice(0, candidateLimit);
+    const diversified = settings.diversify === false ? candidates.slice(0, limit) : mmrDiversify(candidates, limit, Number(settings.mmrLambda || 0.82));
+    return diversified.map((entry) => this.formatResult(entry));
+  }
 
-    return this.readIndex()
-      .filter((entry) => !settings.userId || String(entry.userId || 'default') === String(settings.userId))
-      .filter((entry) => !selectedFileIds.size || selectedFileIds.has(String(entry.fileId)))
-      .map((entry) => {
-        const entryTokens = Array.isArray(entry.tokenSet) ? entry.tokenSet : tokenize(entry.text);
-        const vectorScore = jaccardSimilarity(querySet, new Set(entryTokens));
-        const exactKeywordScore = keywordScore(queryTokens, tokenize(entry.text));
-        const freshness = recencyScore(entry.createdAt);
-        const documentTrustScore = clamp01(entry.documentTrustScore ?? 0.8);
-        const finalScore = (
-          0.60 * vectorScore
-          + 0.25 * exactKeywordScore
-          + 0.10 * freshness
-          + 0.05 * documentTrustScore
-        );
-        return {
-          ...entry,
-          vectorScore,
-          keywordScore: exactKeywordScore,
-          recencyScore: freshness,
-          documentTrustScore,
-          finalScore
-        };
-      })
-      .filter((entry) => entry.finalScore >= minimumScore)
-      .sort((a, b) => b.finalScore - a.finalScore)
-      .slice(0, candidateLimit)
-      .slice(0, limit)
-      .map((entry) => ({
-        id: entry.id,
-        userId: entry.userId || 'default',
-        fileId: entry.fileId,
-        filename: entry.filename || path.basename(entry.source || 'document'),
-        source: entry.source,
-        sourceType: entry.sourceType || 'txt',
-        pageNumber: entry.pageNumber,
-        headingPath: entry.headingPath || [],
-        sectionTitle: entry.sectionTitle,
-        chunkIndex: entry.chunkIndex,
-        text: entry.text,
-        tokenCount: entry.tokenCount || estimateTokens(entry.text),
-        vectorScore: entry.vectorScore,
-        keywordScore: entry.keywordScore,
-        recencyScore: entry.recencyScore,
-        finalScore: entry.finalScore,
-        score: entry.finalScore,
-        summary: `[${entry.filename || path.basename(entry.source || 'document')}] ${entry.text.slice(0, 220).replace(/\s+/g, ' ')}`
-      }));
+  async searchAsync(query = '', options = {}) {
+    const embeddingService = options.embeddingService || this.embeddingService;
+    if (embeddingService && typeof embeddingService.embed === 'function' && !Array.isArray(options.queryEmbedding)) {
+      const queryEmbedding = await embeddingService.embed(query);
+      return this.search(query, { ...options, queryEmbedding });
+    }
+    return this.search(query, options);
   }
 }
 
@@ -140,6 +294,8 @@ module.exports = {
   clamp01,
   jaccardSimilarity,
   keywordScore,
+  phraseScore,
   recencyScore,
+  mmrDiversify,
   VectorSearch
 };

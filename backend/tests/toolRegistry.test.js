@@ -34,6 +34,7 @@ test('ToolRegistry list and get expose consistent metadata', () => {
     name: fetched.name,
     description: fetched.description,
     risk: fetched.risk,
+    toolset: fetched.toolset,
     requiresConfirmation: fetched.requiresConfirmation,
     schema: fetched.schema
   });

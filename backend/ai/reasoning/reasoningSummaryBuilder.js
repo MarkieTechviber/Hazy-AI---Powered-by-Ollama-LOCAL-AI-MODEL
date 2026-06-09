@@ -19,7 +19,6 @@ function buildToolSummary(toolResults, toolDecisions) {
       return `${item.tool}: ${status}${query}`;
     }).join(' | ');
   }
-
   return safeJoin(
     toolDecisions.map((item) => `${item.tool}: ${item.reason}`),
     'No tool needed'
@@ -82,6 +81,20 @@ function buildPublicReasoningTrace({ analysis = {}, toolRun = {} } = {}) {
       label: 'Reasoning level',
       value: `${reasoning.reasoningLevel || 'direct'} | effort ${reasoning.effort || 'none'} | risk ${reasoning.riskLevel || safety.riskLevel || 'low'}`
     },
+    // FIX — surface riskConflict in the trace so it's visible in UI/logs
+    {
+      label: 'Risk conflict',
+      value: reasoning.riskConflict
+        ? `YES — ${reasoning.riskConflictNote || 'keyword and safety-module risk signals disagreed; level escalated'}`
+        : 'none'
+    },
+    // FIX — surface self-consistency status in the trace
+    {
+      label: 'Self-consistency',
+      value: reasoning.selfConsistencyRecommended
+        ? `recommended (complex task) — orchestrator should call runSelfConsistency()`
+        : 'not needed'
+    },
     {
       label: 'Model context',
       value: hasToolContext
@@ -93,6 +106,12 @@ function buildPublicReasoningTrace({ analysis = {}, toolRun = {} } = {}) {
       value: contextWindow.safeInputLimit
         ? `${contextWindow.afterTokens || 0}/${contextWindow.safeInputLimit} input tokens | ${contextWindow.trimLog?.length || contextWindow.trimmedMessageCount || 0} packing action(s) | ${contextWindow.packedSlots?.retrievedChunks || 0} retrieved chunk(s)`
         : 'context budget unavailable'
+    },
+    {
+      label: 'Budget tokens',
+      value: reasoning.budgetTokens != null
+        ? `${reasoning.budgetTokens} (maps to effort: ${reasoning.effort || 'none'})`
+        : 'unavailable'
     },
     {
       label: 'Code intelligence',

@@ -351,6 +351,144 @@ const CODE_TYPE_SIGNALS = {
   ],
 };
 
+
+// ============================================================================
+// CODING INTENT / FILE SIGNAL HELPERS
+// ============================================================================
+
+// FIX: verbs like "write", "make", or "add" are common in non-coding chats
+// ("write a poem", "make a plan"). The old detector returned true on verbs
+// alone. These explicit file/context signals let us require real coding context.
+const CODING_CONTEXT_NOUNS = [
+  'code', 'function', 'class', 'method', 'api', 'endpoint', 'route', 'controller',
+  'component', 'hook', 'module', 'service', 'repository', 'database', 'schema',
+  'query', 'migration', 'test', 'suite', 'script', 'cli', 'parser', 'scraper',
+  'crawler', 'bot', 'package', 'library', 'program', 'app', 'application',
+  'utility', 'page', 'form', 'modal', 'dashboard', 'server', 'backend', 'frontend',
+  'bug', 'error', 'stack trace', 'exception', 'repo', 'project files'
+];
+
+// IMPROVEMENT: detect code intent from filenames/extensions even when the user
+// says vague things like "fix this file" or "check app.tsx".
+const CODE_FILE_EXTENSION_PATTERN = /(?:^|[\s'"`(])(?:[\w./-]+)\.(?:py|js|jsx|mjs|cjs|ts|tsx|go|rs|java|kt|kts|cpp|cc|cxx|c|cs|rb|php|swift|dart|sh|bash|ps1|sql|html|css|vue|svelte|json|yaml|yml|toml)(?=$|[\s'"`),.:;!?])/i;
+
+// IMPROVEMENT: package/config files are strong project-code signals even though
+// they do not always look like source files.
+const CODE_CONFIG_FILE_PATTERN = /\b(package\.json|tsconfig\.json|vite\.config\.[cm]?[jt]s|next\.config\.[cm]?[jt]s|pyproject\.toml|requirements\.txt|go\.mod|cargo\.toml|pom\.xml|build\.gradle(?:\.kts)?|composer\.json|firebase\.json|dockerfile|compose\.ya?ml)\b/i;
+
+function hasAnyKeyword(text, values) {
+  return values.some((value) => keywordMatches(text, value));
+}
+
+function hasFrameworkSignal(text) {
+  return Object.keys(FRAMEWORK_SIGNALS).some((keyword) => keywordMatches(text, keyword));
+}
+
+function hasDomainCodeSignal(text) {
+  return Object.keys(DOMAIN_SIGNALS).some((keyword) => keywordMatches(text, keyword));
+}
+
+// FIX: classify coding intent with evidence instead of a single broad boolean.
+// This makes routing smarter and lets the UI/debug trace explain WHY a request
+// was treated as coding.
+function classifyCodingIntent(message = '') {
+  const text = String(message || '');
+  const lower = text.toLowerCase();
+  const evidence = [];
+
+  const verbPattern = /\b(write|create|build|make|generate|implement|code|develop|program|script|fix|debug|refactor|optimize|improve|add|modify|update|extend|convert|translate|rewrite|deploy|review|explain)\b/i;
+  const hasActionVerb = verbPattern.test(text);
+  const hasContextNoun = hasAnyKeyword(lower, CODING_CONTEXT_NOUNS);
+  const hasCodeBlock = /```|===FILE:/i.test(text);
+  const hasFileSignal = CODE_FILE_EXTENSION_PATTERN.test(text) || CODE_CONFIG_FILE_PATTERN.test(text);
+  const frameworkSignal = hasFrameworkSignal(lower);
+  const domainSignal = hasDomainCodeSignal(lower);
+  const errorSignal = /\b(error|exception|stack trace|traceback|doesn'?t work|not working|failing|broken)\b/i.test(text);
+
+  if (hasCodeBlock) evidence.push('code_block_or_file_delimiter');
+  if (hasFileSignal) evidence.push('file_or_config_reference');
+  if (frameworkSignal) evidence.push('framework_keyword');
+  if (domainSignal) evidence.push('coding_domain_keyword');
+  if (hasActionVerb && hasContextNoun) evidence.push('coding_action_plus_object');
+  if (errorSignal && (hasContextNoun || hasFileSignal || hasCodeBlock || frameworkSignal)) evidence.push('debug_context');
+
+  const isCoding = evidence.length > 0;
+  const confidence = Math.min(99, evidence.length ? 45 + evidence.length * 14 : 0);
+  return { isCodingRequest: isCoding, confidence, evidence };
+}
+
+// IMPROVEMENT: if a user mentions a filename directly, infer language from it.
+// This fills a gap between project scanning and message-only inference.
+function detectLanguageFromFileNames(message = '') {
+  const matches = [...String(message).matchAll(/([\w./-]+)\.([a-z0-9]+)\b/gi)];
+  const signals = [];
+  for (const match of matches) {
+    const normalized = normalizeLanguageAlias(match[2].toLowerCase());
+    if (normalized) {
+      signals.push({
+        lang: normalized,
+        confidence: 88,
+        source: 'filename_extension',
+        keyword: match[0],
+        frameworks: [],
+      });
+    }
+  }
+  return signals;
+}
+
+function mergeUnique(left = [], right = []) {
+  return [...new Set([...(left || []), ...(right || [])].filter(Boolean))];
+}
+
+function shouldProjectContextOverride(langResult, projectContext) {
+  if (!projectContext?.primaryLanguage) return false;
+  const hasExplicitUserLanguage = (langResult.signals || []).some((signal) => signal.source === 'explicit_mention');
+  if (hasExplicitUserLanguage) return false; // user wording wins over project scan
+  if (!langResult.lang || (langResult.confidence || 0) < 55) return true;
+  return (projectContext.confidence || 0) >= (langResult.confidence || 0) + 25;
+}
+
+function mergeProjectContextIntoLanguage(langResult, projectContext) {
+  if (!projectContext?.primaryLanguage) return langResult;
+
+  // FIX: project context used to be applied only when message confidence was
+  // low. That missed cases where weak keyword matches beat the actual project
+  // stack. We now merge context, but still let explicit user language win.
+  if (shouldProjectContextOverride(langResult, projectContext)) {
+    const language = projectContext.primaryLanguage;
+    return {
+      ...langResult,
+      lang: language,
+      confidence: Math.max(langResult.confidence || 0, Math.min(projectContext.confidence || 0, 94)),
+      frameworks: mergeUnique(langResult.frameworks, projectContext.frameworks),
+      reason: `${language} — inferred from project context`,
+      signals: [
+        ...(langResult.signals || []),
+        { lang: language, weight: projectContext.confidence || 60, source: 'project_context', keyword: projectContext.detectedStack || 'project files', frameworks: projectContext.frameworks || [] }
+      ],
+      styleGuide: LANGUAGE_STYLES[language] || null,
+    };
+  }
+
+  return {
+    ...langResult,
+    frameworks: mergeUnique(langResult.frameworks, projectContext.frameworks),
+    projectContextConflict: projectContext.primaryLanguage !== langResult.lang,
+  };
+}
+
+function buildProjectContextSummary(projectContext) {
+  if (!projectContext || projectContext.detectedStack === 'unknown') return null;
+  const parts = [];
+  if (projectContext.detectedStack) parts.push(`Detected stack: ${projectContext.detectedStack}`);
+  if (projectContext.projectType) parts.push(`Project type: ${projectContext.projectType}`);
+  if (projectContext.primaryLanguage) parts.push(`Primary language: ${projectContext.primaryLanguage}`);
+  if ((projectContext.frameworks || []).length) parts.push(`Frameworks: ${projectContext.frameworks.join(', ')}`);
+  if ((projectContext.evidence || []).length) parts.push(`Evidence files: ${projectContext.evidence.slice(0, 6).join(', ')}`);
+  return parts.join('\n');
+}
+
 // ============================================================================
 // LANGUAGE STYLE GUIDES
 // These are injected into the system prompt for each detected language.
@@ -816,7 +954,20 @@ function inferLanguage(message, conversationHistory = []) {
     }
   }
 
-  // 4. Conversation history code block signals
+  // 4. Filename / extension signals from the latest request
+  // IMPROVEMENT: "fix server.ts" should infer TypeScript even without saying
+  // the word TypeScript explicitly.
+  for (const signal of detectLanguageFromFileNames(message)) {
+    signals.push({
+      lang: signal.lang,
+      weight: signal.confidence,
+      source: signal.source,
+      keyword: signal.keyword,
+      frameworks: signal.frameworks || [],
+    });
+  }
+
+  // 5. Conversation history code block signals
   const historySignal = detectLanguageFromCodeBlocks(conversationHistory);
   if (historySignal) signals.push(historySignal);
 
@@ -908,18 +1059,26 @@ function buildInferenceReason(lang, topSignal, frameworks) {
  * Detect the TYPE of coding task from the message.
  */
 function detectCodeType(message) {
-  const lowerMsg = message.toLowerCase();
+  const lowerMsg = String(message || '').toLowerCase();
   const typeCounts = {};
 
   for (const [type, keywords] of Object.entries(CODE_TYPE_SIGNALS)) {
     for (const kw of keywords) {
-      if (lowerMsg.includes(kw)) {
+      // FIX: use keyword boundary matching instead of raw includes(). The old
+      // logic could match accidental substrings and over-count noisy signals.
+      if (keywordMatches(lowerMsg, kw)) {
         typeCounts[type] = (typeCounts[type] || 0) + 1;
       }
     }
   }
 
-  const sorted = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+  // IMPROVEMENT: resolve common overlaps with priority rules. For example,
+  // "debug my React component" should stay debug_fix, not frontend_ui.
+  const priority = ['debug_fix', 'refactor', 'test_suite', 'api_backend', 'frontend_ui', 'database'];
+  const sorted = Object.entries(typeCounts).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return priority.indexOf(a[0]) - priority.indexOf(b[0]);
+  });
   return sorted.length > 0 ? sorted[0][0] : 'general';
 }
 
@@ -927,21 +1086,27 @@ function detectCodeType(message) {
  * Estimate the complexity/scale of the coding task.
  */
 function estimateComplexity(message) {
-  const lower = message.toLowerCase();
+  const lower = String(message || '').toLowerCase();
 
   const complexSignals = [
     'production', 'production-grade', 'enterprise', 'full', 'complete', 'entire',
     'multi-file', 'multi-module', 'scalable', 'architecture', 'system', 'platform',
-    'with tests', 'with documentation', 'end to end',
+    'with tests', 'with documentation', 'end to end', 'source code', 'whole project',
+    'codebase', 'integration', 'orchestrator', 'database migration'
   ];
   const simpleSignals = [
     'simple', 'basic', 'quick', 'small', 'short', 'just a', 'only', 'snippet',
-    'example', 'demo', 'hello world',
+    'example', 'demo', 'hello world'
   ];
 
   const complexScore = complexSignals.filter(s => lower.includes(s)).length;
   const simpleScore = simpleSignals.filter(s => lower.includes(s)).length;
 
+  // IMPROVEMENT: attached/source-code review requests are rarely "simple" even
+  // if the wording is casual. Escalate them so the prompt asks for verification.
+  if (/(source code|whole project|codebase|all files|zip|repository|architecture)/i.test(lower)) {
+    return 'complex';
+  }
   if (complexScore > simpleScore) return 'complex';
   if (simpleScore > complexScore + 1) return 'simple';
   return 'medium';
@@ -952,33 +1117,9 @@ function estimateComplexity(message) {
  * (Even in chat mode, Hazy should detect coding requests.)
  */
 function isCodingRequest(message) {
-  const lower = message.toLowerCase();
-
-  const codingVerbs = [
-    'write', 'create', 'build', 'make', 'generate', 'implement', 'code',
-    'develop', 'program', 'script', 'fix', 'debug', 'refactor', 'optimize',
-    'improve', 'add', 'modify', 'update', 'extend',
-    'convert', 'translate', 'rewrite', 'deploy',
-  ];
-  const contextVerbs = ['review', 'explain'];
-  const codingNouns = [
-    'function', 'class', 'method', 'api', 'algorithm', 'script', 'program',
-    'app', 'application', 'module', 'library', 'package', 'component',
-    'service', 'endpoint', 'database', 'query', 'schema', 'test', 'code',
-    'snippet', 'cli', 'bot', 'parser', 'scraper', 'crawler',
-  ];
-
-  const hasVerb = codingVerbs.some(v => {
-    // More accurate matching — verb must be followed by a space or end of line
-    const regex = new RegExp(`\\b${v}\\b`, 'i');
-    return regex.test(message);
-  });
-  const hasNoun = codingNouns.some(n => lower.includes(n));
-  const hasContextVerb = contextVerbs.some(v => new RegExp(`\\b${v}\\b`, 'i').test(message));
-  const hasCodeBlock = message.includes('```');
-  const hasFileExtension = /\.(py|js|ts|go|rs|java|cpp|cs|rb|php|swift|kt|dart|sh|sql)\b/.test(lower);
-
-  return hasVerb || hasNoun || hasCodeBlock || hasFileExtension || (hasContextVerb && (hasNoun || hasCodeBlock || hasFileExtension));
+  // FIX: keep the public API, but route through the stricter classifier so
+  // non-coding requests with generic verbs no longer trigger code mode.
+  return classifyCodingIntent(message).isCodingRequest;
 }
 
 // ============================================================================
@@ -1096,7 +1237,7 @@ Structure: Target analysis → Request strategy → Parsing → Data extraction 
  * Generate a smart, context-aware system prompt for a coding request.
  * This replaces the static CODE_SYSTEM_PROMPT in the frontend.
  */
-function generateSmartCodePrompt({ langResult, codeType, complexity, userHint }) {
+function generateSmartCodePrompt({ langResult, codeType, complexity, userHint, projectContext }) {
   const style = langResult.styleGuide;
   const langLabel = style ? style.label : (langResult.lang || null);
   const hasConfidentLang = langResult.lang && langResult.confidence >= 45;
@@ -1150,6 +1291,18 @@ function generateSmartCodePrompt({ langResult, codeType, complexity, userHint })
     prompt += `Documentation: ${style.docStyle}\n\n`;
   }
 
+  // ── Project context guidance ───────────────────────────────────────────────
+  const projectSummary = buildProjectContextSummary(projectContext);
+  if (projectSummary) {
+    // IMPROVEMENT: make project scan evidence visible to the model so local
+    // models do not ignore stack-specific constraints from uploaded files.
+    prompt += `## PROJECT CONTEXT DETECTED\n${projectSummary}\n`;
+    if (projectContext.conflictingSignals) {
+      prompt += `Conflicting project language signals were detected. Prefer the user's explicit request; otherwise preserve the existing project stack.\n`;
+    }
+    prompt += `\n`;
+  }
+
   // ── Task type guidance ───────────────────────────────────────────────────
   const taskGuidanceText = TASK_GUIDANCE[codeType] || TASK_GUIDANCE.general;
   prompt += `## TASK TYPE: ${codeType.replace(/_/g, ' ').toUpperCase()}\n`;
@@ -1196,63 +1349,74 @@ function generateSmartCodePrompt({ langResult, codeType, complexity, userHint })
  * @returns {Object} Analysis result
  */
 function analyzeCodeRequest(message, conversationHistory = [], userHint = null, projectContext = null) {
-  const isCode = isCodingRequest(message);
+  const codingIntent = classifyCodingIntent(message);
+  const isCode = codingIntent.isCodingRequest;
 
   if (!isCode) {
-    return { isCodingRequest: false };
-  }
-
-  // If user-provided a hint, inject it as the highest-weight explicit signal
-  let langResult = userHint
-    ? {
-        lang: userHint,
-        confidence: 100,
-        frameworks: [],
-        reason: `${userHint} — user-specified`,
-        styleGuide: LANGUAGE_STYLES[userHint] || null,
-      }
-    : inferLanguage(message, conversationHistory);
-
-  if (!userHint && (!langResult.lang || langResult.confidence < 55) && projectContext?.primaryLanguage) {
-    langResult = {
-      lang: projectContext.primaryLanguage,
-      confidence: Math.max(langResult.confidence || 0, Math.min(projectContext.confidence || 0, 92)),
-      frameworks: projectContext.frameworks || [],
-      reason: `${projectContext.primaryLanguage} — inferred from project context`,
-      styleGuide: LANGUAGE_STYLES[projectContext.primaryLanguage] || null,
+    return {
+      isCodingRequest: false,
+      codingIntent
     };
   }
 
-  const codeType   = detectCodeType(message);
+  const normalizedHint = userHint ? normalizeLanguageAlias(String(userHint).toLowerCase()) || userHint : null;
+
+  // If user-provided a hint, inject it as the highest-weight explicit signal.
+  let langResult = normalizedHint
+    ? {
+        lang: normalizedHint,
+        confidence: 100,
+        frameworks: [],
+        reason: `${normalizedHint} — user-specified`,
+        styleGuide: LANGUAGE_STYLES[normalizedHint] || null,
+        signals: [{ lang: normalizedHint, weight: 100, source: 'user_override', keyword: normalizedHint, frameworks: [] }]
+      }
+    : inferLanguage(message, conversationHistory);
+
+  // FIX: merge project scan evidence even when language inference already has a
+  // medium score. This prevents a stray keyword from beating the actual stack.
+  if (!normalizedHint) {
+    langResult = mergeProjectContextIntoLanguage(langResult, projectContext);
+  }
+
+  const codeType = detectCodeType(message);
   const complexity = estimateComplexity(message);
 
   const systemPrompt = generateSmartCodePrompt({
     langResult,
     codeType,
     complexity,
-    userHint,
+    userHint: normalizedHint,
+    projectContext,
   });
 
   return {
     isCodingRequest: true,
-    language:      langResult.lang,
+    codingIntent,
+    language: langResult.lang,
     languageLabel: langResult.styleGuide?.label || langResult.lang || 'auto-selected',
-    confidence:    langResult.confidence,
-    reason:        langResult.reason,
-    frameworks:    langResult.frameworks,
-    conflictingSignals: Boolean(langResult.conflictingSignals),
+    confidence: Math.max(langResult.confidence || 0, codingIntent.confidence || 0),
+    reason: langResult.reason,
+    frameworks: langResult.frameworks,
+    conflictingSignals: Boolean(langResult.conflictingSignals || langResult.projectContextConflict || projectContext?.conflictingSignals),
     languageSignals: langResult.languageSignals || [],
+    projectContextSummary: buildProjectContextSummary(projectContext),
     codeType,
     complexity,
+    needsProjectContext: complexity === 'complex' || ['debug_fix', 'refactor', 'api_backend', 'database'].includes(codeType),
+    needsVerification: true,
     systemPrompt,
   };
 }
+
+module.exports
 
 module.exports = {
   analyzeCodeRequest,
   inferLanguage,
   detectCodeType,
   isCodingRequest,
+  classifyCodingIntent,
   estimateComplexity,
   LANGUAGE_STYLES,
 };

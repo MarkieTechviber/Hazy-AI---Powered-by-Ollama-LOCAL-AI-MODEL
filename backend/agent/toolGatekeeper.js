@@ -2,6 +2,14 @@
 
 const { validateJsonSchema } = require('../security/jsonSchemaValidator');
 
+function toolsetEnabled(tool, ctx = {}) {
+  const enabled = Array.isArray(ctx.enabledToolsets) && ctx.enabledToolsets.length ? ctx.enabledToolsets : null;
+  const disabled = Array.isArray(ctx.disabledToolsets) ? ctx.disabledToolsets : [];
+  if (disabled.includes(tool.toolset)) return false;
+  if (enabled && !enabled.includes(tool.toolset) && !enabled.includes('full_local') && tool.toolset !== 'safe_default') return false;
+  return true;
+}
+
 function normalizeToolResult(value, latencyMs) {
   if (value && typeof value === 'object' && Object.hasOwn(value, 'ok')) {
     return {
@@ -53,6 +61,9 @@ class ToolGatekeeper {
   async validateAndMaybeRun({ ctx, toolCall, confirmed = false }) {
     const tool = this.registry.get(toolCall.name);
     if (!tool) return this.blocked(ctx, toolCall, 'UNKNOWN_TOOL', 'The requested tool does not exist.');
+    if (!toolsetEnabled(tool, ctx)) {
+      return this.blocked(ctx, toolCall, 'TOOLSET_DISABLED', 'This toolset is not enabled for the current session.');
+    }
     if (!tool.allowedRoles.includes(ctx.role)) {
       return this.blocked(ctx, toolCall, 'ROLE_NOT_ALLOWED', 'Your account role cannot use this tool.');
     }
@@ -61,7 +72,7 @@ class ToolGatekeeper {
     if (!limit.allowed) {
       return this.blocked(ctx, toolCall, 'RATE_LIMITED', 'Too many tool calls. Please wait and try again.');
     }
-    if (['low_write', 'medium_write', 'high_write', 'external_side_effect'].includes(tool.risk)) {
+    if (['low_write', 'medium_write', 'high_write', 'external_side_effect', 'device_control'].includes(tool.risk)) {
       const writeLimit = this.rateLimiter.consume(
         `write:${ctx.userId}`,
         { limit: 30, windowMs: 60 * 60_000 }
@@ -70,7 +81,7 @@ class ToolGatekeeper {
         return this.blocked(ctx, toolCall, 'WRITE_RATE_LIMITED', 'Too many write actions. Please try again later.');
       }
     }
-    if (['high_write', 'external_side_effect'].includes(tool.risk)) {
+    if (['high_write', 'external_side_effect', 'device_control'].includes(tool.risk)) {
       const highRiskLimit = this.rateLimiter.consume(
         `high-risk:${ctx.userId}`,
         { limit: 10, windowMs: 24 * 60 * 60_000 }
@@ -178,4 +189,4 @@ class ToolGatekeeper {
   }
 }
 
-module.exports = { ToolGatekeeper, normalizeToolResult };
+module.exports = { ToolGatekeeper, normalizeToolResult, toolsetEnabled };

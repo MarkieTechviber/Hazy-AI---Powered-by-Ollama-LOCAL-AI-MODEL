@@ -2,7 +2,7 @@
 
 const { formatExemplars } = require('./exemplarLibrary');
 
-function buildTaskReasoningGuidance(task = {}) {
+function buildTaskReasoningGuidance(task = {}, budgetTokens = 0) {
   if (!task.shouldUseReasoning) {
     return [
       'Task-aware reasoning:',
@@ -33,14 +33,29 @@ function buildTaskReasoningGuidance(task = {}) {
       '- Resolve each part before writing the conclusion.'
     ]
   };
+
   const exemplars = formatExemplars(task.taskType, task.complexity === 'complex' ? 2 : 1);
+
+  // FIX — budgetTokens is now passed through and used to adjust the
+  // verbosity instruction injected into the prompt. Providers that
+  // support a native thinking budget will have already consumed this
+  // value in providerAgentAdapter; for standard Ollama models this
+  // is the primary way the budget influences model behaviour.
+  const verbosityHint = budgetTokens >= 4096
+    ? '- This is a high-effort task. Think thoroughly step by step before writing your final answer.'
+    : budgetTokens >= 1536
+    ? '- This is a medium-effort task. Show your reasoning concisely, then give your final answer.'
+    : budgetTokens >= 512
+    ? '- Be concise. One or two reasoning sentences are enough before your answer.'
+    : '- Answer directly and concisely.';
 
   return [
     'Task-aware reasoning:',
     `- Category: ${task.taskType}`,
     `- Complexity: ${task.complexity}`,
     `- Calculator check: ${task.shouldUseCalculator ? 'required for visible arithmetic' : 'not required'}`,
-    `- Self-consistency: ${task.selfConsistencyRecommended ? 'recommended when multiple samples are available' : 'not needed'}`,
+    `- Self-consistency: ${task.selfConsistencyRecommended ? 'recommended — the orchestrator may sample multiple times and vote' : 'not needed'}`,
+    verbosityHint,
     ...(domainRules[task.taskType] || domainRules.general),
     '- Do the detailed reasoning privately. Show only a concise explanation or verifiable calculation, never hidden scratchpad or raw chain-of-thought.',
     exemplars ? `\nWorked-format examples:\n${exemplars}` : ''

@@ -33,6 +33,7 @@ const { UsageStatsStore, createResponseTelemetry } = require('./stats/usageStats
 const { defaultAgentRuntime, createToolContext } = require('./agent/agentRuntime');
 const { buildConfirmationMessage } = require('./agent/confirmationStore');
 const { defaultWebSearchService } = require('./tools/webSearchTool');
+const { defaultBrowserSystem } = require('./browser/browserTool');
 const { SecretVault } = require('./security/secretVault');
 const { runAgentTurn } = require('./agent/runAgentTurn');
 const { createProviderAgentCaller } = require('./ai/providerAgentAdapter');
@@ -151,7 +152,8 @@ function setCORS(res) {
       'X-Hazy-Tool-Used',
       'X-Hazy-Web-Search-Run',
       'X-Hazy-Web-Confidence',
-      'X-Hazy-Citation-Count'
+      'X-Hazy-Citation-Count',
+      'X-Hazy-Web-Search-Mode'
     ].join(', '));
 }
 
@@ -423,13 +425,26 @@ function streamOpenAIToOllamaFormat(proxyRes, clientRes) {
 // ─────────────────────────────────────────────────────
 // ROUTE: /hazy/chat  — universal chat endpoint
 // ─────────────────────────────────────────────────────
-async function handleHazyChat(req, res) {
+async function handleHazyChat(req, res, routeOptions = {}) {
   const originalBody = await readBody(req);
+  if (routeOptions.forceAgent) {
+    originalBody.hazy = {
+      ...(originalBody.hazy || {}),
+      page: 'agent',
+      surface: 'agentic',
+      agenticMode: true,
+      agentEnabled: true
+    };
+  }
   const cfg  = loadConfig();
   const chatContext = createToolContext(originalBody);
   const requestedModel = originalBody.model || cfg.defaults?.textModel || 'ollama/llama3.2';
   const requestedProvider = requestedModel.split('/')[0];
-  const agentRequested = originalBody.hazy?.agentEnabled === true;
+  const requestedSurface = String(originalBody.hazy?.surface || originalBody.hazy?.page || '').toLowerCase();
+  const agentRequested = originalBody.hazy?.agentEnabled === true
+    || originalBody.hazy?.agenticMode === true
+    || requestedSurface === 'agent'
+    || requestedSurface === 'agentic';
   const agentLoopEnabled = agentRequested
     && ['ollama', 'anthropic', 'openai', 'groq', 'nvidia'].includes(requestedProvider);
   const chatLimit = defaultAgentRuntime.rateLimiter.consume(
@@ -509,6 +524,7 @@ async function handleHazyChat(req, res) {
   }
   const webSearchResult = toolRun.toolResults?.find((item) => item.tool === 'web_search');
   if (webSearchResult?.runId) res.setHeader('X-Hazy-Web-Search-Run', webSearchResult.runId);
+  if (webSearchResult?.decision?.mode) res.setHeader('X-Hazy-Web-Search-Mode', webSearchResult.decision.mode);
   if (webSearchResult?.confidence || webSearchResult?.metrics?.confidence) {
     res.setHeader('X-Hazy-Web-Confidence', webSearchResult.confidence || webSearchResult.metrics.confidence);
   }
@@ -983,6 +999,17 @@ async function handleWebSearch(req, res) {
   res.end(JSON.stringify(result));
 }
 
+
+async function handleWebSearchHistory(req, res, parsed) {
+  setCORS(res);
+  const params = new URLSearchParams(parsed.query || '');
+  const userId = params.get('userId') || 'local-user';
+  const limit = Math.max(1, Math.min(50, Number(params.get('limit') || 20)));
+  const runs = defaultWebSearchService.store.listRuns(userId, limit);
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
+  res.end(JSON.stringify({ runs }));
+}
+
 async function handleWebSources(req, res, parsed) {
   setCORS(res);
   const params = new URLSearchParams(parsed.query || '');
@@ -996,6 +1023,95 @@ async function handleWebSources(req, res, parsed) {
   }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
   res.end(JSON.stringify(sources));
+}
+
+async function handleBrowserAction(req, res) {
+  setCORS(res);
+  if (req.method !== 'POST') {
+    res.writeHead(405, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'POST required' }));
+    return;
+  }
+  const body = await readBody(req);
+  const ctx = createToolContext(body, {
+    services: { config: loadConfig() },
+    enabledToolsets: ['browser', 'safe_default']
+  });
+  const action = String(body.action || body.toolName || '').replace(/^browser\./, '');
+  const toolName = action ? `browser.${action}` : '';
+  const actionArgs = body.arguments || Object.fromEntries(
+    Object.entries(body).filter(([key]) => !['action', 'toolName', 'callId', 'userId', 'conversationId', 'chatId', 'tenantId', 'hazy', 'enabledToolsets', 'disabledToolsets'].includes(key))
+  );
+  const result = await defaultAgentRuntime.gatekeeper.validateAndMaybeRun({
+    ctx,
+    toolCall: {
+      id: body.callId || `browser:${ctx.requestId}`,
+      name: toolName,
+      arguments: actionArgs
+    }
+  });
+  const statusCode = result.status === 'blocked' ? 400 : 200;
+  res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
+  res.end(JSON.stringify(result));
+}
+
+async function handleBrowserControl(req, res, parsed) {
+  setCORS(res);
+  const params = new URLSearchParams(parsed.query || '');
+  const body = req.method === 'POST' ? await readBody(req) : {};
+  const userId = body.userId || params.get('userId') || 'local-user';
+  const sessionId = body.sessionId || params.get('sessionId');
+  const command = String(body.command || params.get('command') || '').toLowerCase();
+  let session = null;
+  if (command === 'pause') session = await defaultBrowserSystem.sessionManager.pause(sessionId, { userId });
+  if (command === 'resume') session = await defaultBrowserSystem.sessionManager.resume(sessionId, { userId });
+  if (command === 'cancel') session = await defaultBrowserSystem.sessionManager.cancel(sessionId, { userId });
+  if (command === 'close') session = await defaultBrowserSystem.sessionManager.close(sessionId, { userId });
+  if (!session) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Browser session or command was not found.' }));
+    return;
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
+  res.end(JSON.stringify({ ok: true, session: defaultBrowserSystem.sessionManager.publicSession(session) }));
+}
+
+async function handleBrowserStatus(req, res, parsed) {
+  setCORS(res);
+  const params = new URLSearchParams(parsed.query || '');
+  const userId = params.get('userId') || 'local-user';
+  const sessionId = params.get('sessionId');
+  const liveSessions = defaultBrowserSystem.sessionManager.listSessions(userId);
+  const persistedSessions = defaultBrowserSystem.store.listSessions(userId, 30);
+  const events = defaultBrowserSystem.store.listEvents({ userId, sessionId, limit: Number(params.get('limit') || 100) });
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
+  res.end(JSON.stringify({ liveSessions, persistedSessions, events }));
+}
+
+async function handleBrowserEvents(req, res, parsed) {
+  const params = new URLSearchParams(parsed.query || '');
+  const userId = params.get('userId') || 'local-user';
+  defaultBrowserSystem.streamer.attach(req, res, { store: defaultBrowserSystem.store, userId });
+}
+
+async function handleBrowserScreenshot(req, res, parsed) {
+  setCORS(res);
+  const params = new URLSearchParams(parsed.query || '');
+  const userId = params.get('userId') || 'local-user';
+  const sessionId = params.get('sessionId');
+  const session = defaultBrowserSystem.sessionManager.getSession(sessionId, { userId });
+  const screenshotPath = session?.screenshotPath;
+  if (!screenshotPath || !fs.existsSync(screenshotPath)) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Screenshot not found.' }));
+    return;
+  }
+  res.writeHead(200, {
+    'Content-Type': 'image/png',
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': CORS_ORIGIN
+  });
+  fs.createReadStream(screenshotPath).pipe(res);
 }
 
 // ─────────────────────────────────────────────────────
@@ -1151,12 +1267,19 @@ const server = http.createServer(async (req, res) => {
 
   // ── Hazy universal API routes ──
   if (pathname === '/hazy/chat')         { await handleHazyChat(req, res); return; }
+  if (pathname === '/hazy/agent')        { await handleHazyChat(req, res, { forceAgent: true }); return; }
   if (pathname === '/hazy/analyze')      { await handleAnalyze(req, res); return; }
   if (pathname === '/hazy/tools')        { await handleTools(req, res); return; }
   if (pathname === '/hazy/tool-call')    { await handleToolCall(req, res); return; }
   if (pathname === '/hazy/confirm')      { await handleAgentConfirmation(req, res); return; }
   if (pathname === '/hazy/search')       { await handleWebSearch(req, res); return; }
   if (pathname === '/hazy/sources')      { await handleWebSources(req, res, parsed); return; }
+  if (pathname === '/hazy/search-history'){ await handleWebSearchHistory(req, res, parsed); return; }
+  if (pathname === '/hazy/browser/action'){ await handleBrowserAction(req, res); return; }
+  if (pathname === '/hazy/browser/control'){ await handleBrowserControl(req, res, parsed); return; }
+  if (pathname === '/hazy/browser/status'){ await handleBrowserStatus(req, res, parsed); return; }
+  if (pathname === '/hazy/browser/events'){ await handleBrowserEvents(req, res, parsed); return; }
+  if (pathname === '/hazy/browser/screenshot'){ await handleBrowserScreenshot(req, res, parsed); return; }
   if (pathname === '/hazy/providers')    { await handleProviders(req, res); return; }
   if (pathname === '/hazy/memories')     { await handleMemories(req, res, parsed); return; }
   if (pathname === '/hazy/conversations'){ await handleConversations(req, res, parsed); return; }

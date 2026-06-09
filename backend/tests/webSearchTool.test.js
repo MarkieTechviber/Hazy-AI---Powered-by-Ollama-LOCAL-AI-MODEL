@@ -21,10 +21,10 @@ const { WebSearchService } = require('../webSearch/webSearchService');
 
 test('search router distinguishes stable, fresh, technical, local, and deep requests', () => {
   assert.equal(detectSearchDecision('Explain arrays in JavaScript.').mode, 'none');
-  assert.equal(detectSearchDecision('What is the latest stable version of Next.js?').mode, 'technical_docs');
-  assert.equal(detectSearchDecision('What happened in AI news today?').mode, 'news');
+  assert.equal(detectSearchDecision('What is the latest stable version of Next.js?').mode, 'official_only');
+  assert.equal(detectSearchDecision('What happened in AI news today?').mode, 'fresh_required');
   assert.equal(detectSearchDecision('Search my uploaded files for the invoice.').mode, 'none');
-  assert.equal(detectSearchDecision('Research this topic thoroughly on the web.').mode, 'deep_web');
+  assert.equal(detectSearchDecision('Research this topic thoroughly on the web.').mode, 'research_mode');
   assert.equal(detectSearchDecision('Create code that calls a web search API later.').mode, 'none');
 });
 

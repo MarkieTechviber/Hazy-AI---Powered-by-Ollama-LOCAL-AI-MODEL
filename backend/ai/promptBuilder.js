@@ -1,3 +1,5 @@
+'use strict';
+
 const { buildTaskReasoningGuidance } = require('./reasoning/reasoningPrompt');
 
 function buildSystemPrompt(context) {
@@ -13,7 +15,7 @@ function buildSystemPrompt(context) {
     ragContext = [],
     toolResults = [],
     questionLimit = 1,
-    safety = { riskLevel: "tier_0", flags: [] },
+    safety = { riskLevel: 'tier_0', flags: [] },
     reasoning = null,
     codeAnalysis = null,
     projectContext = null,
@@ -22,28 +24,30 @@ function buildSystemPrompt(context) {
   } = context;
 
   const memoryBlock = memory.length
-    ? memory.map((item) => `- ${item.summary || item.value || item}`).join("\n")
-    : "- No durable memory needed for this turn.";
+    ? memory.map((item) => `- ${item.summary || item.value || item}`).join('\n')
+    : '- No durable memory needed for this turn.';
 
   const ragBlock = ragContext.length
-    ? ragContext.map((item) => `- ${item.summary || item.text || item}`).join("\n")
-    : "- No external retrieval context.";
+    ? ragContext.map((item) => `- ${item.summary || item.text || item}`).join('\n')
+    : '- No external retrieval context.';
 
   const toolBlock = toolResults.length
     ? toolResults.map((item) => {
         const count = Array.isArray(item.results) ? item.results.length : 0;
         return `- ${item.tool}: ${item.success ? `${count} result(s)` : 'no useful result'}${item.query ? ` for "${item.query}"` : ''}`;
-      }).join("\n")
-    : "- No tool results for this turn.";
+      }).join('\n')
+    : '- No tool results for this turn.';
+
   const toolInstructionBlock = toolResults.length
     ? `Tool results were gathered before model generation. Use the provided tool context as the source for this turn. Do not say you cannot browse, cannot search, or cannot access current information; instead, answer from the tool context and clearly mention if the results are weak, incomplete, or failed.`
     : `No tool context was gathered for this turn.`;
 
   const planBlock = (responsePlan?.outline || [])
     .map((line) => `- ${line}`)
-    .join("\n");
+    .join('\n');
 
-  const safetyFlags = safety.flags.length ? safety.flags.join(", ") : "none";
+  const safetyFlags = (safety.flags || []).length ? safety.flags.join(', ') : 'none';
+
   const reasoningBlock = reasoning
     ? [
         `- Mode: ${reasoning.reasoningMode}`,
@@ -53,13 +57,16 @@ function buildSystemPrompt(context) {
         `- Effort: ${reasoning.effort}`,
         `- Budget hint: ${reasoning.budgetTokens || 0} planning token(s)`,
         `- Risk level: ${reasoning.riskLevel}`,
+        `- Self-consistency: ${reasoning.selfConsistencyRecommended ? 'recommended' : 'not needed'}`,
+        `- Risk conflict: ${reasoning.riskConflict ? `YES — ${reasoning.riskConflictNote || 'level escalated'}` : 'none'}`,
         `- Project scan: ${reasoning.needsProjectScan ? 'on' : 'off'}`,
         `- Planning: ${reasoning.needsPlan ? 'on' : 'off'}`,
         `- Verification: ${reasoning.needsVerification ? 'on' : 'off'}`,
         `- Public summary: ${reasoning.publicSummaryEnabled ? 'on' : 'off'}`,
         `- Assumption: ${reasoning.assumption}`
-      ].join("\n")
-    : "- No special reasoning profile.";
+      ].join('\n')
+    : '- No special reasoning profile.';
+
   const reasoningInstructionBlock = reasoning
     ? [
         `Hazy extended reasoning policy:`,
@@ -68,29 +75,41 @@ function buildSystemPrompt(context) {
         `- If verification is on, silently review the final answer for correctness, missing steps, unsafe actions, and user constraints.`,
         `- The visible answer must contain only the helpful final response. Do not include private reasoning unless the user asks for a brief explanation, and even then provide only a concise summary.`,
         `- If the task is high caution, ask for confirmation before destructive, security-sensitive, payment, auth, database, deployment, or overwrite actions.`
-      ].join("\n")
+      ].join('\n')
     : `No extended reasoning policy for this turn.`;
+
+  // FIX #6 — budgetTokens was NEVER passed to buildTaskReasoningGuidance.
+  // This meant the verbosity hint added in the last patch (budget → prompt
+  // verbosity mapping for Ollama) was always receiving undefined and
+  // defaulting to "answer directly". Passing reasoning.budgetTokens here
+  // completes the full budget pipeline:
+  //   reasoningController → profile.budgetTokens
+  //   → promptBuilder (here) → buildTaskReasoningGuidance(task, budget)
+  //   → verbosity instruction injected into system prompt
+  //   → model adjusts output depth accordingly
   const taskReasoningBlock = reasoning?.reasoningTask
-    ? buildTaskReasoningGuidance(reasoning.reasoningTask)
+    ? buildTaskReasoningGuidance(reasoning.reasoningTask, reasoning.budgetTokens || 0)
     : 'No task-specific reasoning guidance for this turn.';
+
   const codingBlock = codeAnalysis?.isCodingRequest
     ? [
         `- Language: ${codeAnalysis.languageLabel || codeAnalysis.language || 'auto'}`,
         `- Confidence: ${codeAnalysis.confidence}%`,
         `- Code task: ${codeAnalysis.codeType}`,
         `- Complexity: ${codeAnalysis.complexity}`,
-        `- Frameworks: ${(codeAnalysis.frameworks || []).join(", ") || 'none detected'}`
-      ].join("\n")
-    : "- Not a coding-specialized turn.";
+        `- Frameworks: ${(codeAnalysis.frameworks || []).join(', ') || 'none detected'}`
+      ].join('\n')
+    : '- Not a coding-specialized turn.';
+
   const projectBlock = projectContext
     ? [
         `- Detected stack: ${projectContext.detectedStack || 'unknown'}`,
         `- Primary language: ${projectContext.primaryLanguage || 'unknown'}`,
-        `- Frameworks: ${(projectContext.frameworks || []).join(", ") || 'none detected'}`,
+        `- Frameworks: ${(projectContext.frameworks || []).join(', ') || 'none detected'}`,
         `- Project type: ${projectContext.projectType || 'unknown'}`,
-        `- Evidence: ${(projectContext.evidence || []).join(", ") || 'none'}`
-      ].join("\n")
-    : "- No project context.";
+        `- Evidence: ${(projectContext.evidence || []).join(', ') || 'none'}`
+      ].join('\n')
+    : '- No project context.';
 
   return `Use the user's existing system prompt, persona, and active mode instructions as the primary source of behavior, identity, tone, and boundaries.
 

@@ -5,6 +5,7 @@ const path = require('path');
 const { ToolRegistry, DEFAULT_ROLES } = require('../tools/toolRegistry');
 const { ToolExecutor } = require('../tools/toolExecutor');
 const { webSearch } = require('../tools/webSearchTool');
+const { defaultBrowserSystem, registerBrowserTools } = require('../browser/browserTool');
 const { evaluateArithmetic } = require('../ai/reasoning/calculator');
 const { InMemoryRateLimiter } = require('../security/rateLimiter');
 const { PendingConfirmationStore } = require('./confirmationStore');
@@ -19,7 +20,9 @@ function createToolContext(body = {}, overrides = {}) {
     role: DEFAULT_ROLES.includes(requestedRole) ? requestedRole : 'user',
     tenantId: overrides.tenantId || body.tenantId || null,
     requestId: overrides.requestId || crypto.randomUUID(),
-    services: overrides.services || {}
+    services: overrides.services || {},
+    enabledToolsets: overrides.enabledToolsets || body.hazy?.enabledToolsets || body.enabledToolsets || null,
+    disabledToolsets: overrides.disabledToolsets || body.hazy?.disabledToolsets || body.disabledToolsets || []
   };
 }
 
@@ -27,15 +30,17 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null } = {}) 
   const registry = new ToolRegistry();
   registry.register({
     name: 'web.search',
-    description: 'Search the web for current or externally verifiable information.',
+    description: 'Search the web for current or externally verifiable information, extract sources, and build citation-ready evidence.',
     risk: 'read',
+    toolset: 'web',
     requiresConfirmation: false,
     allowedRoles: ['admin', 'cashier', 'user'],
     schema: {
       type: 'object',
       properties: {
         query: { type: 'string', minLength: 2, maxLength: 300 },
-        limit: { type: 'integer', minimum: 1, maximum: 10 }
+        limit: { type: 'integer', minimum: 1, maximum: 10 },
+        mode: { type: 'string', enum: ['quick_web', 'deep_web', 'official_only', 'domain_limited', 'fresh_required', 'research_mode'] }
       },
       required: ['query'],
       additionalProperties: false
@@ -54,10 +59,12 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null } = {}) 
       })
     )
   });
+  registerBrowserTools(registry, defaultBrowserSystem);
   registry.register({
     name: 'calculator.evaluate',
     description: 'Evaluate a basic arithmetic expression without running arbitrary code.',
     risk: 'read',
+    toolset: 'safe_default',
     requiresConfirmation: false,
     allowedRoles: ['admin', 'cashier', 'user'],
     schema: {

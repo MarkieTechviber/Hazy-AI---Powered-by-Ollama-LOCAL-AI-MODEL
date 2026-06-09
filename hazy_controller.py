@@ -297,9 +297,15 @@ class HazyProcessManager:
         node = self.which("node")
         if node:
             return [node, "server.js"]
-        python = self.which("python") or sys.executable
-        if python:
-            return [python, "server.py"]
+
+        # Prefer the interpreter that is running the controller. start-controller.bat
+        # launches the controller from a project-local virtual environment, so this
+        # avoids accidentally reusing an unrelated PATH Python such as another app's
+        # venv without pip or backend dependencies.
+        candidates = [sys.executable, self.which("python"), self.which("python3")]
+        for python in candidates:
+            if python:
+                return [python, "server.py"]
         raise ControllerError("Neither Node.js nor Python is available for Hazy.")
 
     def start_hazy(self) -> ServiceStatus:

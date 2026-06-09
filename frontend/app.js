@@ -3659,6 +3659,39 @@ async function sendMessage(userText) {
       trace: hazyTrace || undefined,
       agent: agentRunInfo || undefined
     });
+
+    // === HAZY WEB LOGIC: populate tool structured data from existing agent/tool info ===
+    // (if present in stream). Stored on msg so renderer recreates cards on history load.
+    // Resolution via CONFIG only (no hard-coded tool strings at this call site).
+    if (agentRunInfo) {
+      try {
+        const cfg = window.HAZY_WEB_LOGIC_CONFIG || {};
+        const types = cfg.cardTypes || {};
+        let toolKind = 'tool';
+        for (const tk in types) {
+          if (types[tk] && types[tk].icon === '🔧') { toolKind = types[tk].kind; break; }
+        }
+        const doneSt = (cfg.statuses && cfg.statuses.done) || 'done';
+        const errSt = (cfg.statuses && cfg.statuses.error) || 'error';
+        const toolSrc = agentRunInfo.tools || agentRunInfo.toolCalls || [];
+        if (toolSrc.length) {
+          const toolEntries = toolSrc.map((t, i) => ({
+            kind: toolKind,
+            id: 'tool-' + i,
+            tool_id: t.tool || t.name || ('tool' + i),
+            name: t.tool || t.name || 'tool',
+            context: t.args ? (typeof t.args === 'string' ? t.args.slice(0, 110) : JSON.stringify(t.args).slice(0, 110)) : (t.query || ''),
+            summary: t.result || (t.success ? 'ok' : ''),
+            error: t.success ? undefined : (t.error || t.message || 'tool failed'),
+            status: (t.success !== false) ? doneSt : errSt,
+            startedAt: Date.now() - 1500,
+            completedAt: Date.now()
+          }));
+          const last = conv.messages[conv.messages.length - 1];
+          if (last) last.structured = (last.structured || []).concat(toolEntries);
+        }
+      } catch (e) { /* keep chat working */ }
+    }
     saveConversations();
 
     // Generate a smart title after the very first exchange
@@ -3736,6 +3769,19 @@ async function sendMessage(userText) {
     if (webSourceCards && CONFIG.enableResearchCards !== false && CONFIG.enableCitationsInTranscript !== false) {
       contentDiv.insertAdjacentHTML('beforeend', webSourceCards);
     }
+
+    // === HAZY WEB LOGIC (root hazy-web-logic-integration.js) ===
+    // Insert structured cards (from .structured populated above via webSearch + tools)
+    // right after the existing web panel. Keeps prior flow 100% intact.
+    try {
+      const lastMsgForCards = conv.messages[conv.messages.length - 1];
+      if (lastMsgForCards && Array.isArray(lastMsgForCards.structured) && lastMsgForCards.structured.length &&
+          typeof window.renderHazyStructuredCardsHTML === 'function' &&
+          window.HAZY_WEB_LOGIC_CONFIG && window.HAZY_WEB_LOGIC_CONFIG.enableStructuredCards) {
+        const liveCards = window.renderHazyStructuredCardsHTML(lastMsgForCards.structured);
+        if (liveCards) contentDiv.insertAdjacentHTML('beforeend', liveCards);
+      }
+    } catch (e) { /* guaranteed not to break transcript */ }
 
     if (STATE.ttsEnabled && fullContent && !isBuild && !isCode) {
       speakText(stripMarkdown(fullContent));

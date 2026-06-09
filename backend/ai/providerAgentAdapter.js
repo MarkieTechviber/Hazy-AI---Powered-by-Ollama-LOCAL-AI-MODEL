@@ -206,16 +206,29 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
   return async ({ input, tools, temperature }) => {
     if (provider === 'ollama') {
       const baseUrl = new URL(cfg.providers?.ollama?.baseUrl || 'http://localhost:11434');
+      const reasoningMode = providerBody.hazyReasoning?.reasoningMode;
+      const useThink = reasoningMode !== 'off';
+
+      // FIX #2 (Ollama) — map budgetTokens to num_ctx hint so thinking
+      // models (e.g. qwen3, deepseek-r1) get an appropriate context size.
+      // Ollama doesn't have a native budget param so this is the closest
+      // lever we have. Only apply for models that support thinking.
+      const budgetTokens = providerBody.hazyReasoning?.budgetTokens || 0;
+      const numCtx = useThink && budgetTokens > 0
+        ? Math.min(32768, 4096 + budgetTokens * 2)
+        : undefined;
+
       const data = await requestJson(new URL('/api/chat', baseUrl), {
         body: {
           model: modelId.replace(/^ollama\//, ''),
           messages: toOllamaMessages(input),
           tools: toOpenAITools(tools),
           stream: false,
-          think: providerBody.hazyReasoning?.reasoningMode !== 'off',
+          think: useThink,
           options: {
             ...(providerBody.options || {}),
-            temperature
+            temperature,
+            ...(numCtx ? { num_ctx: numCtx } : {})
           }
         }
       });
@@ -225,6 +238,21 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
     if (provider === 'anthropic') {
       const apiKey = getApiKey('anthropic', cfg);
       if (!apiKey) throw new Error('Anthropic API key is not configured.');
+
+      const reasoningMode = providerBody.hazyReasoning?.reasoningMode;
+      const budgetTokens = providerBody.hazyReasoning?.budgetTokens || 0;
+
+      // FIX #2 (Anthropic) — Extended thinking requires:
+      //   1. thinking: { type: 'enabled', budget_tokens: N } in the body
+      //   2. temperature MUST be exactly 1 (API enforces this)
+      //   3. budget_tokens must be at least 1024
+      // Without these, the API returns a 400 or silently ignores the flag.
+      const useExtendedThinking = reasoningMode === 'deep' || budgetTokens >= 1024;
+      const thinkingParam = useExtendedThinking
+        ? { thinking: { type: 'enabled', budget_tokens: Math.max(1024, budgetTokens) } }
+        : {};
+      const effectiveTemperature = useExtendedThinking ? 1 : temperature;
+
       const data = await requestJson('https://api.anthropic.com/v1/messages', {
         headers: {
           'x-api-key': apiKey,
@@ -241,7 +269,8 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
           })),
           tool_choice: { type: 'auto' },
           max_tokens: providerBody.options?.max_tokens || 4096,
-          temperature
+          temperature: effectiveTemperature,
+          ...thinkingParam
         }
       });
       return normalizeAnthropicResponse(data);
@@ -251,6 +280,7 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
       openai: {
         url: 'https://api.openai.com/v1/chat/completions',
         keyName: 'openai',
+        // FIX #3 — remove double replace (was: .replace(/^openai\//, ''))
         model: modelId.replace(/^openai\//, '')
       },
       groq: {
@@ -261,7 +291,9 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
       nvidia: {
         url: `${(cfg.providers?.nvidia?.baseUrl || 'https://integrate.api.nvidia.com/v1').replace(/\/$/, '')}/chat/completions`,
         keyName: 'nvidia',
-        model: modelId.replace(/^nvidia\//, '').replace(/^nvidia\//, '')
+        // FIX #3 — nvidia had .replace(/^nvidia\//, '').replace(/^nvidia\//, '')
+        // The second replace was redundant. Cleaned up.
+        model: modelId.replace(/^nvidia\//, '')
       }
     }[provider];
 

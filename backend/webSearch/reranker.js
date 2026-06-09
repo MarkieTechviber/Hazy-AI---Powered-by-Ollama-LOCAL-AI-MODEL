@@ -1,9 +1,11 @@
 'use strict';
 
+const { isOfficialSource, getHostname } = require('./sourceQuality');
+
 const STOP_WORDS = new Set([
   'about', 'after', 'before', 'could', 'from', 'have', 'into', 'latest',
   'please', 'search', 'that', 'their', 'there', 'these', 'this', 'what',
-  'when', 'where', 'which', 'with', 'would', 'your'
+  'when', 'where', 'which', 'with', 'would', 'your', 'source', 'sources'
 ]);
 
 function terms(value = '') {
@@ -34,26 +36,54 @@ function scoreFreshness(publishedAt, freshnessRequired) {
   return freshnessRequired ? 25 : 45;
 }
 
+function hasPossibleConflict(text = '') {
+  return /\b(however|contradict|conflict|dispute|different from|not true|false|debunk|correction|retracted)\b/i.test(text);
+}
+
 function rerankChunks({ userMessage, chunks = [], decision = {} }) {
-  return chunks.map((chunk) => {
-    const semantic = keywordOverlap(userMessage, `${chunk.title} ${chunk.text}`);
+  const domainCounts = new Map();
+  const ranked = chunks.map((chunk) => {
+    const combinedText = `${chunk.title || ''} ${chunk.description || ''} ${chunk.text || ''}`;
+    const semantic = keywordOverlap(userMessage, combinedText);
     const source = Number(chunk.sourceQualityScore || 55);
     const freshness = scoreFreshness(chunk.publishedAt, decision.freshnessRequired);
     const keyword = keywordOverlap(userMessage, chunk.text);
+    const official = isOfficialSource(chunk, decision) ? 100 : 35;
     const citationValue = chunk.title && chunk.url ? 90 : 20;
-    const score = semantic * 0.50
-      + source * 0.20
-      + freshness * 0.15
-      + keyword * 0.10
-      + citationValue * 0.05;
-    return { ...chunk, score: Number(score.toFixed(2)) };
+    const promptInjectionPenalty = chunk.untrustedInstructions ? 12 : 0;
+    const score = semantic * 0.42
+      + source * 0.22
+      + freshness * 0.14
+      + official * 0.10
+      + keyword * 0.08
+      + citationValue * 0.04
+      - promptInjectionPenalty;
+    return {
+      ...chunk,
+      officialSource: official >= 100,
+      conflictSignal: hasPossibleConflict(chunk.text),
+      score: Number(Math.max(0, score).toFixed(2))
+    };
   }).sort((a, b) => b.score - a.score)
-    .filter((chunk) => chunk.score >= 35);
+    .filter((chunk) => chunk.score >= 32);
+
+  return ranked.map((chunk) => {
+    const domain = chunk.domain || getHostname(chunk.url) || 'unknown';
+    const seen = domainCounts.get(domain) || 0;
+    domainCounts.set(domain, seen + 1);
+    const diversityPenalty = seen >= 2 && decision.mode !== 'domain_limited' ? Math.min(18, (seen - 1) * 8) : 0;
+    return {
+      ...chunk,
+      diversityPenalty,
+      score: Number(Math.max(0, chunk.score - diversityPenalty).toFixed(2))
+    };
+  }).sort((a, b) => b.score - a.score);
 }
 
 module.exports = {
   rerankChunks,
   keywordOverlap,
   scoreFreshness,
-  terms
+  terms,
+  hasPossibleConflict
 };

@@ -1,8 +1,17 @@
+'use strict';
+
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { summarizeConversation } = require("./conversationSummary");
-const { extractMemoryCandidates, SECRET_PATTERN } = require("./memoryExtractor");
+const { summarizeConversation, clampText } = require("./conversationSummary");
+const {
+  extractMemoryCandidates,
+  extractMemoryRemovals,
+  SECRET_PATTERN,
+  containsSecret,
+  cleanValue,
+  makeKey
+} = require("./memoryExtractor");
 const { HazyDatabase } = require("../storage/hazyDatabase");
 
 function now() {
@@ -15,6 +24,75 @@ function parseJson(value, fallback = null) {
   } catch {
     return fallback;
   }
+}
+
+function safeStringify(value, limit = 20_000) {
+  try {
+    return JSON.stringify(value).slice(0, limit);
+  } catch {
+    return JSON.stringify({ error: "analysis_not_serializable" });
+  }
+}
+
+function isPlainObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
+}
+
+function clampConfidence(value, fallback = 0.5) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.min(number, 1));
+}
+
+function isValidDate(value) {
+  if (!value) return false;
+  const time = Date.parse(value);
+  return Number.isFinite(time);
+}
+
+function normalizeStatus(status) {
+  return ["active", "disabled"].includes(status) ? status : "active";
+}
+
+function normalizeSensitivity(sensitivity) {
+  return ["normal", "personal"].includes(sensitivity) ? sensitivity : "normal";
+}
+
+function normalizeMemoryType(type) {
+  const cleaned = cleanValue(type || "explicit_fact", 60)
+    .toLowerCase()
+    .replace(/[^a-z0-9_:-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return cleaned || "explicit_fact";
+}
+
+function safeIso(value, fallback = now()) {
+  if (!value) return fallback;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date.toISOString();
+}
+
+function tokenizeForSearch(value) {
+  return cleanValue(value, 1000)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 3)
+    .filter((token) => !new Set([
+      "the", "and", "for", "that", "this", "with", "from", "you", "your",
+      "about", "what", "when", "where", "how", "why", "are", "was", "were"
+    ]).has(token));
+}
+
+function scoreMemoryForQuery(memory, queryTokens, conversationId) {
+  let score = Number(memory.confidence || 0) * 10;
+  if (memory.conversation_id === conversationId) score += 3;
+  if (!queryTokens.length) return score;
+
+  const haystack = `${memory.type} ${memory.key} ${memory.value}`.toLowerCase();
+  for (const token of queryTokens) {
+    if (haystack.includes(token)) score += 4;
+  }
+  return score;
 }
 
 class MemoryManager {
@@ -44,7 +122,7 @@ class MemoryManager {
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      for (const [conversationId, conversation] of Object.entries(conversations)) {
+      for (const [conversationId, conversation] of Object.entries(conversations || {})) {
         const userId = "default";
         this.ensureConversation(conversationId, userId);
         for (const turn of conversation.turns || []) {
@@ -54,19 +132,19 @@ class MemoryManager {
             role: turn.role,
             content: turn.content,
             analysis: turn.analysis,
-            createdAt: turn.ts ? new Date(turn.ts).toISOString() : now()
+            createdAt: turn.ts ? safeIso(turn.ts) : now()
           });
         }
         for (const summary of conversation.summaries || []) {
           this.insertSummary(conversationId, summary);
         }
         for (const fact of conversation.projectFacts || []) {
-          if (SECRET_PATTERN.test(String(fact))) continue;
+          if (containsSecret(String(fact))) continue;
           this.upsertMemory({
             userId,
             conversationId,
             type: "project_fact",
-            key: String(fact).slice(0, 80),
+            key: makeKey(String(fact)),
             value: String(fact),
             confidence: 0.75,
             source: "legacy_json"
@@ -74,9 +152,9 @@ class MemoryManager {
         }
       }
 
-      for (const [userId, profile] of Object.entries(profiles)) {
+      for (const [userId, profile] of Object.entries(profiles || {})) {
         for (const [key, value] of Object.entries(profile.preferences || {})) {
-          if (SECRET_PATTERN.test(`${key} ${value}`)) continue;
+          if (containsSecret(`${key} ${value}`)) continue;
           this.upsertMemory({
             userId,
             type: "preference",
@@ -105,40 +183,77 @@ class MemoryManager {
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         user_id = excluded.user_id,
-        project_id = excluded.project_id,
+        project_id = CASE
+          WHEN excluded.project_id != '' THEN excluded.project_id
+          ELSE conversations.project_id
+        END,
         updated_at = excluded.updated_at
     `).run(conversationId, userId, projectId || "", timestamp, timestamp);
   }
 
   insertMessage({ conversationId, userId, role, content, analysis, createdAt = now() }) {
+    const id = crypto.randomUUID();
+    const safeRole = ["user", "assistant", "system", "tool"].includes(role) ? role : "user";
     this.db.prepare(`
       INSERT INTO messages(id, conversation_id, user_id, role, content, analysis_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
-      crypto.randomUUID(),
+      id,
       conversationId,
       userId,
-      role,
-      String(content || ""),
-      analysis ? JSON.stringify(analysis) : null,
-      createdAt
+      safeRole,
+      String(content || "").slice(0, 20_000),
+      analysis ? safeStringify(analysis, 20_000) : null,
+      safeIso(createdAt)
     );
+    return id;
   }
 
   insertSummary(conversationId, summary) {
+    const safeSummary = clampText(summary, 1600);
+    if (!safeSummary) return null;
+
+    const latest = this.db.prepare(`
+      SELECT summary FROM conversation_summaries
+      WHERE conversation_id = ?
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 1
+    `).get(conversationId);
+    if (latest?.summary === safeSummary) return null;
+
+    const id = crypto.randomUUID();
     this.db.prepare(`
       INSERT INTO conversation_summaries(id, conversation_id, summary, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(crypto.randomUUID(), conversationId, String(summary), now());
+    `).run(id, conversationId, safeSummary, now());
+
+    const keepIds = this.db.prepare(`
+      SELECT id FROM conversation_summaries
+      WHERE conversation_id = ?
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 12
+    `).all(conversationId).map((row) => row.id);
+    if (keepIds.length) {
+      const placeholders = keepIds.map(() => "?").join(",");
+      this.db.prepare(`
+        DELETE FROM conversation_summaries
+        WHERE conversation_id = ? AND id NOT IN (${placeholders})
+      `).run(conversationId, ...keepIds);
+    }
+
+    return id;
   }
 
-  getConversation(conversationId = "default") {
+  getConversation(conversationId = "default", userId = null) {
+    const userClause = userId ? " AND user_id = ?" : "";
+    const params = userId ? [conversationId, userId] : [conversationId];
+
     const turns = this.db.prepare(`
       SELECT role, content, analysis_json, created_at
       FROM messages
-      WHERE conversation_id = ?
+      WHERE conversation_id = ?${userClause}
       ORDER BY created_at ASC, rowid ASC
-    `).all(conversationId).map((row) => ({
+    `).all(...params).map((row) => ({
       role: row.role,
       content: row.content,
       ts: Date.parse(row.created_at),
@@ -170,14 +285,15 @@ class MemoryManager {
     }, {});
   }
 
-  saveConversationStates(conversations = {}, userId = "local-user") {
+  saveConversationStates(conversations = {}, userId = "local-user", options = {}) {
     const timestamp = now();
+    const pruneMissing = options.pruneMissing !== false;
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const keepIds = [];
       for (const [conversationId, state] of Object.entries(conversations || {})) {
         keepIds.push(conversationId);
-        const createdAt = new Date(state.createdAt || Date.now()).toISOString();
+        const createdAt = safeIso(state?.createdAt || Date.now());
         this.db.prepare(`
           INSERT INTO conversations(id, user_id, project_id, title, created_at, updated_at)
           VALUES (?, ?, '', ?, ?, ?)
@@ -188,7 +304,7 @@ class MemoryManager {
         `).run(
           conversationId,
           userId,
-          String(state.title || "New Chat").slice(0, 200),
+          String(state?.title || "New Chat").slice(0, 200),
           createdAt,
           timestamp
         );
@@ -204,20 +320,24 @@ class MemoryManager {
         `).run(
           conversationId,
           userId,
-          JSON.stringify(state),
+          safeStringify(state || {}, 500_000),
           createdAt,
           timestamp
         );
       }
 
-      if (keepIds.length) {
-        const placeholders = keepIds.map(() => "?").join(",");
-        this.db.prepare(`
-          DELETE FROM conversations
-          WHERE user_id = ? AND id NOT IN (${placeholders})
-        `).run(userId, ...keepIds);
-      } else {
-        this.db.prepare("DELETE FROM conversations WHERE user_id = ?").run(userId);
+      // Browser UI syncs send the complete conversation map, so missing IDs
+      // are treated as deleted unless pruneMissing is explicitly false.
+      if (pruneMissing) {
+        if (keepIds.length) {
+          const placeholders = keepIds.map(() => "?").join(",");
+          this.db.prepare(`
+            DELETE FROM conversation_states
+            WHERE user_id = ? AND conversation_id NOT IN (${placeholders})
+          `).run(userId, ...keepIds);
+        } else {
+          this.db.prepare("DELETE FROM conversation_states WHERE user_id = ?").run(userId);
+        }
       }
       this.db.exec("COMMIT");
     } catch (error) {
@@ -231,12 +351,21 @@ class MemoryManager {
       "SELECT 1 AS present FROM conversations WHERE id = ? AND user_id = ?"
     ).get(conversationId, userId);
     if (!existing) return false;
-    this.db.prepare("DELETE FROM conversations WHERE id = ? AND user_id = ?")
-      .run(conversationId, userId);
-    return true;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("DELETE FROM conversation_states WHERE conversation_id = ? AND user_id = ?")
+        .run(conversationId, userId);
+      this.db.prepare("DELETE FROM conversations WHERE id = ? AND user_id = ?")
+        .run(conversationId, userId);
+      this.db.exec("COMMIT");
+      return true;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
-  listMemories({ userId = "default", projectId, status = "active", limit = 100 } = {}) {
+  listMemories({ userId = "default", projectId, status = "active", limit = 100, includeExpired = false } = {}) {
     const clauses = ["user_id = ?"];
     const params = [userId];
     if (projectId !== undefined) {
@@ -245,7 +374,11 @@ class MemoryManager {
     }
     if (status && status !== "all") {
       clauses.push("status = ?");
-      params.push(status);
+      params.push(normalizeStatus(status));
+    }
+    if (!includeExpired && status !== "all") {
+      clauses.push("(expires_at IS NULL OR expires_at > ?)");
+      params.push(now());
     }
     params.push(Math.max(1, Math.min(Number(limit) || 100, 500)));
     return this.db.prepare(`
@@ -274,14 +407,23 @@ class MemoryManager {
     status = "active",
     expiresAt = null
   }) {
-    if (!key || !String(value || "").trim()) {
+    const normalizedKey = makeKey(key || value).slice(0, 120);
+    const normalizedValue = cleanValue(value, 2000);
+    const safeType = normalizeMemoryType(type);
+    if (!normalizedKey || !normalizedValue) {
       throw new Error("Memory key and value are required.");
     }
-    if (SECRET_PATTERN.test(`${key} ${value}`)) {
+    if (containsSecret(`${normalizedKey} ${normalizedValue}`)) {
       throw new Error("Credentials and secrets cannot be stored as companion memory.");
     }
+
     const timestamp = now();
     const memoryId = id || crypto.randomUUID();
+    const boundedConfidence = clampConfidence(confidence, 0.5);
+    const safeSensitivity = normalizeSensitivity(sensitivity);
+    const safeStatus = normalizeStatus(status);
+    const safeExpiresAt = isValidDate(expiresAt) ? new Date(expiresAt).toISOString() : null;
+
     this.db.prepare(`
       INSERT INTO memories(
         id, user_id, project_id, conversation_id, type, key, value,
@@ -290,19 +432,31 @@ class MemoryManager {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, project_id, type, key) DO UPDATE SET
-        conversation_id = excluded.conversation_id,
-        value = excluded.value,
-        confidence = excluded.confidence,
-        sensitivity = excluded.sensitivity,
-        source_message_id = excluded.source_message_id,
+        conversation_id = CASE
+          WHEN excluded.conversation_id != '' THEN excluded.conversation_id
+          ELSE memories.conversation_id
+        END,
+        value = CASE
+          WHEN excluded.confidence >= memories.confidence OR memories.status = 'disabled'
+          THEN excluded.value ELSE memories.value
+        END,
+        confidence = MAX(memories.confidence, excluded.confidence),
+        sensitivity = CASE
+          WHEN memories.sensitivity = 'personal' OR excluded.sensitivity = 'personal'
+          THEN 'personal' ELSE excluded.sensitivity
+        END,
+        source_message_id = COALESCE(excluded.source_message_id, memories.source_message_id),
         status = excluded.status,
         updated_at = excluded.updated_at,
-        expires_at = excluded.expires_at
+        expires_at = CASE
+          WHEN excluded.confidence >= memories.confidence OR memories.status = 'disabled'
+          THEN excluded.expires_at ELSE memories.expires_at
+        END
     `).run(
-      memoryId, userId, projectId || "", conversationId || "", type,
-      String(key).slice(0, 120), String(value).trim().slice(0, 2000),
-      Math.max(0, Math.min(Number(confidence) || 0, 1)), sensitivity,
-      sourceMessageId, status, timestamp, timestamp, expiresAt
+      memoryId, userId, projectId || "", conversationId || "", safeType,
+      normalizedKey, normalizedValue,
+      boundedConfidence, safeSensitivity,
+      sourceMessageId, safeStatus, timestamp, timestamp, safeExpiresAt
     );
     return this.db.prepare(`
       SELECT id, user_id AS userId, project_id AS projectId,
@@ -310,17 +464,15 @@ class MemoryManager {
         sensitivity, status, created_at AS createdAt, updated_at AS updatedAt,
         last_used_at AS lastUsedAt, expires_at AS expiresAt
       FROM memories WHERE user_id = ? AND project_id = ? AND type = ? AND key = ?
-    `).get(userId, projectId || "", type, String(key).slice(0, 120));
+    `).get(userId, projectId || "", safeType, normalizedKey);
   }
 
   setMemoryStatus(id, userId = "default", status = "active") {
-    if (!["active", "disabled"].includes(status)) {
-      throw new Error("Memory status must be active or disabled.");
-    }
+    const safeStatus = normalizeStatus(status);
     const result = this.db.prepare(`
       UPDATE memories SET status = ?, updated_at = ?
       WHERE id = ? AND user_id = ?
-    `).run(status, now(), id, userId);
+    `).run(safeStatus, now(), id, userId);
     return result.changes > 0;
   }
 
@@ -330,14 +482,51 @@ class MemoryManager {
     ).run(id, userId).changes > 0;
   }
 
+  forgetMemories({ userId = "default", projectId = "", target = "" } = {}) {
+    const cleaned = cleanValue(target, 300).toLowerCase();
+    if (!cleaned) return 0;
+
+    const timestamp = now();
+    const wantsAll = /^(all|everything|all memories|my memories|what you know)$/i.test(cleaned);
+    if (wantsAll) {
+      return this.db.prepare(`
+        UPDATE memories SET status = 'disabled', updated_at = ?
+        WHERE user_id = ? AND status = 'active'
+      `).run(timestamp, userId).changes;
+    }
+
+    const keyNeedle = `%${makeKey(cleaned)}%`;
+    const textNeedle = `%${cleaned}%`;
+    const loose = cleaned.replace(/\b(my|the|a|an)\b/g, "").replace(/\s+/g, " ").trim();
+    const looseNeedle = `%${loose}%`;
+
+    return this.db.prepare(`
+      UPDATE memories SET status = 'disabled', updated_at = ?
+      WHERE user_id = ?
+        AND status = 'active'
+        AND (project_id = '' OR project_id = ?)
+        AND (
+          LOWER(key) LIKE ?
+          OR LOWER(value) LIKE ?
+          OR LOWER(value) LIKE ?
+        )
+    `).run(timestamp, userId, projectId || "", keyNeedle, textNeedle, looseNeedle).changes;
+  }
+
   getRelevantMemory({
     conversationId = "default",
     userId = "default",
-    projectId = ""
+    projectId = "",
+    query = "",
+    limit = 12
   } = {}) {
-    const conversation = this.getConversation(conversationId);
-    const durable = this.db.prepare(`
-      SELECT id, type, key, value, confidence
+    const conversation = this.getConversation(conversationId, userId);
+    const timestamp = now();
+    const queryTokens = tokenizeForSearch(query || conversation.turns.at?.(-1)?.content || "");
+    const memoryLimit = Math.max(1, Math.min(Number(limit) || 12, 24));
+
+    const candidates = this.db.prepare(`
+      SELECT id, conversation_id, type, key, value, confidence
       FROM memories
       WHERE user_id = ?
         AND status = 'active'
@@ -347,11 +536,18 @@ class MemoryManager {
         CASE WHEN conversation_id = ? THEN 0 ELSE 1 END,
         confidence DESC,
         updated_at DESC
-      LIMIT 8
-    `).all(userId, projectId || "", now(), conversationId);
+      LIMIT 40
+    `).all(userId, projectId || "", timestamp, conversationId);
+
+    const durable = candidates
+      .map((memory) => ({
+        ...memory,
+        relevanceScore: scoreMemoryForQuery(memory, queryTokens, conversationId)
+      }))
+      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+      .slice(0, Math.min(8, memoryLimit));
 
     if (durable.length) {
-      const timestamp = now();
       const update = this.db.prepare("UPDATE memories SET last_used_at = ? WHERE id = ?");
       for (const memory of durable) update.run(timestamp, memory.id);
     }
@@ -360,17 +556,22 @@ class MemoryManager {
       id: item.id,
       type: item.type,
       summary: `${item.key}: ${item.value}`,
-      confidence: item.confidence
+      confidence: item.confidence,
+      relevanceScore: item.relevanceScore
     }));
     const conversationSummaries = conversation.summaries.slice(-2).map((summary) => ({
       type: "conversation_summary",
-      summary
-    }));
-    const lastTurns = conversation.turns.slice(-6).map((turn) => ({
-      type: "recent_turn",
-      summary: `${turn.role}: ${turn.content.slice(0, 180)}`
-    }));
-    return [...memories, ...conversationSummaries, ...lastTurns].slice(0, 12);
+      summary: clampText(summary, 800)
+    })).filter((item) => item.summary);
+    const lastTurns = conversation.turns
+      .filter((turn) => ["user", "assistant"].includes(turn.role))
+      .slice(-6)
+      .map((turn) => ({
+        type: "recent_turn",
+        summary: `${turn.role}: ${clampText(turn.content, 180)}`
+      }))
+      .filter((turn) => !/^(user|assistant):\s*$/i.test(turn.summary.trim()));
+    return [...memories, ...conversationSummaries, ...lastTurns].slice(0, memoryLimit);
   }
 
   recordTurn({
@@ -382,52 +583,81 @@ class MemoryManager {
     analysis,
     profileHints = {}
   }) {
-    this.ensureConversation(conversationId, userId, projectId);
-    this.insertMessage({ conversationId, userId, role: "user", content: userMessage });
-    this.insertMessage({
-      conversationId,
-      userId,
-      role: "assistant",
-      content: finalResponse,
-      analysis
-    });
-
-    for (const candidate of extractMemoryCandidates(userMessage)) {
-      this.upsertMemory({
-        ...candidate,
-        userId,
-        projectId,
-        conversationId
-      });
-    }
-    for (const [key, value] of Object.entries(profileHints)) {
-      this.upsertMemory({
-        userId,
-        projectId: "",
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.ensureConversation(conversationId, userId, projectId);
+      const userMessageId = this.insertMessage({ conversationId, userId, role: "user", content: userMessage });
+      this.insertMessage({
         conversationId,
-        type: "preference",
-        key,
-        value: String(value),
-        confidence: 0.7
+        userId,
+        role: "assistant",
+        content: finalResponse,
+        analysis
       });
-    }
 
-    const current = this.getConversation(conversationId);
-    if (current.turns.length > 40) {
-      this.insertSummary(conversationId, summarizeConversation(current.turns).summary);
-      const keepIds = this.db.prepare(`
-        SELECT id FROM messages
-        WHERE conversation_id = ?
-        ORDER BY created_at DESC, rowid DESC
-        LIMIT 20
-      `).all(conversationId).map((row) => row.id);
-      if (keepIds.length) {
-        const placeholders = keepIds.map(() => "?").join(",");
-        this.db.prepare(`
-          DELETE FROM messages
-          WHERE conversation_id = ? AND id NOT IN (${placeholders})
-        `).run(conversationId, ...keepIds);
+      const removals = extractMemoryRemovals(userMessage);
+      for (const removal of removals) {
+        this.forgetMemories({ userId, projectId, target: removal.target });
       }
+
+      if (!removals.length) {
+        for (const candidate of extractMemoryCandidates(userMessage)) {
+          try {
+            this.upsertMemory({
+              ...candidate,
+              userId,
+              projectId,
+              conversationId,
+              sourceMessageId: userMessageId
+            });
+          } catch (error) {
+            if (!/secrets cannot be stored/i.test(error.message)) throw error;
+          }
+        }
+      }
+
+      if (isPlainObject(profileHints)) {
+        for (const [key, value] of Object.entries(profileHints)) {
+          if (containsSecret(`${key} ${value}`)) continue;
+          this.upsertMemory({
+            userId,
+            projectId: "",
+            conversationId,
+            type: "preference",
+            key,
+            value: String(value),
+            confidence: 0.7,
+            sourceMessageId: userMessageId
+          });
+        }
+      }
+
+      const current = this.getConversation(conversationId, userId);
+      if (current.turns.length > 40) {
+        const keepRows = this.db.prepare(`
+          SELECT id FROM messages
+          WHERE conversation_id = ? AND user_id = ?
+          ORDER BY created_at DESC, rowid DESC
+          LIMIT 20
+        `).all(conversationId, userId);
+        const keepIds = keepRows.map((row) => row.id);
+        const olderTurns = current.turns.slice(0, Math.max(0, current.turns.length - 20));
+        const summary = summarizeConversation(olderTurns).summary;
+        if (summary) this.insertSummary(conversationId, summary);
+
+        if (keepIds.length) {
+          const placeholders = keepIds.map(() => "?").join(",");
+          this.db.prepare(`
+            DELETE FROM messages
+            WHERE conversation_id = ? AND user_id = ? AND id NOT IN (${placeholders})
+          `).run(conversationId, userId, ...keepIds);
+        }
+      }
+
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
     }
   }
 }

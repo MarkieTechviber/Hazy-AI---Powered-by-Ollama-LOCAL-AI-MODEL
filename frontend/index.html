@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hazy - Local Companion by Dream On</title>
+  <title>Hazy - Local Companion Hazy AI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -94,6 +94,18 @@
           </button>
         </div>
 
+        <div class="sidebar-section-label workspace-section-label">Workspace</div>
+        <div class="page-nav" id="pageNav" role="tablist" aria-label="Hazy workspace pages">
+          <button class="page-nav-btn active" id="navChatBtn" data-page="chat" type="button" role="tab" aria-pressed="true">
+            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>
+            <span>Chat</span>
+          </button>
+          <button class="page-nav-btn" id="navAgentBtn" data-page="agent" type="button" role="tab" aria-pressed="false">
+            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bot"></use></svg>
+            <span>Agentic Mode</span>
+          </button>
+        </div>
+
         <div class="sidebar-search-row">
           <label class="sidebar-search" for="historySearch">
             <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-search"></use></svg>
@@ -110,8 +122,8 @@
           <span>Clear Chat</span>
         </button>
 
-        <div class="sidebar-section-label">Recent Chats</div>
-        <p class="sidebar-history-note">Jump back into older threads, rename them, or clean them up from here.</p>
+        <div class="sidebar-section-label" id="historySectionLabel">Recent Chats</div>
+        <p class="sidebar-history-note" id="historySectionNote">Jump back into older threads, rename them, or clean them up from here.</p>
         <div class="chat-history" id="chatHistory"></div>
       </div>
 
@@ -187,12 +199,38 @@
           </div>
         </div>
 
+        <section class="agent-page-panel" id="agentPagePanel" hidden aria-live="polite">
+          <div class="agent-page-copy">
+            <span class="surface-label">Agentic Mode</span>
+            <h3>Backend Tool Loop</h3>
+            <p id="agentPageStatus">Backend tool loop ready · max 5 steps</p>
+          </div>
+          <div class="agent-page-controls">
+            <label class="agent-step-control" for="agentMaxIterationsInline">
+              <span>Max Steps</span>
+              <input id="agentMaxIterationsInline" type="number" min="2" max="8" value="5" inputmode="numeric" />
+            </label>
+            <div class="agent-tool-counter">
+              <strong id="agentToolCountInline">0</strong>
+              <span>tools ready</span>
+            </div>
+          </div>
+          <div class="agent-page-tools" id="agentPageToolsList">
+            <div class="agent-tool-item compact">
+              <div class="tool-info">
+                <div class="tool-name">Tool registry loading…</div>
+                <div class="tool-description">Agentic mode uses backend tools, not the old chat toggle.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div class="welcome-screen" id="welcomeScreen">
           <div class="hero-orb">
             <img class="hazy-theme-logo" src="assets/logos/hazy_logo_cream_transparent.svg" alt="Hazy logo" data-hazy-logo />
           </div>
           <h1>Hazy</h1>
-          <p class="hero-brand">by <strong>Dream On</strong></p>
+          <p class="hero-brand">by <strong>Hazy AI</strong></p>
           <p class="hero-subtitle">Your local companion for support, coding, and building full websites.</p>
 
           <div class="starter-grid" id="suggestionGrid">
@@ -300,7 +338,7 @@
           </div>
           <button class="send-btn" id="sendBtn" type="button" title="Send"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-send"></use></svg></button>
         </div>
-        <div class="composer-footer"><span>Hazy by <strong>Dream On</strong> · Powered by Ollama</span><span id="charCount"></span></div>
+        <div class="composer-footer"><span>Hazy by <strong>Hazy AI</strong> · Powered by Ollama</span><span id="charCount"></span></div>
       </section>
     </main>
 
@@ -817,6 +855,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="app.js"></script>
+  <script src="hazy-web-logic-integration.js"></script>
   <script src="hazy-enhancements-complete.js"></script>
   <script src="hazy-rag.js"></script>
   <script src="hazy-agent.js"></script>

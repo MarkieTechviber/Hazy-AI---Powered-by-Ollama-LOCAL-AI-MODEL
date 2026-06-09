@@ -5,7 +5,8 @@ const TOOL_RISKS = Object.freeze([
   'low_write',
   'medium_write',
   'high_write',
-  'external_side_effect'
+  'external_side_effect',
+  'device_control'
 ]);
 
 const DEFAULT_ROLES = Object.freeze(['admin', 'cashier', 'user']);
@@ -41,8 +42,11 @@ function normalizeTool(tool) {
     ...tool,
     description: tool.description || '',
     risk,
+    toolset: tool.toolset || 'safe_default',
+    rateLimit: tool.rateLimit || null,
+    audit: tool.audit === false ? false : true,
     requiresConfirmation: tool.requiresConfirmation === true
-      || ['medium_write', 'high_write', 'external_side_effect'].includes(risk),
+      || ['medium_write', 'high_write', 'external_side_effect', 'device_control'].includes(risk),
     allowedRoles,
     schema: cloneValue(tool.schema || {
       type: 'object',
@@ -83,6 +87,7 @@ class ToolRegistry {
       name: tool.name,
       description: tool.description || "",
       risk: tool.risk,
+      toolset: tool.toolset,
       requiresConfirmation: tool.requiresConfirmation,
       schema: cloneValue(tool.schema || {})
     }));

@@ -50,7 +50,7 @@ test('deterministic routing injects backend evidence and never builds a canned d
       __testWebSearchResult: {
         success: true,
         runId: 'test-run',
-        decision: { mode: 'technical_docs', freshnessRequired: true },
+        decision: { mode: 'official_only', freshnessRequired: true },
         query: 'latest Vite release',
         queries: [{ query: 'latest Vite release official documentation', intent: 'docs' }],
         contextText: '[SOURCE 1]\nTitle: Vite Releases\nURL: https://vite.dev/releases\nContent:\nRelease information.',
