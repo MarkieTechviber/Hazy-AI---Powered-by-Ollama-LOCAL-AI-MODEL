@@ -35,7 +35,8 @@ class WebSearchService {
     decision: providedDecision,
     provider: providedProvider,
     forceSearch,
-    maxContextTokens
+    maxContextTokens,
+    onProgress // optional callback for progressive steps (Phase 1): onProgress({step, ...})
   }) {
     const startedAt = Date.now();
     const decision = providedDecision || detectSearchDecision(userMessage, { forceSearch });
@@ -60,6 +61,9 @@ class WebSearchService {
     }
 
     const queries = planQueries(userMessage, decision, { messages });
+    if (typeof onProgress === 'function') {
+      onProgress({ step: 'queries_planned', count: queries.length, queries: queries.map(q => q.query || q) });
+    }
     const provider = providedProvider || createSearchProvider(cfg, { fetchImpl: this.fetchImpl });
     const searchStarted = Date.now();
     const providerResponses = await Promise.allSettled(queries.map((query) =>
@@ -92,10 +96,14 @@ class WebSearchService {
       .sort((a, b) => b.sourceQualityScore - a.sourceQualityScore);
     const rejectedResults = filtered.rejected;
     const searchLatencyMs = Date.now() - searchStarted;
+    if (typeof onProgress === 'function') {
+      onProgress({ step: 'search_complete', accepted: filteredResults.length, rejected: rejectedResults.length });
+    }
 
     const fetchStarted = Date.now();
     const topResults = filteredResults.slice(0, decision.maxPagesToFetch);
     const fetchErrors = [];
+    if (typeof onProgress === 'function') onProgress({ step: 'fetching_pages', count: topResults.length });
     const fetched = await Promise.all(topResults.map((result) => fetchPage(result.url, {
       fetchImpl: this.fetchImpl,
       lookup: this.lookup,

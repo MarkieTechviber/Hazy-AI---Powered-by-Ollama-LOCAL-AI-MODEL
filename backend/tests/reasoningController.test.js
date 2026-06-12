@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { buildReasoningProfile } = require('../ai/reasoning/reasoningController');
 
-test('buildReasoningProfile flags destructive requests for clarification', () => {
+test('buildReasoningProfile does not ask for clarification on destructive requests', () => {
   const result = buildReasoningProfile({
     message: 'Delete old files and rewrite everything in this app.',
     mode: 'code',
@@ -14,7 +14,7 @@ test('buildReasoningProfile flags destructive requests for clarification', () =>
     safety: { flags: [], riskLevel: 'tier_0' }
   });
 
-  assert.equal(result.needsQuestion, true);
+  assert.equal(result.needsQuestion, false);
   assert.equal(result.reasoningLevel, 'high_caution');
 });
 

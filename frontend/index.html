@@ -199,32 +199,6 @@
           </div>
         </div>
 
-        <section class="agent-page-panel" id="agentPagePanel" hidden aria-live="polite">
-          <div class="agent-page-copy">
-            <span class="surface-label">Agentic Mode</span>
-            <h3>Backend Tool Loop</h3>
-            <p id="agentPageStatus">Backend tool loop ready · max 5 steps</p>
-          </div>
-          <div class="agent-page-controls">
-            <label class="agent-step-control" for="agentMaxIterationsInline">
-              <span>Max Steps</span>
-              <input id="agentMaxIterationsInline" type="number" min="2" max="8" value="5" inputmode="numeric" />
-            </label>
-            <div class="agent-tool-counter">
-              <strong id="agentToolCountInline">0</strong>
-              <span>tools ready</span>
-            </div>
-          </div>
-          <div class="agent-page-tools" id="agentPageToolsList">
-            <div class="agent-tool-item compact">
-              <div class="tool-info">
-                <div class="tool-name">Tool registry loading…</div>
-                <div class="tool-description">Agentic mode uses backend tools, not the old chat toggle.</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
         <div class="welcome-screen" id="welcomeScreen">
           <div class="hero-orb">
             <img class="hazy-theme-logo" src="assets/logos/hazy_logo_cream_transparent.svg" alt="Hazy logo" data-hazy-logo />
@@ -447,7 +421,8 @@
       <div class="modal-footer">
         <div class="footer-actions">
           <button class="btn-secondary" id="ttsCancelBtn">Cancel</button>
-          <button class="btn-primary" id="ttsSaveBtn">Enable Voice</button>
+          <button class="btn-primary" id="ttsSaveBtn">Enable Classic Voice</button>
+        <!-- plan Agent F: this is the Legacy/Classic (Piper + browser) path. The recommended Kokoro Voice controls live in the main Settings > Voice tab. -->
         </div>
       </div>
     </div>
@@ -569,6 +544,7 @@
           <button class="snav-btn" data-tab="sProviders"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-box"></use></svg>AI Providers</button>
           <button class="snav-btn" data-tab="sMemory"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Memory</button>
           <button class="snav-btn" data-tab="sGeneration"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bolt"></use></svg>Generation</button>
+          <button class="snav-btn" data-tab="sVoice"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-microphone"></use></svg>Voice</button>
           <button class="snav-btn" data-tab="sAppearance"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-sun"></use></svg>Appearance</button>
           <button class="snav-btn" data-tab="sNovelWriter"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Novel Writer</button>
           <button class="snav-btn" data-tab="sAbout"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-user"></use></svg>About</button>
@@ -687,6 +663,37 @@
                 <label class="setting-label" for="settingsReasoningSummary"><input id="settingsReasoningSummary" type="checkbox" checked /> Show reasoning summary</label>
               </div>
             </div>
+          </div>
+
+          <div class="stab" id="sVoice">
+            <div class="stab-section-title">Voice Settings</div>
+            <p class="stab-helper">Control <strong>Kokoro Voice</strong> (recommended, fully local streaming) for responses and message playback. (See Classic/Legacy TTS option in the separate TTS modal for Piper/browser fallback.)</p>
+            <div class="setting-group">
+              <label class="setting-label"><input id="voiceEnabled" type="checkbox" /> Enable voice responses</label>
+            </div>
+            <div class="setting-group">
+              <label class="setting-label" for="voiceSelect">Voice selection</label>
+              <div class="setting-grid two-column">
+                <select class="setting-input" id="voiceSelect"></select>
+                <button class="btn-secondary" id="voicePreviewBtn" type="button">Preview</button>
+              </div>
+            </div>
+            <div class="setting-group">
+              <label class="setting-label" for="voiceSpeed">Speech speed: <span id="voiceSpeedLabel">1.0×</span></label>
+              <input class="setting-range" id="voiceSpeed" type="range" min="0.5" max="2" step="0.25" value="1" />
+            </div>
+            <div class="setting-group">
+              <label class="setting-label" for="voiceVolume">Speech volume: <span id="voiceVolumeLabel">100</span></label>
+              <input class="setting-range" id="voiceVolume" type="range" min="0" max="100" step="1" value="100" />
+            </div>
+            <div class="setting-group">
+              <label class="setting-label"><input id="voiceAutoplay" type="checkbox" checked /> Auto play responses</label>
+            </div>
+            <div class="setting-group">
+              <label class="setting-label"><input id="voicePreferGPU" type="checkbox" checked /> Prefer GPU acceleration (WebGPU) when available</label>
+            </div>
+            <!-- plan Agent E: kokoro ready status indicator (cloned from Piper tts-model-status pattern) inside sVoice stab; no new modals -->
+            <div id="kokoroStatus" class="tts-model-status">Kokoro loads on first use or preview.</div>
           </div>
 
           <div class="stab" id="sAppearance">
@@ -854,18 +861,14 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="voiceSettingsStore.js"></script>
+  <script src="audioQueueManager.js"></script>
+  <script src="ttsManager.js"></script>
+  <script src="streamingTTSController.js"></script>
   <script src="app.js"></script>
-  <script src="hazy-web-logic-integration.js"></script>
   <script src="hazy-enhancements-complete.js"></script>
   <script src="hazy-rag.js"></script>
   <script src="hazy-agent.js"></script>
-  <script type="importmap">
-  {
-    "imports": {
-      "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/+esm"
-    }
-  }
-  </script>
   <script>
     window.PiperTTS = null;
     window.dispatchEvent(new Event('piper-ready'));

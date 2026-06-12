@@ -28,6 +28,32 @@ function buildCitations(chunks = []) {
   return Array.from(seen.values()).sort((a, b) => a.sourceNumber - b.sourceNumber);
 }
 
+/**
+ * FIX Issue 3: Filter citations to only those the model actually referenced in its response.
+ * Parses [SOURCE N] tags from the generated text and removes citation objects for
+ * sources the model never mentioned — preventing the "cited sources don't match answer" bug.
+ *
+ * @param {Array}  citations    - Full citation list from buildCitations()
+ * @param {string} responseText - The model's final response text
+ * @returns {{ cited: Array, uncited: Array, hallucinated: number[] }}
+ */
+function filterCitationsByResponse(citations = [], responseText = '') {
+  const text = String(responseText || '');
+  // Match [SOURCE 1], [source 2], SOURCE 1, etc.
+  const citedNums = new Set(
+    [...text.matchAll(/\[?SOURCE\s+(\d+)\]?/gi)].map((m) => parseInt(m[1], 10))
+  );
+
+  const cited = citations.filter((c) => citedNums.has(c.sourceNumber));
+  const uncited = citations.filter((c) => !citedNums.has(c.sourceNumber));
+
+  // Detect hallucinated citations: model cited a number with no matching source
+  const availableNums = new Set(citations.map((c) => c.sourceNumber));
+  const hallucinated = [...citedNums].filter((n) => !availableNums.has(n));
+
+  return { cited, uncited, hallucinated };
+}
+
 function estimateConfidence({ selectedChunks = [], citations = [], freshnessRequired = false, suspiciousSources = [] }) {
   const average = selectedChunks.reduce((sum, chunk) => sum + (chunk.score || 0), 0) / Math.max(1, selectedChunks.length);
   const qualityAverage = selectedChunks.reduce((sum, chunk) => sum + (chunk.sourceQualityScore || 0), 0) / Math.max(1, selectedChunks.length);
@@ -55,4 +81,4 @@ function buildSourcePanelSummary({ decision = {}, queries = [], citations = [], 
   };
 }
 
-module.exports = { buildCitations, estimateConfidence, buildSourcePanelSummary, citationDomain };
+module.exports = { buildCitations, filterCitationsByResponse, estimateConfidence, buildSourcePanelSummary, citationDomain };

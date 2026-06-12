@@ -19,6 +19,8 @@ Run:
 import asyncio
 import json
 import os
+import platform
+import subprocess
 import sys
 from pathlib import Path
 from typing import AsyncGenerator
@@ -40,10 +42,43 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────────────────────
 OLLAMA_BASE  = os.getenv("OLLAMA_URL", "http://localhost:11434")
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+KOKORO_DIR = Path(__file__).parent.parent / "kokoro"
 PORT         = int(os.getenv("PORT", 8080))
 HOST         = os.getenv("HOST", "127.0.0.1")
 NVIDIA_BASE  = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")
+KOKORO_URL   = os.getenv("KOKORO_URL", "http://127.0.0.1:8880/v1/audio/speech")
+
+def get_kokoro_health_url():
+    """Derive /health from KOKORO_URL (supports custom host/port like the TTS proxy)."""
+    try:
+        from urllib.parse import urlparse, urlunparse
+        parsed = urlparse(KOKORO_URL)
+        # Replace path with /health, drop query/fragment
+        health_path = parsed._replace(path="/health", query="", fragment="")
+        return urlunparse(health_path)
+    except Exception:
+        return "http://127.0.0.1:8880/health"
+
+
+def parse_nvidia_smi(smi_raw):
+    """Pure helper mirroring JS parseNvidiaSmi (first line for multi-GPU, guards)."""
+    if not smi_raw or not isinstance(smi_raw, str):
+        return None
+    first_line = smi_raw.splitlines()[0].strip() if smi_raw else ""
+    if not first_line:
+        return None
+    parts = [p.strip() for p in first_line.split(",", 1)]
+    if len(parts) < 2:
+        return None
+    gpu_name, vram_str = parts
+    try:
+        vram_mb = int(vram_str)
+    except ValueError:
+        return None
+    if not gpu_name or vram_mb <= 0:
+        return None
+    return {"gpu": gpu_name, "vramMB": vram_mb}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # App
@@ -177,11 +212,141 @@ async def status():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Kokoro TTS server-offload proxy (mirrors backend/server.js)
+# /hazy/tts, /hazy/tts/health, /hazy/hardware for GPU/CPU scan + proxy to kokoro-fastapi
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/hazy/tts")
+async def hazy_tts(request: Request):
+    body = await request.json()
+    text = (body or {}).get("text", "")
+    voice = (body or {}).get("voice", "af_heart")
+    speed = (body or {}).get("speed", 1.0)
+
+    if not text or not str(text).strip():
+        return Response(content=json.dumps({"error": "No text provided"}), media_type="application/json", status_code=400)
+
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            # Note on abort: client disconnect on /hazy/tts does not auto-cancel this upstream httpx post
+            # (browser->hazy abort works; hazy->kokoro remains fire-and-forget on py side to keep change minimal.
+            # JS handleHazyTTS wires AbortController + close listeners for real upstream cancel.)
+            kokoro_res = await client.post(
+                KOKORO_URL,
+                json={
+                    "model": "kokoro",
+                    "input": text,
+                    "voice": voice,
+                    "speed": speed,
+                    "response_format": "wav"
+                },
+                headers={"Content-Type": "application/json"}
+            )
+            kokoro_res.raise_for_status()
+
+            async def guarded_stream():
+                # Guard to avoid partial + error body corruption on upstream/stream failure after headers (mirror JS fix)
+                try:
+                    async for chunk in kokoro_res.aiter_bytes():
+                        yield chunk
+                except Exception as stream_err:
+                    print("[TTS Proxy] stream error after start:", str(stream_err))
+                    # Do not yield error JSON into audio; just stop
+                    return
+
+            return StreamingResponse(
+                guarded_stream(),
+                media_type="audio/wav",
+                headers={"Transfer-Encoding": "chunked"}
+            )
+    except Exception as e:
+        print("[TTS Proxy]", str(e))
+        return Response(
+            content=json.dumps({"error": "Kokoro TTS unavailable", "detail": str(e)}),
+            media_type="application/json",
+            status_code=503
+        )
+
+@app.get("/hazy/tts/health")
+async def hazy_tts_health():
+    try:
+        health_url = get_kokoro_health_url()
+        async with httpx.AsyncClient(timeout=5) as client:
+            check = await client.get(health_url)
+            data = check.json()
+            return {"status": "ok", "kokoro": data}
+    except Exception:
+        return Response(
+            content=json.dumps({"status": "unavailable"}),
+            media_type="application/json",
+            status_code=503
+        )
+
+@app.get("/hazy/hardware")
+async def hazy_hardware():
+    info = {
+        "platform": sys.platform,
+        "cpuCores": os.cpu_count() or 0,
+        "cpuModel": platform.processor() or "Unknown",
+        "totalRAM": 0,
+        "freeRAM": 0,
+        "gpu": None,
+        "cudaAvailable": False,
+        "recommendedDevice": "cpu"
+    }
+    # Cross-platform RAM (prefer psutil if installed for accurate Windows + Linux; fallback keeps 0 but no crash)
+    try:
+        import psutil
+        vm = psutil.virtual_memory()
+        info["totalRAM"] = round(vm.total / (1024 ** 3))
+        info["freeRAM"] = round(vm.available / (1024 ** 3))
+    except ImportError:
+        # Fallback for no-psutil (common on minimal envs): linux sysconf or leave 0; Windows will be 0 until psutil added
+        try:
+            if hasattr(os, "sysconf") and os.sysconf:
+                page_size = os.sysconf("SC_PAGE_SIZE")
+                phys_pages = os.sysconf("SC_PHYS_PAGES")
+                info["totalRAM"] = round(page_size * phys_pages / (1024 ** 3))
+        except Exception:
+            pass
+    # Best-effort CPU model (already set via platform; /proc for more detail on linux)
+    try:
+        if os.name == 'posix' and info["cpuModel"] in (None, "", "Unknown"):
+            with open('/proc/cpuinfo') as f:
+                for line in f:
+                    if 'model name' in line:
+                        info["cpuModel"] = line.split(':', 1)[1].strip()
+                        break
+    except Exception:
+        pass
+    # Try NVIDIA via nvidia-smi (subprocess) — use parse helper for multi-GPU robustness
+    try:
+        smi_raw = subprocess.check_output(
+            ['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'],
+            timeout=3
+        ).decode().strip()
+        parsed = parse_nvidia_smi(smi_raw)
+        if parsed:
+            info["gpu"] = parsed["gpu"]
+            info["vramMB"] = parsed["vramMB"]
+            info["cudaAvailable"] = True
+            info["recommendedDevice"] = "cuda"
+        elif smi_raw:
+            print("[Hazy Hardware] nvidia-smi parse invalid, raw:", smi_raw)
+    except Exception:
+        pass
+    if info.get("cudaAvailable") and info.get("vramMB", 0) < 2048:
+        info["recommendedDevice"] = "cpu"
+        info["gpuWarning"] = "VRAM too low for GPU inference — falling back to CPU"
+    return info
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Serve frontend static files
 # ─────────────────────────────────────────────────────────────────────────────
 if FRONTEND_DIR.exists():
     # Mount static assets
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+    app.mount("/kokoro", StaticFiles(directory=str(KOKORO_DIR)), name="kokoro")
 
     @app.get("/")
     async def serve_index():

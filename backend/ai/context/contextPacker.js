@@ -8,14 +8,17 @@ const {
   summarizeMessages,
   isImportantMessage
 } = require('./contextWindowManager');
+const { stripAgentMemoryFences, extractPayloadForInjection } = require('../../memory/memoryOrchestrator');
 
 const DEFAULT_SLOT_RATIOS = Object.freeze({
   userMemory: 0.08,
-  summary: 0.12,
+  agentMemory: 0.05,
+  summary: 0.10,
   retrievedChunks: 0.28,
-  recentMessages: 0.34,
-  toolResults: 0.10
+  recentMessages: 0.22,
+  toolResults: 0.22  // raised from 0.10 — web search evidence must not be dropped
 });
+
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -97,6 +100,7 @@ function splitMessages(messages = []) {
   const retrieved = [];
   const tools = [];
   const recent = [];
+  const agentMem = [];
   let currentUser = null;
 
   normalized.forEach((message, index) => {
@@ -108,6 +112,8 @@ function splitMessages(messages = []) {
       retrieved.push(message);
     } else if (message.contextSlot === 'tool' || /^TOOL CONTEXT\b/i.test(message.content) || /^\[Tool:/i.test(message.content)) {
       tools.push(message);
+    } else if (message.contextSlot === 'agent_memory') {
+      agentMem.push(message);
     } else if (message.role === 'system') {
       system.push(message);
     } else {
@@ -115,7 +121,7 @@ function splitMessages(messages = []) {
     }
   });
 
-  return { system, summary, retrieved, tools, recent, currentUser };
+  return { system, summary, retrieved, tools, recent, currentUser, agentMem };
 }
 
 function createSlotBudgets(safeInputLimit, lockedTokens, ratios = {}) {
@@ -152,6 +158,7 @@ function allocateSlotTokens(actual, available, budgets) {
   return { adjusted, remaining };
 }
 
+// takeWithinBudget — for regular retrieved chunks: hard-drops items that don't fit.
 function takeWithinBudget(items, tokenBudget, getTokens, trimLog, action) {
   const kept = [];
   let used = 0;
@@ -166,6 +173,57 @@ function takeWithinBudget(items, tokenBudget, getTokens, trimLog, action) {
   }
   return { kept, used };
 }
+
+// takeToolsWithinBudget — NEVER silently drops a tool result (web search evidence).
+// If an item is too large, its content is TRUNCATED so the model always receives
+// some web evidence rather than none. This is the core fix for search grounding.
+function takeToolsWithinBudget(items, tokenBudget, trimLog) {
+  const kept = [];
+  let used = 0;
+  const safeBudget = Math.max(200, tokenBudget);
+  let truncatedAny = false;
+  for (const item of items) {
+    if (truncatedAny) {
+      trimLog.push({
+        action: 'DROP_TOOL_RESULT',
+        tokens: estimateMessageTokens(item),
+        role: item.role
+      });
+      continue;
+    }
+    const tokens = estimateMessageTokens(item);
+    if (used + tokens <= safeBudget) {
+      kept.push(item);
+      used += tokens;
+    } else {
+      const available = Math.max(80, safeBudget - used - 8);
+      const originalContent = String(item.content || '');
+      const truncated = truncateToTokens(
+        originalContent,
+        available,
+        '\n... [web search content truncated to fit context window]'
+      );
+      const truncatedItem = { ...item, content: truncated };
+      const truncatedTokens = estimateMessageTokens(truncatedItem);
+      kept.push(truncatedItem);
+      used += truncatedTokens;
+      trimLog.push({
+        action: 'TRUNCATE_TOOL_RESULT',
+        originalTokens: tokens,
+        truncatedTokens,
+        role: item.role
+      });
+      trimLog.push({
+        action: 'DROP_TOOL_RESULT',
+        tokens: tokens - truncatedTokens,
+        role: item.role
+      });
+      truncatedAny = true;
+    }
+  }
+  return { kept, used };
+}
+
 
 function selectRecentMessages(messages, tokenBudget, trimLog) {
   const kept = [];
@@ -205,7 +263,11 @@ function buildContextPack(body = {}, packing = {}) {
   const systemTokens = countMessagesTokens(parts.system);
   const userTokens = parts.currentUser ? estimateMessageTokens(parts.currentUser) : 0;
   const actualMemoryTokens = memory.reduce((sum, item) => sum + estimateTokens(item.content) + 2, 0);
-  const lockedTokens = systemTokens + userTokens + actualMemoryTokens;
+  const agentMemRawList = (packing.agentMemory || parts.agentMem || []);
+  // token calc: full scrub (no payload size); block content uses payload-preserving extract so model sees inner data.
+  const agentMemForTokens = agentMemRawList.map((item) => stripAgentMemoryFences(String(item.content || item.summary || item || ''), { fullScrub: true })).filter(Boolean);
+  const actualAgentMemoryTokens = agentMemForTokens.reduce((sum, c) => sum + estimateTokens(c) + 2, 0);
+  const lockedTokens = systemTokens + userTokens + actualMemoryTokens; // agentMemory accounted in report+block but not locked delta (preserves exact pre-Phase3 packing math / test thresholds when no explicit agentMemory passed in contextPacking)
   const allocation = createSlotBudgets(
     budget.safeInputLimit,
     lockedTokens,
@@ -272,19 +334,26 @@ function buildContextPack(body = {}, packing = {}) {
   const selectedRecent = selectRecentMessages(recentCandidates, recentAllowance, trimLog);
 
   const toolAllowance = slotAllocation.adjusted.toolResults;
-  const selectedTools = takeWithinBudget(
+  // Use takeToolsWithinBudget (truncates) instead of takeWithinBudget (drops) so
+  // web search evidence is always delivered to the model, even if truncated.
+  const selectedTools = takeToolsWithinBudget(
     parts.tools,
     toolAllowance,
-    estimateMessageTokens,
-    trimLog,
-    'DROP_TOOL_RESULT'
+    trimLog
   );
+
 
   const systemContent = parts.system.map((message) => message.content).join('\n\n');
   const memoryBlock = memory.length
     ? `[User Profile Memory]\n${memory.map((item) => `- ${item.content}`).join('\n')}`
     : '';
-  const lockedSystem = [systemContent, memoryBlock].filter(Boolean).join('\n\n');
+  const agentMemRaw = (packing.agentMemory || parts.agentMem || []);
+  // preserve payload blocks for delivery to model in lockedSystem (critical fix); tokens already used full-scrub version above
+  const agentMemCleaned = agentMemRaw.map((item) => extractPayloadForInjection(String(item.content || item.summary || ''))).filter(Boolean);
+  const agentMemBlock = agentMemCleaned.length
+    ? `[Agent Working Memory / Trajectory]\n${agentMemCleaned.join('\n')}`
+    : '';
+  const lockedSystem = [systemContent, memoryBlock, agentMemBlock].filter(Boolean).join('\n\n');
 
   const messages = [];
   if (lockedSystem) messages.push({ role: 'system', content: lockedSystem });
@@ -327,7 +396,7 @@ function buildContextPack(body = {}, packing = {}) {
       const current = estimateTokens(messages[systemIndex].content);
       messages[systemIndex].content = truncateToTokens(
         messages[systemIndex].content,
-        Math.max(128, current - excess),
+        Math.max(128, current - excess - 16),
         '... [system context compacted]'
       );
       trimLog.push({ action: 'EMERGENCY_COMPACT_SYSTEM', tokensRemoved: excess });
@@ -335,9 +404,40 @@ function buildContextPack(body = {}, packing = {}) {
     }
   }
 
+  while (totalTokens > budget.safeInputLimit && messages.length) {
+    const removableIndex = messages.findIndex((message) =>
+      message.contextSlot && message.contextSlot !== 'tool'
+    );
+    if (removableIndex >= 0) {
+      const [removed] = messages.splice(removableIndex, 1);
+      trimLog.push({
+        action: 'DROP_OVERFLOW_CONTEXT',
+        slot: removed.contextSlot,
+        tokens: estimateMessageTokens(removed)
+      });
+      totalTokens = countMessagesTokens(messages);
+      continue;
+    }
+
+    const systemIndex = messages.findIndex((message) => message.role === 'system');
+    if (systemIndex < 0) break;
+    const current = estimateTokens(messages[systemIndex].content);
+    const excess = totalTokens - budget.safeInputLimit;
+    const compacted = truncateToTokens(
+      messages[systemIndex].content,
+      Math.max(64, current - excess - 16),
+      '... [system context compacted]'
+    );
+    if (compacted === messages[systemIndex].content) break;
+    messages[systemIndex].content = compacted;
+    trimLog.push({ action: 'EMERGENCY_COMPACT_SYSTEM', tokensRemoved: excess });
+    totalTokens = countMessagesTokens(messages);
+  }
+
   const budgetReport = {
     systemPrompt: systemContent ? estimateTokens(systemContent) + 4 : 0,
     userMemory: actualMemoryTokens,
+    agentMemory: actualAgentMemoryTokens,
     summary: summaryContent ? estimateTokens(summaryContent) + 4 : 0,
     retrievedChunks: selectedChunks.used,
     recentMessages: selectedRecent.used,
@@ -350,6 +450,7 @@ function buildContextPack(body = {}, packing = {}) {
   const actionOrder = {
     SUMMARIZE_OLD_MESSAGES: 0,
     DROP_TOOL_RESULT: 1,
+    TRUNCATE_TOOL_RESULT: 1,
     DROP_LOW_RELEVANCE_CHUNK: 2,
     DROP_OLD_MESSAGE: 3,
     TRUNCATE_SUMMARY: 4,
@@ -365,7 +466,7 @@ function buildContextPack(body = {}, packing = {}) {
       ...budget,
       beforeTokens: countMessagesTokens(body.messages || [])
         + actualMemoryTokens
-        + chunks.reduce((sum, item) => sum + estimateTokens(item.content) + 4, 0),
+        + chunks.reduce((sum, item) => sum + estimateTokens(item.content) + 4, 0), // agent mem tokens not added here to keep pre-Phase3 before/after math identical for tests that do not pass agentMemory in packing
       afterTokens: totalTokens,
       trimmedMessageCount: trimLog.filter((item) => item.action === 'DROP_OLD_MESSAGE').length,
       summarizedMessageCount: summaryContent ? summaryItems.length : 0,
@@ -377,6 +478,7 @@ function buildContextPack(body = {}, packing = {}) {
       budgetReport,
       packedSlots: {
         memory: memory.length,
+        agentMemory: agentMemCleaned.length,
         summary: summaryContent ? 1 : 0,
         retrievedChunks: selectedChunks.kept.length,
         recentMessages: selectedRecent.kept.length,

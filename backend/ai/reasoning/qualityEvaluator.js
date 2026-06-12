@@ -63,6 +63,7 @@ function majorityVote(answers = []) {
 // FIX #3 — selfConsistencyRecommended was flagged in taskClassifier and
 // surfaced in reasoningController but majorityVote() was never wired up
 // to anything. This helper is the missing bridge.
+// Phase 2: evaluateReasoningResponse + runSelfConsistency now callable from inside agent loop via getLoopReviewers.
 //
 // Usage in your orchestrator:
 //

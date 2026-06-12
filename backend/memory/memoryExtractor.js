@@ -142,6 +142,44 @@ function extractMemoryCandidates(message = "") {
   return [...unique.values()];
 }
 
+function extractAgentTrajectoryCandidates(text = "", context = {}) {
+  // Phase 3 extension: agent-specific candidates e.g. from tool results, plan updates, failed attempts, artifacts, questions.
+  // Called from recordTurn (user content) and from MemoryOrchestrator sync / BuiltIn sync_turn (full messages/trajectory).
+  const t = String(text || "").trim();
+  if (!t || containsSecret(t)) return [];
+  const cands = [];
+  const add = (type, keySrc, value, conf) => {
+    const cleaned = firstClause(value, 280);
+    if (!cleaned || cleaned.length < 3 || VAGUE_MEMORY_PATTERN.test(cleaned.toLowerCase())) return;
+    if (containsSecret(cleaned)) return;
+    cands.push({
+      type,
+      key: makeKey(keySrc || cleaned),
+      value: cleaned,
+      confidence: Math.max(0, Math.min(1, Number(conf) || 0.55))
+    });
+  };
+  if (/plan\.manage|current plan|task list|in_progress|add task/i.test(t)) {
+    const m = t.match(/description["\s:]+([^".,]{5,120})/i) || t.match(/plan[^.]{0,80}/i);
+    if (m) add("agent_plan", m[1] || t, m[1] || t, 0.68);
+  }
+  if (/failed|error|did not|attempt failed|exception|blocked by/i.test(t) && t.length > 20) {
+    add("failed_attempt", t, firstClause(t, 220), 0.42);
+  }
+  if (/artifact|wrote|created file|saved to|output path|ref:/i.test(t)) {
+    add("artifact_ref", t, firstClause(t, 200), 0.65);
+  }
+  if (/unresolved|stuck|open question|need to (?:verify|check|resolve|clarify)|remains to/i.test(t)) {
+    add("unresolved_question", t, firstClause(t, 160), 0.58);
+  }
+  if (context && context.planStep) {
+    add("agent_step", context.planStep, context.planStep, 0.7);
+  }
+  const uniq = new Map();
+  for (const c of cands) uniq.set(`${c.type}:${c.key}`, c);
+  return [...uniq.values()];
+}
+
 function extractMemoryRemovals(message = "") {
   const text = String(message || "").trim();
   if (!text) return [];
@@ -169,9 +207,20 @@ function extractMemoryRemovals(message = "") {
   return removals;
 }
 
+const AGENT_MEMORY_TYPES = ['agent_plan', 'agent_step', 'failed_attempt', 'artifact_ref', 'unresolved_question'];
+
+function normalizeMemoryType(type) {
+  const cleaned = cleanValue(type || 'explicit_fact', 60)
+    .toLowerCase()
+    .replace(/[^a-z0-9_:-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return cleaned || 'explicit_fact';
+}
+
 module.exports = {
   extractMemoryCandidates,
   extractMemoryRemovals,
+  extractAgentTrajectoryCandidates,
   cleanValue,
   makeKey,
   cleanName,
@@ -179,5 +228,7 @@ module.exports = {
   redactSecrets,
   SECRET_PATTERN,
   SECRET_LABEL_PATTERN,
-  SENSITIVE_PATTERN
+  SENSITIVE_PATTERN,
+  AGENT_MEMORY_TYPES,
+  normalizeMemoryType
 };

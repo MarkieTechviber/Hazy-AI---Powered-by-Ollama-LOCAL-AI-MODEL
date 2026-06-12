@@ -199,6 +199,101 @@ function normalizeAnthropicResponse(data) {
   return { type: 'final_answer', text, usage };
 }
 
+function toGeminiContents(input = []) {
+  // map internal {role, content, toolCalls, callId} to Gemini contents + systemInstruction.
+  // assistant toolCalls -> model + functionCall parts; tool results -> user + functionResponse (name via idToName scan for roundtrips); system separate.
+  const idToName = {};
+  for (const msg of input) {
+    if (msg.role === 'assistant' && Array.isArray(msg.toolCalls)) {
+      for (const call of msg.toolCalls) {
+        if (call.id && call.name) idToName[call.id] = call.name;
+      }
+    }
+  }
+  const contents = [];
+  for (const message of input.filter((item) => item.role !== 'system')) {
+    if (message.role === 'assistant' && Array.isArray(message.toolCalls)) {
+      contents.push({
+        role: 'model',
+        parts: [
+          ...(message.content ? [{ text: message.content }] : []),
+          ...message.toolCalls.map((call) => ({
+            functionCall: {
+              name: call.name,
+              args: call.arguments || {}
+            }
+          }))
+        ]
+      });
+      continue;
+    }
+    if (message.role === 'tool') {
+      const name = idToName[message.callId] || 'unknown_tool';
+      let responseObj;
+      try {
+        responseObj = JSON.parse(String(message.content || '{}'));
+      } catch {
+        responseObj = { result: String(message.content || '') };
+      }
+      contents.push({
+        role: 'user',
+        parts: [{
+          functionResponse: {
+            name,
+            response: responseObj
+          }
+        }]
+      });
+      continue;
+    }
+    contents.push({
+      role: message.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: String(message.content || '') }]
+    });
+  }
+  return contents;
+}
+
+function toGeminiTools(tools = []) {
+  if (!tools || !tools.length) return undefined;
+  return [{
+    functionDeclarations: tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description || '',
+      parameters: tool.parameters || { type: 'object', properties: {} }
+    }))
+  }];
+}
+
+function normalizeGeminiResponse(data) {
+  if (data && data.error) {
+    const message = data.error.message || 'Gemini error';
+    const err = new Error(message);
+    err.providerBody = data;
+    throw err;
+  }
+  const candidate = (data && data.candidates && data.candidates[0]) || {};
+  const parts = (candidate.content && candidate.content.parts) || [];
+  const toolCalls = parts
+    .filter((p) => p && p.functionCall)
+    .map((p) => ({
+      id: crypto.randomUUID(),
+      name: p.functionCall.name || '',
+      arguments: p.functionCall.args || {}
+    }))
+    .filter((call) => call.name);
+  const text = parts
+    .filter((p) => p && typeof p.text === 'string')
+    .map((p) => p.text)
+    .join('');
+  const usage = {
+    inputTokens: Number((data && data.usageMetadata && data.usageMetadata.promptTokenCount) || 0),
+    outputTokens: Number((data && data.usageMetadata && data.usageMetadata.candidatesTokenCount) || 0)
+  };
+  if (toolCalls.length) return { type: 'tool_calls', text, toolCalls, usage };
+  return { type: 'final_answer', text, usage };
+}
+
 function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
   const modelId = providerBody.model || cfg.defaults?.textModel || 'ollama/llama3.2';
   const provider = modelId.split('/')[0];
@@ -276,6 +371,31 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
       return normalizeAnthropicResponse(data);
     }
 
+    if (provider === 'gemini') {
+      const apiKey = getApiKey('gemini', cfg);
+      if (!apiKey) throw new Error('Gemini API key is not configured.');
+
+      const gemModel = modelId.replace(/^gemini\//, '');
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${gemModel}:generateContent`;
+      const sys = input.find((message) => message.role === 'system');
+      const body = {
+        contents: toGeminiContents(input),
+        generationConfig: {
+          temperature,
+          maxOutputTokens: providerBody.options?.max_tokens || 4096
+        }
+      };
+      if (sys && sys.content) {
+        body.systemInstruction = { parts: [{ text: sys.content }] };
+      }
+      if (tools && tools.length) {
+        body.tools = toGeminiTools(tools);
+        body.toolConfig = { functionCallingConfig: { mode: 'AUTO' } };
+      }
+      const data = await requestJson(url, { headers: { 'x-goog-api-key': apiKey }, body });
+      return normalizeGeminiResponse(data);
+    }
+
     const compatible = {
       openai: {
         url: 'https://api.openai.com/v1/chat/completions',
@@ -321,9 +441,12 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
 module.exports = {
   createProviderAgentCaller,
   normalizeAnthropicResponse,
+  normalizeGeminiResponse,
   normalizeOllamaResponse,
   normalizeOpenAIResponse,
   toAnthropicMessages,
+  toGeminiContents,
+  toGeminiTools,
   toOllamaMessages,
   toOpenAIMessages,
   toOpenAITools

@@ -15,7 +15,7 @@ const { ToolGatekeeper } = require('../agent/toolGatekeeper');
 const { runAgentTurn } = require('../agent/runAgentTurn');
 const { buildRuntimeContextBlock } = require('../agent/promptPolicy');
 const { classifyAgentMode } = require('../agent/agentTypes');
-const { createToolContext } = require('../agent/agentRuntime');
+const { createAgentRuntime, createToolContext } = require('../agent/agentRuntime');
 
 function createHarness() {
   const registry = new ToolRegistry();
@@ -214,6 +214,8 @@ test('agent loop executes tool results and stops at the configured step limit', 
   assert.equal(result.finalText, 'The tool returned hello.');
   assert.equal(result.toolCalls, 1);
   assert.deepEqual(result.usage, { inputTokens: 13, outputTokens: 8, totalTokens: 21 });
+  // NOTE (for fixed Phase 2 evidence/maintainability): This test deliberately exercises only the no-profile (reasoningProfile omitted = default null) compat path + early final_answer via mock (maxSteps:3, non-cheap 'echo' tool).
+  // Fixed behaviors (IterationBudget drive with grace guard in refund + explicit isExhausted() break at end of while body; profile-driven shouldVerify using correct modelTextForReview capture right after callModel; safe user-role synthetic "REVIEWER FEEDBACK (synthetic internal guidance...)" carrying exact "Replan: issues found... Continue exactly where you left off or adjust plan. Use current plan state and prior partial tool results..."; promptPolicy with exact formatPlanForModel leverage + richer SCRATCHPAD/CONTINUITY note *only* in plan-present branch) are intentionally not reached here. This preserves pre-existing call sites, test greenness, and "no test additions" / "compat" / "smallest change" rules. The exercised path still validates gatekeeper for real tools, usage tracking, confirmation paths, and early-final returns. See runAgentTurn.js + promptPolicy.js for the Phase 2 implementations.
 });
 
 test('runtime policy, mode classification, redaction, and rate limits are enforced', () => {
@@ -225,6 +227,8 @@ test('runtime policy, mode classification, redaction, and rate limits are enforc
     mode: 'tool_action',
     availableToolNames: ['web.search']
   }), /backend decides permissions, risk, validation, confirmation, and execution/i);
+  // NOTE (for fixed Phase 2 evidence/maintainability): This buildRuntimeContextBlock call exercises the empty-plan branch (no currentPlan passed) — produces *exactly* the original pre-change "CURRENT PLAN: (empty...)" text (no richer note).
+  // Fixed enrichment (in promptPolicy.js): uses exact `formatPlanForModel(plan)` (leverage of planStore, no duplication of markers/ids/formatting) + appends "SCRATCHPAD / CONTINUITY: ... 'continue exactly where you left off' using last task ids/status and prior outputs. Do not discard partial progress." *only inside the plan-present branch* (when plan.tasks.length > 0). Empty-plan case unchanged (avoids non-agent side-effect on shared runtimeContext callers in orchestrator/prepare). When plan active (agent use of plan.manage), the richer context + continuation language surfaces in AGENT RUNTIME CONTEXT. This test site + the plan.manage subtest (direct gatekeeper) provide evidence for leverage + conditional without new assertions or test logic.
   assert.deepEqual(redact({
     apiKey: 'secret',
     nested: { authorization: 'Bearer secret', value: 2 }
@@ -237,4 +241,54 @@ test('runtime policy, mode classification, redaction, and rate limits are enforc
   assert.equal(limiter.consume('u', { limit: 1, windowMs: 100 }, 0).allowed, true);
   assert.equal(limiter.consume('u', { limit: 1, windowMs: 100 }, 1).allowed, false);
   assert.equal(limiter.consume('u', { limit: 1, windowMs: 100 }, 101).allowed, true);
+});
+
+test('plan.manage tool is registered and can create / list / update tasks (in-memory mode)', async () => {
+  const runtime = createAgentRuntime({ auditPath: false, confirmationPath: false, planPath: false });
+  const ctx = createToolContext({ conversationId: 'plan-test-chat', userId: 'tester' }, {
+    services: { planStore: runtime.planStore }
+  });
+  const tools = runtime.registry.getModelTools(ctx);
+  const planTool = tools.find((t) => t.name === 'plan.manage');
+  assert.ok(planTool, 'plan.manage tool should be registered on the agent runtime');
+
+  // list when empty
+  let res = await runtime.gatekeeper.validateAndMaybeRun({
+    ctx,
+    toolCall: { id: 'p1', name: 'plan.manage', arguments: { action: 'list' } }
+  });
+  assert.equal(res.status, 'executed');
+  assert.ok(res.result.data.formatted.includes('No tasks'));
+
+  // add
+  res = await runtime.gatekeeper.validateAndMaybeRun({
+    ctx,
+    toolCall: { id: 'p2', name: 'plan.manage', arguments: { action: 'add', description: 'Research the requirements' } }
+  });
+  assert.equal(res.status, 'executed');
+  assert.ok(res.result.data.plan.tasks.length === 1);
+  const taskId = res.result.data.plan.tasks[0].id;
+
+  // update status
+  res = await runtime.gatekeeper.validateAndMaybeRun({
+    ctx,
+    toolCall: { id: 'p3', name: 'plan.manage', arguments: { action: 'update', taskId, status: 'in_progress' } }
+  });
+  assert.equal(res.status, 'executed');
+  assert.equal(res.result.data.plan.tasks[0].status, 'in_progress');
+
+  // list again shows the update
+  res = await runtime.gatekeeper.validateAndMaybeRun({
+    ctx,
+    toolCall: { id: 'p4', name: 'plan.manage', arguments: { action: 'list' } }
+  });
+  assert.ok(res.result.data.formatted.includes('in_progress'));
+
+  // clear
+  res = await runtime.gatekeeper.validateAndMaybeRun({
+    ctx,
+    toolCall: { id: 'p5', name: 'plan.manage', arguments: { action: 'clear' } }
+  });
+  assert.equal(res.status, 'executed');
+  assert.equal(res.result.data.plan.tasks.length, 0);
 });

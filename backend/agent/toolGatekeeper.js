@@ -102,6 +102,43 @@ class ToolGatekeeper {
       );
     }
 
+    // Guardrail support: tools (or internal policy) can return synthetic result for "denied, here is why"
+    // e.g. for high-risk or future code sandbox. Stays compatible with normal {ok,data} result shape.
+    // Synthetic path is after schema/rate/role/toolset but can short-circuit before execute/confirm.
+    let guardDecision = null;
+    if (typeof tool.guardrail === 'function') {
+      try {
+        guardDecision = tool.guardrail(parsed.data, ctx);
+      } catch (e) {
+        // non-fatal; fall through to normal execute
+      }
+    }
+    if (guardDecision && guardDecision.synthetic) {
+      const result = {
+        ok: true,
+        data: {
+          synthetic: true,
+          reason: guardDecision.reason || 'denied by guardrail',
+          suggestion: guardDecision.suggestion || null,
+          ...(guardDecision.data || {})
+        },
+        metrics: { latencyMs: 0 }
+      };
+      this.audit.log({
+        requestId: ctx.requestId,
+        userId: ctx.userId,
+        chatId: ctx.chatId,
+        toolName: tool.name,
+        risk: tool.risk,
+        args: parsed.data,
+        result,
+        status: 'synthetic_guardrail',
+        errorCode: null,
+        latencyMs: 0
+      });
+      return { status: 'executed', result };
+    }
+
     if (tool.requiresConfirmation && !confirmed) {
       const confirmation = this.confirmations.create({
         ctx,
@@ -186,6 +223,36 @@ class ToolGatekeeper {
         arguments: decision.confirmation.args
       }
     });
+  }
+
+  // Concurrent dispatch for independent reads (risk=read, no confirm, toolset ok).
+  // Preserves result order. Falls back to sequential otherwise.
+  // Lives in gatekeeper (the single law) per spec. Existing single callers unaffected.
+  async validateAndRunBatch(toolCalls = [], ctx = {}, options = {}) {
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+      return [];
+    }
+    const allSafeForParallel = toolCalls.every((tc) => {
+      const t = this.registry.get(tc && tc.name);
+      if (!t) return false;
+      if (!toolsetEnabled(t, ctx)) return false;
+      if (Array.isArray(t.allowedRoles) && !t.allowedRoles.includes(ctx.role)) return false;
+      return t.risk === 'read' && t.requiresConfirmation !== true;
+    });
+    if (allSafeForParallel && toolCalls.length > 1) {
+      try {
+        const promises = toolCalls.map((tc) => this.validateAndMaybeRun({ ctx, toolCall: tc }));
+        return await Promise.all(promises);
+      } catch (e) {
+        // non-fatal: fall back to sequential
+      }
+    }
+    // sequential path preserves order, used for writes/mixed/confirmed
+    const out = [];
+    for (const tc of toolCalls) {
+      out.push(await this.validateAndMaybeRun({ ctx, toolCall: tc }));
+    }
+    return out;
   }
 }
 

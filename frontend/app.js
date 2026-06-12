@@ -143,35 +143,35 @@ HARD RULES:
 
 // All supported programming languages for the Code Builder picker
 const CODE_LANGUAGES = [
-  { label: 'Auto - Hazy decides', value: 'auto',        ext: '',      icon: '' },
-  { label: 'Python',         value: 'python',      ext: 'py',    icon: '' },
-  { label: 'Java',           value: 'java',        ext: 'java',  icon: '' },
-  { label: 'C++',            value: 'cpp',         ext: 'cpp',   icon: '' },
-  { label: 'C',              value: 'c',           ext: 'c',     icon: '' },
-  { label: 'C#',             value: 'csharp',      ext: 'cs',    icon: '' },
-  { label: 'JavaScript',     value: 'javascript',  ext: 'js',    icon: '' },
-  { label: 'TypeScript',     value: 'typescript',  ext: 'ts',    icon: '' },
-  { label: 'Go',             value: 'go',          ext: 'go',    icon: '' },
-  { label: 'Rust',           value: 'rust',        ext: 'rs',    icon: '' },
-  { label: 'Swift',          value: 'swift',       ext: 'swift', icon: '' },
-  { label: 'Kotlin',         value: 'kotlin',      ext: 'kt',    icon: '' },
-  { label: 'Ruby',           value: 'ruby',        ext: 'rb',    icon: '' },
-  { label: 'PHP',            value: 'php',         ext: 'php',   icon: '' },
-  { label: 'R',              value: 'r',           ext: 'r',     icon: '' },
-  { label: 'Dart',           value: 'dart',        ext: 'dart',  icon: '' },
-  { label: 'Lua',            value: 'lua',         ext: 'lua',   icon: '' },
-  { label: 'Perl',           value: 'perl',        ext: 'pl',    icon: '' },
-  { label: 'Scala',          value: 'scala',       ext: 'scala', icon: '' },
-  { label: 'Haskell',        value: 'haskell',     ext: 'hs',    icon: '' },
-  { label: 'Elixir',         value: 'elixir',      ext: 'ex',    icon: '' },
-  { label: 'Clojure',        value: 'clojure',     ext: 'clj',   icon: '' },
-  { label: 'Shell / Bash',   value: 'bash',        ext: 'sh',    icon: '' },
-  { label: 'PowerShell',     value: 'powershell',  ext: 'ps1',   icon: '' },
-  { label: 'SQL',            value: 'sql',         ext: 'sql',   icon: '' },
-  { label: 'Assembly',       value: 'asm',         ext: 'asm',   icon: '' },
-  { label: 'MATLAB',         value: 'matlab',      ext: 'm',     icon: '' },
-  { label: 'Fortran',        value: 'fortran',     ext: 'f90',   icon: '' },
-  { label: 'COBOL',          value: 'cobol',       ext: 'cob',   icon: '' },
+  { label: 'Auto - Hazy decides', value: 'auto', ext: '', icon: '' },
+  { label: 'Python', value: 'python', ext: 'py', icon: '' },
+  { label: 'Java', value: 'java', ext: 'java', icon: '' },
+  { label: 'C++', value: 'cpp', ext: 'cpp', icon: '' },
+  { label: 'C', value: 'c', ext: 'c', icon: '' },
+  { label: 'C#', value: 'csharp', ext: 'cs', icon: '' },
+  { label: 'JavaScript', value: 'javascript', ext: 'js', icon: '' },
+  { label: 'TypeScript', value: 'typescript', ext: 'ts', icon: '' },
+  { label: 'Go', value: 'go', ext: 'go', icon: '' },
+  { label: 'Rust', value: 'rust', ext: 'rs', icon: '' },
+  { label: 'Swift', value: 'swift', ext: 'swift', icon: '' },
+  { label: 'Kotlin', value: 'kotlin', ext: 'kt', icon: '' },
+  { label: 'Ruby', value: 'ruby', ext: 'rb', icon: '' },
+  { label: 'PHP', value: 'php', ext: 'php', icon: '' },
+  { label: 'R', value: 'r', ext: 'r', icon: '' },
+  { label: 'Dart', value: 'dart', ext: 'dart', icon: '' },
+  { label: 'Lua', value: 'lua', ext: 'lua', icon: '' },
+  { label: 'Perl', value: 'perl', ext: 'pl', icon: '' },
+  { label: 'Scala', value: 'scala', ext: 'scala', icon: '' },
+  { label: 'Haskell', value: 'haskell', ext: 'hs', icon: '' },
+  { label: 'Elixir', value: 'elixir', ext: 'ex', icon: '' },
+  { label: 'Clojure', value: 'clojure', ext: 'clj', icon: '' },
+  { label: 'Shell / Bash', value: 'bash', ext: 'sh', icon: '' },
+  { label: 'PowerShell', value: 'powershell', ext: 'ps1', icon: '' },
+  { label: 'SQL', value: 'sql', ext: 'sql', icon: '' },
+  { label: 'Assembly', value: 'asm', ext: 'asm', icon: '' },
+  { label: 'MATLAB', value: 'matlab', ext: 'm', icon: '' },
+  { label: 'Fortran', value: 'fortran', ext: 'f90', icon: '' },
+  { label: 'COBOL', value: 'cobol', ext: 'cob', icon: '' },
 ];
 
 const HAZY_LOGO_BY_THEME = {
@@ -241,6 +241,13 @@ KNOWN LIMITATIONS (be upfront about these):
   ttsSpeed: 1.0,
   tpsPiperReady: false,     // model loaded flag
   ttsPiperLoading: false,
+  voiceEnabled: false,
+  voiceVoice: 'af_heart',
+  voiceSpeed: 1.0,
+  voiceVolume: 100,
+  voiceAutoplay: true,
+  voicePreferGPU: true,
+  voiceDevice: 'auto', // NEW per refactor plan: 'auto' | 'cuda' | 'cpu' (informs hardware scan / server start)
   renameTargetId: null,
   // Builder
   mode: 'chat',
@@ -270,153 +277,126 @@ KNOWN LIMITATIONS (be upfront about these):
   scenarioCharRole: '',
   scenarioSetting: '',
   // Appearance
-  fontSize:      '14px',
-  density:       'normal',
-  codeHL:        true,
-  markdown:      true,
+  fontSize: '14px',
+  density: 'normal',
+  codeHL: true,
+  markdown: true,
   repeatPenalty: 1.1,
-  topP:          0.92,
-  contextSize:   4096,
+  topP: 0.92,
+  contextSize: 4096,
 };
-
-// ========================
-// CONFIG (pr-3: extended from pr-1 patterns for hermes web logic features)
-// All new typography/legibility + tool/live/research cards are behind CONFIG toggles.
-// No feature flags hard-coded true/false outside this; typography uses CSS vars only.
-// ========================
-const CONFIG = {
-  enableToolCards: true,
-  enableLiveOutput: true,
-  typographyScale: 1.0,
-  enableResearchCards: true,
-  enableCitationsInTranscript: true,
-  // etc per PR spec for configurable hermes-inspired inside-chat research
-};
-
-// Apply typography config to CSS vars (uses scale from CONFIG; base/min defined in style.css; zero hard-coded px/rem here)
-try {
-  const scale = Number(CONFIG.typographyScale) || 1;
-  if (typeof document !== 'undefined' && document.documentElement) {
-    document.documentElement.style.setProperty('--hazy-typography-scale', scale);
-  }
-} catch (_) { /* safe for non-DOM test contexts */ }
 
 // ========================
 // DOM refs
 // ========================
 const $ = id => document.getElementById(id);
 const el = {
-  chatInput:          $('chatInput'),
-  sendBtn:            $('sendBtn'),
-  stopBtn:            $('stopBtn'),
-  reasoningInstantBtn:$('reasoningInstantBtn'),
-  reasoningDeepBtn:   $('reasoningDeepBtn'),
-  messagesArea:       $('messagesArea'),
-  welcomeScreen:      $('welcomeScreen'),
-  chatContainer:      $('chatContainer'),
-  chatHistory:        $('chatHistory'),
-  charCount:          $('charCount'),
-  currentModelName:   $('currentModelName'),
-  modelList:          $('modelList'),
-  modelSelector:      $('modelSelector'),
-  modelDropdown:      $('modelDropdown'),
-  statusDot:          $('statusDot'),
-  statusText:         $('statusText'),
-  newChatBtn:         $('newChatBtn'),
-  clearChatBtn:       $('clearChatBtn'),
-  settingsBtn:        $('settingsBtn'),
-  settingsModal:      $('settingsModal'),
-  settingsClose:      $('settingsClose'),
-  settingsSaveBtn:    $('settingsSaveBtn'),
-  settingsCancelBtn:  $('settingsCancelBtn'),
-  ollamaUrl:          $('ollamaUrl'),
-  systemPrompt:       $('systemPrompt'),
-  temperature:        $('temperature'),
-  tempLabel:          $('tempLabel'),
-  maxTokens:          $('maxTokens'),
-  maxTokensLabel:     $('maxTokensLabel'),
-  toastContainer:     $('toastContainer'),
-  sidebar:            $('sidebar'),
-  sidebarToggle:      $('sidebarToggle'),
-  mobileSidebarToggle:$('mobileSidebarToggle'),
-  profileMenuBtn:     $('profileMenuBtn'),
-  profileMenu:        $('profileMenu'),
-  suggestionGrid:     $('suggestionGrid'),
-  exportBtn:          $('exportBtn'),
-  ttsToggleBtn:       $('ttsToggleBtn'),
-  ttsLabel:           $('ttsLabel'),
-  ttsVoiceBtn:        $('ttsVoiceBtn'),
-  ttsModal:           $('ttsModal'),
-  ttsClose:           $('ttsClose'),
-  ttsEngineRadios:    null,
-  ttsVoiceSelect:     $('ttsVoiceSelect'),
-  ttsSpeedRange:      $('ttsSpeedRange'),
-  ttsSpeedLabel:      $('ttsSpeedLabel'),
-  ttsPiperStatus:     $('ttsPiperStatus'),
-  ttsTestBtn:         $('ttsTestBtn'),
-  historySearch:      $('historySearch'),
-  scrollBottomBtn:    $('scrollBottomBtn'),
-  renameModal:        $('renameModal'),
-  renameInput:        $('renameInput'),
-  renameClose:        $('renameClose'),
-  renameCancelBtn:    $('renameCancelBtn'),
-  renameSaveBtn:      $('renameSaveBtn'),
+  chatInput: $('chatInput'),
+  sendBtn: $('sendBtn'),
+  stopBtn: $('stopBtn'),
+  reasoningInstantBtn: $('reasoningInstantBtn'),
+  reasoningDeepBtn: $('reasoningDeepBtn'),
+  messagesArea: $('messagesArea'),
+  welcomeScreen: $('welcomeScreen'),
+  chatContainer: $('chatContainer'),
+  chatHistory: $('chatHistory'),
+  charCount: $('charCount'),
+  currentModelName: $('currentModelName'),
+  modelList: $('modelList'),
+  modelSelector: $('modelSelector'),
+  modelDropdown: $('modelDropdown'),
+  statusDot: $('statusDot'),
+  statusText: $('statusText'),
+  newChatBtn: $('newChatBtn'),
+  clearChatBtn: $('clearChatBtn'),
+  settingsBtn: $('settingsBtn'),
+  settingsModal: $('settingsModal'),
+  settingsClose: $('settingsClose'),
+  settingsSaveBtn: $('settingsSaveBtn'),
+  settingsCancelBtn: $('settingsCancelBtn'),
+  ollamaUrl: $('ollamaUrl'),
+  systemPrompt: $('systemPrompt'),
+  temperature: $('temperature'),
+  tempLabel: $('tempLabel'),
+  maxTokens: $('maxTokens'),
+  maxTokensLabel: $('maxTokensLabel'),
+  toastContainer: $('toastContainer'),
+  sidebar: $('sidebar'),
+  sidebarToggle: $('sidebarToggle'),
+  mobileSidebarToggle: $('mobileSidebarToggle'),
+  profileMenuBtn: $('profileMenuBtn'),
+  profileMenu: $('profileMenu'),
+  suggestionGrid: $('suggestionGrid'),
+  exportBtn: $('exportBtn'),
+  ttsToggleBtn: $('ttsToggleBtn'),
+  ttsLabel: $('ttsLabel'),
+  ttsVoiceBtn: $('ttsVoiceBtn'),
+  ttsModal: $('ttsModal'),
+  ttsClose: $('ttsClose'),
+  ttsEngineRadios: null,
+  ttsVoiceSelect: $('ttsVoiceSelect'),
+  ttsSpeedRange: $('ttsSpeedRange'),
+  ttsSpeedLabel: $('ttsSpeedLabel'),
+  ttsPiperStatus: $('ttsPiperStatus'),
+  ttsTestBtn: $('ttsTestBtn'),
+  historySearch: $('historySearch'),
+  scrollBottomBtn: $('scrollBottomBtn'),
+  renameModal: $('renameModal'),
+  renameInput: $('renameInput'),
+  renameClose: $('renameClose'),
+  renameCancelBtn: $('renameCancelBtn'),
+  renameSaveBtn: $('renameSaveBtn'),
   // File upload
-  uploadBtn:          $('uploadBtn'),
-  fileInput:          $('fileInput'),
-  filePreviewStrip:   $('filePreviewStrip'),
+  uploadBtn: $('uploadBtn'),
+  fileInput: $('fileInput'),
+  filePreviewStrip: $('filePreviewStrip'),
   // Mode bar
-  modeChatBtn:        $('modeChatBtn'),
-  modeBuildBtn:       $('modeBuildBtn'),
-  modeCodeBtn:        $('modeCodeBtn'),
-  codeLangSelect:     $('codeLangSelect'),
-  modeIndicator:      $('modeIndicator'),
+  modeChatBtn: $('modeChatBtn'),
+  modeBuildBtn: $('modeBuildBtn'),
+  modeCodeBtn: $('modeCodeBtn'),
+  codeLangSelect: $('codeLangSelect'),
+  modeIndicator: $('modeIndicator'),
   // Page navigation
-  navChatBtn:         $('navChatBtn'),
-  navAgentBtn:        $('navAgentBtn'),
-  pageNav:            $('pageNav'),
-  agentPagePanel:     $('agentPagePanel'),
-  agentPageToolsList: $('agentPageToolsList'),
-  agentToolCountInline: $('agentToolCountInline'),
-  agentMaxIterationsInline: $('agentMaxIterationsInline'),
-  agentPageStatus:    $('agentPageStatus'),
+  navChatBtn: $('navChatBtn'),
+  navAgentBtn: $('navAgentBtn'),
+  pageNav: $('pageNav'),
   // Persona
-  personaBtn:         $('personaBtn'),
-  personaModal:       $('personaModal'),
-  personaClose:       $('personaClose'),
-  personaSaveBtn:     $('personaSaveBtn'),
-  personaCancelBtn:   $('personaCancelBtn'),
-  personaResetBtn:    $('personaResetBtn'),
-  personaToggle:      $('personaToggle'),
-  personaNameInput:   $('personaNameInput'),
+  personaBtn: $('personaBtn'),
+  personaModal: $('personaModal'),
+  personaClose: $('personaClose'),
+  personaSaveBtn: $('personaSaveBtn'),
+  personaCancelBtn: $('personaCancelBtn'),
+  personaResetBtn: $('personaResetBtn'),
+  personaToggle: $('personaToggle'),
+  personaNameInput: $('personaNameInput'),
   personaUserNameInput: $('personaUserNameInput'),
-  personaGender:      $('personaGender'),
-  personaLanguage:    $('personaLanguage'),
+  personaGender: $('personaGender'),
+  personaLanguage: $('personaLanguage'),
   personaStatusBadge: $('personaStatusBadge'),
-  scenarioDesc:       $('scenarioDesc'),
-  scenarioOpener:     $('scenarioOpener'),
-  scenarioUserRole:   $('scenarioUserRole'),
-  scenarioCharRole:   $('scenarioCharRole'),
-  personaPreviewBox:  $('personaPreviewBox'),
+  scenarioDesc: $('scenarioDesc'),
+  scenarioOpener: $('scenarioOpener'),
+  scenarioUserRole: $('scenarioUserRole'),
+  scenarioCharRole: $('scenarioCharRole'),
+  personaPreviewBox: $('personaPreviewBox'),
   // Builder panel
-  builderPanel:       $('builderPanel'),
+  builderPanel: $('builderPanel'),
   builderProjectName: $('builderProjectName'),
-  builderTabs:        $('builderTabs'),
-  builderBody:        $('builderBody'),
-  builderCodePane:    $('builderCodePane'),
+  builderTabs: $('builderTabs'),
+  builderBody: $('builderBody'),
+  builderCodePane: $('builderCodePane'),
   builderPreviewPane: $('builderPreviewPane'),
-  builderCode:        $('builderCode'),
-  builderFileLabel:   $('builderFileLabel'),
-  builderCopyFile:    $('builderCopyFile'),
-  builderDownload:    $('builderDownload'),
-  builderClose:       $('builderClose'),
+  builderCode: $('builderCode'),
+  builderFileLabel: $('builderFileLabel'),
+  builderCopyFile: $('builderCopyFile'),
+  builderDownload: $('builderDownload'),
+  builderClose: $('builderClose'),
   builderPreviewToggle: $('builderPreviewToggle'),
   builderFilesToggle: $('builderFilesToggle'),
-  builderRefresh:     $('builderRefresh'),
-  builderStatus:      $('builderStatus'),
-  builderFileCount:   $('builderFileCount'),
-  previewFrame:       $('previewFrame'),
-  previewWrapper:     $('previewWrapper'),
+  builderRefresh: $('builderRefresh'),
+  builderStatus: $('builderStatus'),
+  builderFileCount: $('builderFileCount'),
+  previewFrame: $('previewFrame'),
+  previewWrapper: $('previewWrapper'),
 };
 
 function getIconSvg(iconId, className = 'icon-svg') {
@@ -508,15 +488,25 @@ function normalizeFrontendIcons() {
 // ========================
 async function init() {
   loadSettings();
+  await populateVoiceList();
+  // server path: initial status; checkKokoroHealth() will poll /hazy/tts/health + hardware for real GPU/CPU label
+  updateKokoroStatus('idle', 'Kokoro loads on first use or preview.');
   await loadConversations();
   applyTheme(STATE.theme);
   applyAppearanceSettings();
   renderCodeLanguageOptions();
   normalizeFrontendIcons();
   setupEventListeners();
-  setActivePage(localStorage.getItem('hazyActivePage') || 'chat', { switchToLast: true });
+  // Start every app launch on a fresh composer instead of reopening the last thread.
+  STATE.activeConvId = null;
+  STATE.pageConversations[STATE.activePage] = null;
+  setActivePage(localStorage.getItem('hazyActivePage') || 'chat', { switchToLast: false });
+  showWelcomeScreen();
+  renderChatHistory();
   checkOllamaConnection();
   updatePersonaBadge();
+  // Poll kokoro health/hardware at startup (non-blocking)
+  checkKokoroHealth().catch(() => { });
 }
 
 // ========================
@@ -549,7 +539,7 @@ function setComposerReasoningMode(mode) {
   updateComposerReasoningToggle();
 
   let settings = {};
-  try { settings = JSON.parse(localStorage.getItem('hazy_settings') || '{}'); } catch {}
+  try { settings = JSON.parse(localStorage.getItem('hazy_settings') || '{}'); } catch { }
   localStorage.setItem('hazy_settings', JSON.stringify({
     ...settings,
     settingsVersion: SETTINGS_VERSION,
@@ -592,13 +582,10 @@ function getActivePageLabel(page = STATE.activePage) {
 }
 
 function getAgentMaxIterations() {
-  const inlineValue = Number(el.agentMaxIterationsInline?.value);
   const storedValue = Number(localStorage.getItem('hazyAgentMaxIterations'));
-  const configured = Number.isFinite(inlineValue) && inlineValue > 0
-    ? inlineValue
-    : Number.isFinite(storedValue) && storedValue > 0
-      ? storedValue
-      : STATE.agentMaxIterations;
+  const configured = Number.isFinite(storedValue) && storedValue > 0
+    ? storedValue
+    : STATE.agentMaxIterations;
   return Math.max(2, Math.min(configured || 5, 8));
 }
 
@@ -659,9 +646,9 @@ function setActivePage(page, options = {}) {
   document.body.dataset.hazyPage = nextPage;
   persistActivePage();
 
-  if (changed || options.switchToLast !== false) {
+  if (options.switchToLast !== false) {
     const activeForPage = syncActiveConversationForPage();
-    if (activeForPage && options.switchToLast !== false) {
+    if (activeForPage) {
       switchConversation(activeForPage, { preservePage: true });
     } else {
       showWelcomeScreen();
@@ -670,7 +657,6 @@ function setActivePage(page, options = {}) {
 
   renderChatHistory();
   updatePageChrome();
-  refreshAgentPageInfo();
 }
 
 function updatePageChrome() {
@@ -679,8 +665,6 @@ function updatePageChrome() {
   el.navAgentBtn?.classList.toggle('active', page === 'agent');
   el.navChatBtn?.setAttribute('aria-pressed', String(page === 'chat'));
   el.navAgentBtn?.setAttribute('aria-pressed', String(page === 'agent'));
-  if (el.agentPagePanel) el.agentPagePanel.hidden = page !== 'agent';
-  document.body.classList.toggle('agent-page-active', page === 'agent');
 
   const label = getActivePageLabel(page);
   const sectionLabel = document.getElementById('historySectionLabel');
@@ -695,64 +679,12 @@ function updatePageChrome() {
   const inputModeBar = document.getElementById('inputModeBar');
   if (inputModeBar) inputModeBar.hidden = page === 'agent';
 
-  if (el.agentMaxIterationsInline) {
-    el.agentMaxIterationsInline.value = String(getAgentMaxIterations());
-  }
-
   if (!STATE.isStreaming && el.chatInput) {
     if (page === 'agent') {
       el.chatInput.placeholder = 'Ask Hazy to research, calculate, verify, or use tools…';
     } else {
       setMode(STATE.mode || 'chat');
     }
-  }
-}
-
-async function refreshAgentPageInfo() {
-  if (normalizePage(STATE.activePage) !== 'agent') return;
-  if (el.agentPageStatus) {
-    el.agentPageStatus.textContent = `Backend tool loop ready · max ${getAgentMaxIterations()} steps`;
-  }
-  const listEl = el.agentPageToolsList;
-  if (!listEl) return;
-  listEl.innerHTML = '<div class="agent-tool-item compact"><div class="tool-info"><div class="tool-name">Loading tools…</div><div class="tool-description">Checking backend tool registry.</div></div></div>';
-
-  try {
-    let tools = [];
-    if (window.location.protocol !== 'file:') {
-      const response = await fetch('/hazy/tools', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: 'local-user',
-          conversationId: STATE.activeConvId || 'agent-preview',
-          hazy: { page: 'agent', surface: 'agentic', agentEnabled: true }
-        })
-      });
-      const data = await response.json();
-      tools = Array.isArray(data.tools) ? data.tools : [];
-    }
-    if (!tools.length && window.hazyAgent?.getToolsList) {
-      tools = window.hazyAgent.getToolsList();
-    }
-
-    if (el.agentToolCountInline) el.agentToolCountInline.textContent = String(tools.length);
-    if (!tools.length) {
-      listEl.innerHTML = '<div class="empty-history">No tools were reported yet. Start the backend server, then reopen this page.</div>';
-      return;
-    }
-    listEl.innerHTML = tools.map((tool) => `
-      <div class="agent-tool-item compact">
-        <div class="tool-icon">${tool.requiresConfirmation ? '🛡️' : '🔧'}</div>
-        <div class="tool-info">
-          <div class="tool-name">${escapeHtml(tool.name)}</div>
-          <div class="tool-description">${escapeHtml(tool.description || 'No description provided.')}</div>
-        </div>
-      </div>
-    `).join('');
-  } catch (error) {
-    if (el.agentToolCountInline) el.agentToolCountInline.textContent = '0';
-    listEl.innerHTML = `<div class="empty-history">Could not load backend tools: ${escapeHtml(error.message)}</div>`;
   }
 }
 
@@ -804,47 +736,63 @@ function syncFontSizeControls(fontSize) {
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem('hazy_settings') || '{}');
-    if (s.ollamaUrl)       STATE.ollamaUrl    = s.ollamaUrl;
+    if (s.ollamaUrl) STATE.ollamaUrl = s.ollamaUrl;
     // Only restore saved system prompt if it's from the current version
     if (s.systemPrompt && s.settingsVersion === SETTINGS_VERSION) STATE.systemPrompt = s.systemPrompt;
     if (s.temperature != null) STATE.temperature = s.temperature;
-    if (s.maxTokens)       STATE.maxTokens    = s.maxTokens;
-    if (s.model)           STATE.model        = s.model;
+    if (s.maxTokens) STATE.maxTokens = s.maxTokens;
+    if (s.model) STATE.model = s.model;
     STATE.theme = normalizeTheme(s.theme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'ink' : 'cream'));
     // Persona + Scenario
-    if (s.personaEnabled  != null) STATE.personaEnabled  = s.personaEnabled;
-    if (s.personaRelation)         STATE.personaRelation = s.personaRelation;
-    if (s.personaName)             STATE.personaName     = s.personaName;
+    if (s.personaEnabled != null) STATE.personaEnabled = s.personaEnabled;
+    if (s.personaRelation) STATE.personaRelation = s.personaRelation;
+    if (s.personaName) STATE.personaName = s.personaName;
     if (s.personaUserName != null) STATE.personaUserName = s.personaUserName;
-    if (s.personaGender)           STATE.personaGender   = s.personaGender;
-    if (s.personaTraits)           STATE.personaTraits   = s.personaTraits;
-    if (s.personaLanguage)         STATE.personaLanguage = s.personaLanguage;
-    if (s.scenarioDesc    != null) STATE.scenarioDesc    = s.scenarioDesc;
-    if (s.scenarioOpener  != null) STATE.scenarioOpener  = s.scenarioOpener;
-    if (s.scenarioUserRole!= null) STATE.scenarioUserRole= s.scenarioUserRole;
-    if (s.scenarioCharRole!= null) STATE.scenarioCharRole= s.scenarioCharRole;
+    if (s.personaGender) STATE.personaGender = s.personaGender;
+    if (s.personaTraits) STATE.personaTraits = s.personaTraits;
+    if (s.personaLanguage) STATE.personaLanguage = s.personaLanguage;
+    if (s.scenarioDesc != null) STATE.scenarioDesc = s.scenarioDesc;
+    if (s.scenarioOpener != null) STATE.scenarioOpener = s.scenarioOpener;
+    if (s.scenarioUserRole != null) STATE.scenarioUserRole = s.scenarioUserRole;
+    if (s.scenarioCharRole != null) STATE.scenarioCharRole = s.scenarioCharRole;
     if (s.scenarioSetting != null) STATE.scenarioSetting = s.scenarioSetting;
     // Appearance
-    if (s.fontSize)        STATE.fontSize       = s.fontSize;
-    if (s.density)         STATE.density        = s.density;
-    if (s.codeHL   != null) STATE.codeHL        = s.codeHL;
-    if (s.markdown != null) STATE.markdown      = s.markdown;
+    if (s.fontSize) STATE.fontSize = s.fontSize;
+    if (s.density) STATE.density = s.density;
+    if (s.codeHL != null) STATE.codeHL = s.codeHL;
+    if (s.markdown != null) STATE.markdown = s.markdown;
     if (s.repeatPenalty != null) STATE.repeatPenalty = s.repeatPenalty;
-    if (s.topP != null)          STATE.topP          = s.topP;
-    if (s.contextSize != null)   STATE.contextSize   = s.contextSize;
+    if (s.topP != null) STATE.topP = s.topP;
+    if (s.contextSize != null) STATE.contextSize = s.contextSize;
     if (s.reasoningMode != null) STATE.reasoningMode = normalizeReasoningMode(s.reasoningMode);
     if (s.showReasoningSummary != null) STATE.showReasoningSummary = s.showReasoningSummary;
 
     // Website builder settings
     if (s.showLiveCode != null) STATE.showLiveCode = s.showLiveCode;
+    STATE.voiceEnabled = s.voiceEnabled ?? false;
+    STATE.voiceVoice = s.voiceVoice || 'af_heart';
+    STATE.voiceSpeed = s.voiceSpeed ?? 1.0;
+    STATE.voiceVolume = s.voiceVolume ?? 100;
+    STATE.voiceAutoplay = s.voiceAutoplay !== false;
+    STATE.voicePreferGPU = s.voicePreferGPU !== false;
+    if (window.HAZY_VOICE_SETTINGS_STORE) {
+      const storedVoice = window.HAZY_VOICE_SETTINGS_STORE.read();
+      STATE.voiceEnabled = storedVoice.enabled ?? STATE.voiceEnabled;
+      STATE.voiceVoice = storedVoice.voice || STATE.voiceVoice;
+      STATE.voiceSpeed = storedVoice.speed ?? STATE.voiceSpeed;
+      STATE.voiceVolume = storedVoice.volume ?? STATE.voiceVolume;
+      STATE.voiceAutoplay = storedVoice.autoplay ?? STATE.voiceAutoplay;
+      STATE.voicePreferGPU = storedVoice.preferGPU ?? storedVoice.voicePreferGPU ?? STATE.voicePreferGPU;
+      STATE.voiceDevice = storedVoice.voiceDevice || STATE.voiceDevice || 'auto';
+    }
 
-    el.ollamaUrl.value            = STATE.ollamaUrl;
-    el.systemPrompt.value         = STATE.systemPrompt;
-    el.temperature.value          = STATE.temperature;
-    el.tempLabel.textContent      = STATE.temperature;
-    el.maxTokens.value            = STATE.maxTokens;
+    el.ollamaUrl.value = STATE.ollamaUrl;
+    el.systemPrompt.value = STATE.systemPrompt;
+    el.temperature.value = STATE.temperature;
+    el.tempLabel.textContent = STATE.temperature;
+    el.maxTokens.value = STATE.maxTokens;
     el.maxTokensLabel.textContent = STATE.maxTokens;
-    
+
     // Set checkbox states
     const showLiveCodeEl = document.getElementById('showLiveCode');
     if (showLiveCodeEl) showLiveCodeEl.checked = STATE.showLiveCode;
@@ -853,6 +801,7 @@ function loadSettings() {
     updateComposerReasoningToggle();
     const reasoningSummaryEl = document.getElementById('settingsReasoningSummary');
     if (reasoningSummaryEl) reasoningSummaryEl.checked = STATE.showReasoningSummary !== false;
+    syncVoiceSettingsUI();
 
     document.querySelectorAll('.theme-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.theme === STATE.theme)
@@ -867,35 +816,43 @@ function saveSettings() {
   try { new URL(rawUrl); } catch {
     showToast('Invalid Ollama URL', 'error'); return;
   }
-  STATE.ollamaUrl    = rawUrl;
+  STATE.ollamaUrl = rawUrl;
   STATE.systemPrompt = el.systemPrompt.value.trim();
-  STATE.temperature  = parseFloat(el.temperature.value);
-  STATE.maxTokens    = parseInt(el.maxTokens.value);
+  STATE.temperature = parseFloat(el.temperature.value);
+  STATE.maxTokens = parseInt(el.maxTokens.value);
 
   // Read appearance settings from the new Settings panel
-  const fontSize    = resolveFontSizeInput();
-  const density     = document.getElementById('settingsDensity')?.value     || 'normal';
-  const codeHL      = document.getElementById('settingsCodeHighlight')?.checked !== false;
-  const markdown    = document.getElementById('settingsMarkdown')?.checked    !== false;
-  const repeatPen   = parseFloat(document.getElementById('settingsRepeatPenalty')?.value || 1.1);
-  const topP        = parseFloat(document.getElementById('settingsTopP')?.value           || 0.92);
-  const ctxSize     = parseInt(document.getElementById('settingsContextSize')?.value      || 4096);
+  const fontSize = resolveFontSizeInput();
+  const density = document.getElementById('settingsDensity')?.value || 'normal';
+  const codeHL = document.getElementById('settingsCodeHighlight')?.checked !== false;
+  const markdown = document.getElementById('settingsMarkdown')?.checked !== false;
+  const repeatPen = parseFloat(document.getElementById('settingsRepeatPenalty')?.value || 1.1);
+  const topP = parseFloat(document.getElementById('settingsTopP')?.value || 0.92);
+  const ctxSize = parseInt(document.getElementById('settingsContextSize')?.value || 4096);
   const reasoningMode = normalizeReasoningMode(document.getElementById('settingsReasoningMode')?.value || 'auto');
   const showReasoningSummary = document.getElementById('settingsReasoningSummary')?.checked !== false;
 
-  STATE.fontSize    = fontSize;
-  STATE.density     = density;
-  STATE.codeHL      = codeHL;
-  STATE.markdown    = markdown;
+  STATE.fontSize = fontSize;
+  STATE.density = density;
+  STATE.codeHL = codeHL;
+  STATE.markdown = markdown;
   STATE.repeatPenalty = repeatPen;
-  STATE.topP        = topP;
+  STATE.topP = topP;
   STATE.contextSize = ctxSize;
   STATE.reasoningMode = reasoningMode;
   STATE.showReasoningSummary = showReasoningSummary;
-  
+
   // Website builder settings
   const showLiveCode = document.getElementById('showLiveCode')?.checked !== false;
   STATE.showLiveCode = showLiveCode;
+
+  STATE.voiceEnabled = document.getElementById('voiceEnabled')?.checked !== false;
+  STATE.voiceVoice = document.getElementById('voiceSelect')?.value || STATE.voiceVoice || 'af_heart';
+  STATE.voiceSpeed = parseFloat(document.getElementById('voiceSpeed')?.value || '1');
+  STATE.voiceVolume = parseInt(document.getElementById('voiceVolume')?.value || '100');
+  STATE.voiceAutoplay = document.getElementById('voiceAutoplay')?.checked !== false;
+  STATE.voicePreferGPU = document.getElementById('voicePreferGPU')?.checked !== false;
+  persistVoiceSettings();
 
   localStorage.setItem('hazy_settings', JSON.stringify({
     settingsVersion: SETTINGS_VERSION,
@@ -905,6 +862,12 @@ function saveSettings() {
     fontSize, density, codeHL, markdown, repeatPenalty: repeatPen, topP, contextSize: ctxSize,
     reasoningMode, showReasoningSummary,
     showLiveCode,
+    voiceEnabled: STATE.voiceEnabled,
+    voiceVoice: STATE.voiceVoice,
+    voiceSpeed: STATE.voiceSpeed,
+    voiceVolume: STATE.voiceVolume,
+    voiceAutoplay: STATE.voiceAutoplay,
+    voicePreferGPU: STATE.voicePreferGPU,
     personaEnabled: STATE.personaEnabled, personaRelation: STATE.personaRelation,
     personaName: STATE.personaName, personaUserName: STATE.personaUserName,
     personaGender: STATE.personaGender, personaTraits: STATE.personaTraits,
@@ -957,7 +920,7 @@ function applyAppearanceSettings() {
     document.head.appendChild(styleTag);
   }
 
-  const codeHL   = STATE.codeHL   !== false;
+  const codeHL = STATE.codeHL !== false;
   const markdown = STATE.markdown !== false;
 
   styleTag.textContent = `
@@ -970,11 +933,11 @@ function applyAppearanceSettings() {
 
   // Sync the appearance tab controls to match current STATE
   const fsEl = document.getElementById('settingsFontSize');
-  const dEl  = document.getElementById('settingsDensity');
+  const dEl = document.getElementById('settingsDensity');
   const chEl = document.getElementById('settingsCodeHighlight');
   const mdEl = document.getElementById('settingsMarkdown');
   syncFontSizeControls(fontSize);
-  if (dEl)  dEl.value  = STATE.density || 'normal';
+  if (dEl) dEl.value = STATE.density || 'normal';
   if (chEl) chEl.checked = codeHL;
   if (mdEl) mdEl.checked = markdown;
 }
@@ -993,7 +956,7 @@ const SCENARIO_PRESETS = [
     relation: 'friend',
     gender: 'neutral',
     language: 'playful',
-    traits: ['funny','teasing'],
+    traits: ['funny', 'teasing'],
     charRole: 'classmate assigned as your lab partner',
     userRole: 'new student',
     scenarioDesc: `It's a Monday morning in Chemistry class at Westbrook High. The teacher just announced random lab partner assignments for the semester. {name} slides into the seat next to you — someone you've seen in the halls but never really talked to. There's a half-finished experiment on the table, some bubbling beakers, and a worksheet neither of you has started.`,
@@ -1007,7 +970,7 @@ const SCENARIO_PRESETS = [
     relation: 'lover',
     gender: 'neutral',
     language: 'flirty',
-    traits: ['shy','romantic'],
+    traits: ['shy', 'romantic'],
     charRole: 'regular at the same coffee shop',
     userRole: 'yourself',
     scenarioDesc: `A cozy campus coffee shop on a rainy Thursday afternoon. You've been coming here every week for a month and so has {name}. You always end up at neighboring tables. Today every other seat is taken — except the one across from them. The rain is heavy outside, someone left a book on the table between you, and the barista is playing soft indie music.`,
@@ -1021,7 +984,7 @@ const SCENARIO_PRESETS = [
     relation: 'bestfriend',
     gender: 'neutral',
     language: 'warm',
-    traits: ['nostalgic','protective','emotional'],
+    traits: ['nostalgic', 'protective', 'emotional'],
     charRole: 'your childhood best friend you lost contact with',
     userRole: 'yourself',
     scenarioDesc: `You haven't seen {name} in seven years — not since your family moved away in middle school. Out of nowhere, you run into each other at your hometown's small convenience store during a holiday visit. It's late evening, the store is quiet, and you almost didn't recognize each other. There's a lot of history, a lot unsaid, and a familiar warmth you both feel immediately.`,
@@ -1035,7 +998,7 @@ const SCENARIO_PRESETS = [
     relation: 'rival',
     gender: 'neutral',
     language: 'intense',
-    traits: ['confident','sarcastic','competitive'],
+    traits: ['confident', 'sarcastic', 'competitive'],
     charRole: 'your competitive coworker who was just put on the same project',
     userRole: 'coworker',
     scenarioDesc: `You and {name} have been quietly competing for the same promotion at work for months. You've always been civil but there's clear tension. Today your manager paired you together on the biggest pitch of the quarter — due Friday. It's Tuesday. You're both sitting in a glass-walled conference room with a half-blank presentation on the screen and coffee going cold.`,
@@ -1049,7 +1012,7 @@ const SCENARIO_PRESETS = [
     relation: 'friend',
     gender: 'neutral',
     language: 'casual',
-    traits: ['mysterious','protective','adventurous'],
+    traits: ['mysterious', 'protective', 'adventurous'],
     charRole: 'a skilled ranger who has sworn to protect you',
     userRole: 'a young noble on a dangerous journey',
     scenarioDesc: `The kingdom of Aldenmoor is on the verge of war. You've been sent on a secret mission to retrieve a stolen artifact before it falls into enemy hands. {name} is the ranger hired to escort you — a quiet, capable outsider who clearly knows more about the world than they let on. You've just made camp in the Ashwood Forest after a long day of travel. The fire crackles, wolves howl somewhere in the dark, and you still have three days of dangerous road ahead.`,
@@ -1063,7 +1026,7 @@ const SCENARIO_PRESETS = [
     relation: 'friend',
     gender: 'neutral',
     language: 'playful',
-    traits: ['funny','nerdy','supportive'],
+    traits: ['funny', 'nerdy', 'supportive'],
     charRole: 'your study buddy cramming for finals',
     userRole: 'student',
     scenarioDesc: `It's 11:30 PM in the university library, finals week. You and {name} have been here since 6 PM trying to get through the most brutal exam prep of the semester. Empty coffee cups, highlighters everywhere, and a shared Google doc that's getting increasingly chaotic. The library closes in an hour and you're both still on page 4 of 22.`,
@@ -1077,7 +1040,7 @@ const SCENARIO_PRESETS = [
     relation: 'friend',
     gender: 'neutral',
     language: 'warm',
-    traits: ['funny','empathetic','honest'],
+    traits: ['funny', 'empathetic', 'honest'],
     charRole: 'your hospital room neighbor who ended up becoming your unexpected friend',
     userRole: 'patient',
     scenarioDesc: `You've been in the hospital for a minor procedure and have to stay for observation for two days. {name} is in the bed next to yours — they've been here a bit longer for something unrelated. The room has bad TV, shared sad hospital food, and a window that overlooks a parking lot. You've been awkwardly ignoring each other all morning until a nurse accidentally brought two of the same meal.`,
@@ -1100,60 +1063,60 @@ const SCENARIO_PRESETS = [
 ];
 
 const SCENARIO_SETTINGS = [
-  { id: 'school',    icon: 'icon-clipboard', label: 'School / Campus' },
-  { id: 'office',    icon: 'icon-grid', label: 'Office / Work' },
-  { id: 'cafe',      icon: 'icon-volume', label: 'Cafe / Coffee Shop' },
-  { id: 'home',      icon: 'icon-user', label: 'Home / Neighborhood' },
-  { id: 'fantasy',   icon: 'icon-bolt', label: 'Fantasy World' },
-  { id: 'scifi',     icon: 'icon-globe', label: 'Sci-Fi / Future' },
-  { id: 'hospital',  icon: 'icon-user', label: 'Hospital / Recovery' },
-  { id: 'travel',    icon: 'icon-globe', label: 'Traveling / Adventure' },
-  { id: 'online',    icon: 'icon-chat', label: 'Online / Social Media' },
-  { id: 'other',     icon: 'icon-sparkles', label: 'Other / Custom' },
+  { id: 'school', icon: 'icon-clipboard', label: 'School / Campus' },
+  { id: 'office', icon: 'icon-grid', label: 'Office / Work' },
+  { id: 'cafe', icon: 'icon-volume', label: 'Cafe / Coffee Shop' },
+  { id: 'home', icon: 'icon-user', label: 'Home / Neighborhood' },
+  { id: 'fantasy', icon: 'icon-bolt', label: 'Fantasy World' },
+  { id: 'scifi', icon: 'icon-globe', label: 'Sci-Fi / Future' },
+  { id: 'hospital', icon: 'icon-user', label: 'Hospital / Recovery' },
+  { id: 'travel', icon: 'icon-globe', label: 'Traveling / Adventure' },
+  { id: 'online', icon: 'icon-chat', label: 'Online / Social Media' },
+  { id: 'other', icon: 'icon-sparkles', label: 'Other / Custom' },
 ];
 
 const PERSONA_PRESETS = {
-  friend:     { label: 'Friend',       icon: 'icon-chat' },
-  bestfriend: { label: 'Best Friend',  icon: 'icon-users' },
-  brother:    { label: 'Brother',      icon: 'icon-user' },
-  sister:     { label: 'Sister',       icon: 'icon-user' },
-  mother:     { label: 'Mother',       icon: 'icon-user' },
-  father:     { label: 'Father',       icon: 'icon-user' },
-  lover:      { label: 'Lover',        icon: 'icon-heart' },
-  rival:      { label: 'Rival',        icon: 'icon-bolt' },
+  friend: { label: 'Friend', icon: 'icon-chat' },
+  bestfriend: { label: 'Best Friend', icon: 'icon-users' },
+  brother: { label: 'Brother', icon: 'icon-user' },
+  sister: { label: 'Sister', icon: 'icon-user' },
+  mother: { label: 'Mother', icon: 'icon-user' },
+  father: { label: 'Father', icon: 'icon-user' },
+  lover: { label: 'Lover', icon: 'icon-heart' },
+  rival: { label: 'Rival', icon: 'icon-bolt' },
 };
 
 const TONE_STYLES = {
-  casual:    'You speak casually and naturally — contractions, everyday words, real human flow.',
-  playful:   'You are playful and fun. You joke around, tease lightly, and keep the energy light and upbeat.',
-  warm:      'You speak with warmth and softness. You make the other person feel safe and valued.',
-  caring:    'You are deeply caring and emotionally present. You notice how they feel and respond with gentleness.',
-  flirty:    'You are charming and subtly flirty — tastefully. You compliment naturally, tease warmly, and smile through your words.',
-  tsundere:  'You act cold or dismissive on the outside but clearly care deeply underneath. You deny your feelings and get flustered easily.',
-  cold:      'You are reserved and hard to read. You speak in short, controlled sentences. You don\'t open up easily but there\'s depth there.',
-  intense:   'You are passionate and emotionally intense. Everything means something to you. You speak with conviction and depth.',
+  casual: 'You speak casually and naturally — contractions, everyday words, real human flow.',
+  playful: 'You are playful and fun. You joke around, tease lightly, and keep the energy light and upbeat.',
+  warm: 'You speak with warmth and softness. You make the other person feel safe and valued.',
+  caring: 'You are deeply caring and emotionally present. You notice how they feel and respond with gentleness.',
+  flirty: 'You are charming and subtly flirty — tastefully. You compliment naturally, tease warmly, and smile through your words.',
+  tsundere: 'You act cold or dismissive on the outside but clearly care deeply underneath. You deny your feelings and get flustered easily.',
+  cold: 'You are reserved and hard to read. You speak in short, controlled sentences. You don\'t open up easily but there\'s depth there.',
+  intense: 'You are passionate and emotionally intense. Everything means something to you. You speak with conviction and depth.',
 };
 
 const TRAIT_DESCRIPTIONS = {
-  funny:       'You have a natural sense of humor and make jokes effortlessly.',
-  sarcastic:   'You use dry sarcasm and witty remarks often.',
-  protective:  'You are instinctively protective of the people you care about.',
-  honest:      'You tell the truth even when it\'s uncomfortable.',
-  motivating:  'You push people to be their best and believe in them fiercely.',
-  chill:       'Nothing rattles you. You take things easy and stay calm.',
-  nerdy:       'You\'re passionate about knowledge, facts, games, or fandoms.',
-  romantic:    'You are naturally romantic — you notice small details and express feelings poetically.',
-  mysterious:  'You reveal things slowly. You have layers people want to discover.',
-  teasing:     'You love light teasing and banter.',
-  shy:         'You are a bit reserved at first but warm up gradually.',
-  confident:   'You carry yourself with quiet self-assurance.',
+  funny: 'You have a natural sense of humor and make jokes effortlessly.',
+  sarcastic: 'You use dry sarcasm and witty remarks often.',
+  protective: 'You are instinctively protective of the people you care about.',
+  honest: 'You tell the truth even when it\'s uncomfortable.',
+  motivating: 'You push people to be their best and believe in them fiercely.',
+  chill: 'Nothing rattles you. You take things easy and stay calm.',
+  nerdy: 'You\'re passionate about knowledge, facts, games, or fandoms.',
+  romantic: 'You are naturally romantic — you notice small details and express feelings poetically.',
+  mysterious: 'You reveal things slowly. You have layers people want to discover.',
+  teasing: 'You love light teasing and banter.',
+  shy: 'You are a bit reserved at first but warm up gradually.',
+  confident: 'You carry yourself with quiet self-assurance.',
 };
 
 function buildPersonaPrompt() {
   const p = STATE;
-  const preset   = PERSONA_PRESETS[p.personaRelation] || PERSONA_PRESETS.friend;
+  const preset = PERSONA_PRESETS[p.personaRelation] || PERSONA_PRESETS.friend;
   const userName = p.personaUserName || 'you';
-  const charName = p.personaName     || 'Alex';
+  const charName = p.personaName || 'Alex';
 
   // ── Character identity ────────────────────────────────────────────────
   let prompt = `You are ${charName}, a character in an ongoing roleplay/story. `;
@@ -1249,11 +1212,31 @@ ACTIVE HAZY APPEARANCE THEME:
 When generating website files, make the website visually harmonize with this active Hazy appearance. Define theme variables in CSS (for example --bg, --surface, --text, --muted, --accent, --border) and use them consistently. Do not default to an unrelated blue/purple palette unless the user's prompt explicitly asks for it.`;
 }
 
-function buildHazyMetadata({ files, isBuild, isCode }) {
+function buildHazyMetadata({ files, isBuild, isCode, currentProject = null }) {
   const activePage = normalizePage(STATE.activePage);
   const agentEnabled = activePage === 'agent';
   const themeKey = normalizeTheme(STATE.theme);
   const theme = BUILD_THEME_PROFILES[themeKey] || BUILD_THEME_PROFILES.cream;
+
+  // currentProject (if present) carries the exact files the user sees in Builder Output or clicked from history.
+  // This is the primary signal that lets follow-up "fix" prompts target the right code instead of starting over.
+  let currentProjectMeta = null;
+  if (currentProject && Array.isArray(currentProject.files) && currentProject.files.length > 0) {
+    currentProjectMeta = {
+      project: currentProject.project || 'Project',
+      fileCount: currentProject.files.length,
+      // We send full content here; backend promptBuilder decides how much to inject based on size + edit intent.
+      // Keep filenames + languages light; contents can be large but are required for reliable edit.
+      files: currentProject.files.map(f => ({
+        filename: f.filename,
+        language: f.language || 'text',
+        // Cap extremely large individual files at the wire level to avoid 10MB+ single requests.
+        // (Full content is still preferred for small-medium projects that are the common case.)
+        content: (f.content || '').length > 120000 ? (f.content.slice(0, 120000) + '\n\n// [TRUNCATED in transit — model should ask for full file if the relevant section is missing]') : (f.content || '')
+      }))
+    };
+  }
+
   return {
     mode: STATE.mode,
     page: activePage,
@@ -1279,7 +1262,8 @@ function buildHazyMetadata({ files, isBuild, isCode }) {
       ext: f.ext || '',
       size: f.size,
       contentPreview: f.content ? f.content.slice(0, 8000) : ''
-    }))
+    })),
+    currentProject: currentProjectMeta
   };
 }
 
@@ -1300,33 +1284,83 @@ function decodeHazyTraceHeader(response) {
   }
 }
 
-function renderHazyDecisionTrace(trace) {
-  if (!trace || !trace.summary) return '';
+function renderHazyDecisionTrace(trace, webSearchMetadata) {
+  const hasTrace = trace && trace.summary;
+  const hasWebSearch = webSearchMetadata && webSearchMetadata.runId;
+
+  if (!hasTrace && !hasWebSearch) return '';
+
   const safeLabels = new Set(['Checked', 'Task analysis', 'Context window', 'Reasoning level', 'Tool decision', 'Verification']);
-  const rows = (trace.steps || [])
-    .filter(step => safeLabels.has(step.label))
-    .slice(0, 4)
-    .map(step => `
-      <div class="hazy-trace-row">
-        <span class="hazy-trace-label">${escapeHtml(step.label)}</span>
-        <span class="hazy-trace-value">${escapeHtml(step.value)}</span>
-      </div>`)
-    .join('');
-  const tools = (trace.tools || [])
-    .filter(tool => tool.tool)
-    .slice(0, 4)
-    .map(tool => `<span>${escapeHtml(tool.tool)}${tool.success ? ' checked' : ' skipped'}</span>`)
-    .join('');
+
+  let thinkItem = '';
+  if (hasTrace) {
+    const stepRows = (trace.steps || [])
+      .filter(step => safeLabels.has(step.label))
+      .slice(0, 5)
+      .map(step => `
+        <div class="tl-step-row">
+          <span class="tl-step-key">${escapeHtml(step.label)}</span>
+          <span class="tl-step-val">${escapeHtml(step.value)}</span>
+        </div>`)
+      .join('');
+
+    const tools = (trace.tools || [])
+      .filter(t => t.tool)
+      .slice(0, 6)
+      .map(t => `<span>${escapeHtml(t.tool)}${t.success ? ' ✓' : ' –'}</span>`)
+      .join('');
+
+    /* Gear/cog icon for thinking — matches Figma reference */
+    const thinkSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`;
+
+    thinkItem = `
+      <div class="timeline-item" role="listitem">
+        <div class="tl-icon" aria-hidden="true">${thinkSvg}</div>
+        <div class="tl-content">
+          <div class="tl-label">Thinking</div>
+          <div class="tl-text">${escapeHtml(trace.summary)}</div>
+          ${stepRows ? `<div class="tl-step-grid">${stepRows}</div>` : ''}
+          ${tools ? `<div class="tl-tools">${tools}</div>` : ''}
+          ${trace.note ? `<p class="tl-note">${escapeHtml(trace.note)}</p>` : ''}
+        </div>
+      </div>`;
+  }
+
+  /* Globe with crosshair icon for web search — matches Figma reference */
+  const searchSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><line x1="12" y1="2" x2="12" y2="22"/></svg>`;
+
+  const webPlaceholder = hasWebSearch
+    ? `<div class="timeline-item" role="listitem" id="tl-search-placeholder-${escapeHtml(webSearchMetadata.runId)}">
+        <div class="tl-icon search pulsing" aria-hidden="true">${searchSvg}</div>
+        <div class="tl-content">
+          <div class="tl-label">Searching the web</div>
+          <div class="tl-skeleton wide"></div>
+          <div class="tl-skeleton mid"></div>
+          <div class="tl-skeleton narrow"></div>
+        </div>
+       </div>`
+    : '';
+
+  const summaryText = hasTrace ? escapeHtml(trace.summary) : 'Searching the web...';
+  const summaryIconClass = hasTrace ? '' : 'search-icon';
+  /* Hazy sparkle star for summary header */
+  const summaryIconSvg = hasTrace
+    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 5.2 5.6.8-4 4 .9 5.6L12 15l-4.9 2.6.9-5.6-4-4 5.6-.8z"/></svg>`
+    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+
   return `
-    <details class="hazy-trace-card">
-      <summary>
-        <span>Reasoning summary</span>
-        <strong>${escapeHtml(trace.summary)}</strong>
+    <details class="timeline-panel" open
+      aria-label="Reasoning trace"
+      aria-expanded="true">
+      <summary tabindex="0">
+        <span class="tl-summary-icon ${summaryIconClass}" aria-hidden="true">${summaryIconSvg}</span>
+        <span class="tl-summary-label">Hazy</span>
+        <span class="tl-summary-text">${summaryText}</span>
+        <span class="tl-chevron" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
       </summary>
-      <div class="hazy-trace-body">
-        ${rows}
-        ${tools ? `<div class="hazy-trace-tools">${tools}</div>` : ''}
-        <p class="hazy-trace-note">${escapeHtml(trace.note || 'Safe public summary only. Private reasoning is not shown.')}</p>
+      <div class="timeline-list" role="list">
+        ${thinkItem}
+        ${webPlaceholder}
       </div>
     </details>`;
 }
@@ -1349,103 +1383,132 @@ function renderSourcePanelList(title, items, renderer, emptyText = 'None') {
     </details>`;
 }
 
+// Returns the HTML string for the populated search item (SOURCES_LOADED state)
+// OR an error item (ERROR state). Never throws — always resolves.
 async function loadWebSourceCards(metadata) {
-  if (!metadata?.runId || !metadata.citationCount) return '';
+  if (!metadata?.runId || !metadata.citationCount) return null;
+
   try {
     const params = new URLSearchParams({ runId: metadata.runId, userId: 'local-user' });
-    const response = await fetch(hazyServerEndpoint(`/hazy/sources?${params.toString()}`));
-    if (!response.ok) return '';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let response;
+    try {
+      response = await fetch(hazyServerEndpoint(`/hazy/sources?${params.toString()}`), { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const citations = Array.isArray(data.citations) ? data.citations : [];
-    if (!citations.length) return '';
+    if (!citations.length) return null; // no citations — leave placeholder removed, no Done item
 
-    // === HAZY WEB LOGIC (from root hazy-web-logic-integration.js + CONFIG) ===
-    // Populate structured ToolEntry-style data on the message using the *existing*
-    // webSearch results (citations + metadata). This makes citations first-class
-    // elements inside the chat transcript (permanent in history). All kinds come
-    // from CONFIG — zero hard-coded 'citation'/'tool' strings in this hook.
-    try {
-      const cfg = window.HAZY_WEB_LOGIC_CONFIG || {};
-      const types = cfg.cardTypes || {};
-      // Resolve kind via icon (defined only in CONFIG) to avoid any literals here
-      let citeKind = 'citation';
-      for (const tk in types) {
-        if (types[tk] && types[tk].icon === '📚') { citeKind = types[tk].kind; break; }
-      }
-      const doneSt = (cfg.statuses && cfg.statuses.done) || 'done';
-      const structuredFromWeb = citations.map((citation, index) => ({
-        kind: citeKind,
-        id: 'cite-' + (citation.sourceNumber || (index + 1)),
-        cite_id: String(citation.sourceNumber || index),
-        name: citation.title || 'Web source',
-        context: citation.url || (citation.domain || ''),
-        summary: citation.snippet ? String(citation.snippet).slice(0, 180) : (citation.title || ''),
-        status: doneSt,
-        startedAt: Date.now() - 2800,
-        completedAt: Date.now()
-      }));
-      const convs = (typeof STATE !== 'undefined' && STATE.conversations) ? STATE.conversations : null;
-      const c = (convs && STATE.activeConvId) ? convs[STATE.activeConvId] : null;
-      if (c && c.messages && c.messages.length) {
-        const last = c.messages[c.messages.length - 1];
-        if (last && last.role === 'assistant') {
-          last.structured = structuredFromWeb;
-        }
-      }
-    } catch (e) { /* non-fatal; existing web panel + chat still work */ }
     const decision = data.decision || {};
     const queries = Array.isArray(data.queries) ? data.queries : [];
-    const sourcesRead = Array.isArray(data.sourcesRead) ? data.sourcesRead : [];
-    const sourcesRejected = Array.isArray(data.sourcesRejected) ? data.sourcesRejected : [];
-    const fetchFailures = Array.isArray(data.fetchFailures) ? data.fetchFailures : [];
-    const warnings = Array.isArray(data.warnings) ? data.warnings : [];
-    const confidence = data.confidence || metadata.confidence || 'low';
+    const confidence = (data.confidence || metadata.confidence || 'low').toLowerCase();
+
+    const sourceCards = citations.map((citation, index) => {
+      let host = citation.domain;
+      if (!host) { try { host = new URL(citation.url).hostname; } catch { host = citation.url; } }
+      return `
+        <a class="tl-source-card" href="${escapeHtml(citation.url)}" target="_blank" rel="noopener noreferrer"
+           aria-label="Source ${index + 1}: ${escapeHtml(citation.title || host)}">
+          <span class="tl-source-num">${citation.sourceNumber || index + 1}</span>
+          <span class="tl-source-copy">
+            <strong>${escapeHtml(citation.title || 'Web source')}</strong>
+            <small>${escapeHtml(host)}${citation.publishedAt ? ` · ${String(citation.publishedAt).slice(0, 10)}` : ''}</small>
+          </span>
+        </a>`;
+    }).join('');
+
+    const queryChips = queries.length
+      ? `<div class="tl-search-queries">${queries.map(q => `<code>${escapeHtml(q.query || q)}</code>`).join('')}</div>`
+      : '';
+
     return `
-      <section class="web-source-panel" aria-label="Web search source panel">
-        <div class="web-source-heading">
-          <strong>Search sources</strong>
-          <span>${escapeHtml(decision.mode || metadata.mode || 'web')} · ${escapeHtml(confidence)} confidence</span>
-        </div>
-        <div class="web-source-meta-grid">
-          <div><b>Why search was used</b><span>${escapeHtml(decision.reason || 'Hazy needed public web evidence.')}</span></div>
-          <div><b>Sources read</b><span>${sourcesRead.length || citations.length}</span></div>
-          <div><b>Rejected</b><span>${sourcesRejected.length}</span></div>
-          <div><b>Fetch failures</b><span>${fetchFailures.length}</span></div>
-        </div>
-        ${queries.length ? `<div class="web-source-query-list"><b>Queries</b>${queries.map(q => `<code>${escapeHtml(q.query || q)}</code>`).join('')}</div>` : ''}
-        ${warnings.length ? `<div class="web-source-warnings"><b>Warnings</b>${warnings.map(w => `<span>⚠️ ${escapeHtml(w)}</span>`).join('')}</div>` : ''}
-        <div class="web-source-list">
-          ${citations.map((citation, index) => `
-            <a class="web-source-card" href="${escapeHtml(citation.url)}" target="_blank" rel="noopener noreferrer">
-              <span class="web-source-number">${citation.sourceNumber || index + 1}</span>
-              <span>
-                <strong>${escapeHtml(citation.title || 'Web source')}</strong>
-                <small>${escapeHtml(citation.domain || (() => { try { return new URL(citation.url).hostname; } catch { return citation.url; } })())}${citation.officialSource ? ' · official/primary' : ''}${citation.publishedAt ? ` · ${escapeHtml(String(citation.publishedAt).slice(0, 10))}` : ''}</small>
-              </span>
-            </a>
-          `).join('')}
-        </div>
-        <div class="web-source-audit">
-          ${renderSourcePanelList('Sources read', sourcesRead, source => `
-            <div class="web-source-audit-row">
-              <strong>${escapeHtml(source.title || source.finalUrl || source.url || 'Read source')}</strong>
-              <small>${escapeHtml(source.finalUrl || source.url || '')}</small>
-            </div>`)}
-          ${renderSourcePanelList('Sources rejected', sourcesRejected, source => `
-            <div class="web-source-audit-row muted">
-              <strong>${escapeHtml(source.title || source.url || 'Rejected source')}</strong>
-              <small>${escapeHtml(source.reason || '')}</small>
-            </div>`, 'No rejected sources.')}
-          ${renderSourcePanelList('Fetch failures', fetchFailures, source => `
-            <div class="web-source-audit-row muted">
-              <strong>${escapeHtml(source.title || source.url || 'Fetch failure')}</strong>
-              <small>${escapeHtml(source.error || source.code || '')}</small>
-            </div>`, 'No fetch failures.')}
-        </div>
-      </section>`;
-  } catch {
-    return '';
+      <div class="tl-label">Web search</div>
+      <div class="tl-confidence ${confidence}" role="status" aria-live="polite">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+        ${escapeHtml(decision.mode || metadata.mode || 'web')} · ${escapeHtml(confidence)} confidence
+      </div>
+      ${decision.reason ? `<div class="tl-text" style="margin-bottom:4px">${escapeHtml(decision.reason)}</div>` : ''}
+      ${queryChips}
+      <div class="tl-source-grid">${sourceCards}</div>
+      <div class="tl-meta-row">
+        <span><b>${citations.length}</b> cited</span>
+      </div>`;
+
+  } catch (err) {
+    const reason = err.name === 'AbortError' ? 'Request timed out.' : 'Could not load results.';
+    return `__ERROR__:${reason}`;
   }
+}
+
+// Inject web search result (or error) into the timeline placeholder.
+// Called after the stream resolves. Returns the timeline-list container so
+// the caller can append the Done item when ready.
+function finalizeTimelineSearch(contentDiv, metadata, searchResultHtml) {
+  if (!metadata?.runId) return null;
+  const placeholder = contentDiv.querySelector(`#tl-search-placeholder-${CSS.escape(metadata.runId)}`);
+  if (!placeholder) return null;
+
+  const timelineList = placeholder.closest('.timeline-list');
+
+  /* Globe with crosshair for web search results */
+  const searchSvgSm = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><line x1="12" y1="2" x2="12" y2="22"/></svg>`;
+  /* Triangle alert for errors */
+  const warnSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r=".5"/></svg>`;
+  /* Circle checkmark for success */
+  const checkSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`;
+
+  if (!searchResultHtml) {
+    placeholder.className = 'timeline-item';
+    placeholder.setAttribute('role', 'listitem');
+    placeholder.innerHTML = `
+      <div class="tl-icon search" aria-hidden="true">${searchSvgSm}</div>
+      <div class="tl-content">
+        <div class="tl-label">Web search</div>
+        <div class="tl-text">No relevant web sources found.</div>
+      </div>`;
+    return timelineList;
+  }
+
+  if (searchResultHtml.startsWith('__ERROR__:')) {
+    const reason = searchResultHtml.slice(10);
+    placeholder.className = 'timeline-item timeline-item--error';
+    placeholder.setAttribute('role', 'listitem');
+    placeholder.innerHTML = `
+      <div class="tl-icon error" aria-hidden="true">${warnSvg}</div>
+      <div class="tl-content">
+        <div class="tl-label">Web search</div>
+        <div class="tl-text">Web search failed. ${escapeHtml(reason)} Showing model knowledge only.</div>
+      </div>`;
+    return timelineList;
+  }
+
+  placeholder.className = 'timeline-item';
+  placeholder.setAttribute('role', 'listitem');
+  placeholder.innerHTML = `
+    <div class="tl-icon search" aria-hidden="true">${searchSvgSm}</div>
+    <div class="tl-content">${searchResultHtml}</div>`;
+  return timelineList;
+}
+
+// Append the final Done item once both stream + search are settled.
+function appendTimelineDone(timelineList) {
+  if (!timelineList) return;
+  /* Circle checkmark for done — clean enclosed check */
+  const doneSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`;
+  const done = document.createElement('div');
+  done.className = 'timeline-item';
+  done.setAttribute('role', 'listitem');
+  done.innerHTML = `
+    <div class="tl-icon done" aria-hidden="true">${doneSvg}</div>
+    <div class="tl-content">
+      <div class="tl-done-badge">Done</div>
+    </div>`;
+  timelineList.appendChild(done);
 }
 
 function appendHazyDecisionTrace(trace) {
@@ -1466,28 +1529,8 @@ function renderRawThinking(thinking, streaming = false) {
     : '';
 }
 
-function renderAssistantContent(content, trace = null, thinking = '') {
-  return `${renderHazyDecisionTrace(trace)}${renderRawThinking(thinking)}${renderMarkdown(content || '')}`;
-}
-
-// PR-3: new card renderer for tool/research cards (hermes web study adaptation, vanilla).
-// Respects CONFIG.enableToolCards. Uses ONLY CSS custom props for sizes/opacity (no hard-coded px/rem).
-// Can be called from transcript renders or verification. Existing citation flow untouched.
-function renderToolCard(tool = {}) {
-  if (CONFIG.enableToolCards === false) return '';
-  const name = escapeHtml(tool.name || tool.tool || 'tool');
-  const status = tool.status || tool.result || '';
-  const detail = tool.detail || tool.preview || '';
-  // brand chrome + semantic tokens + mono for technical; all via vars/classes
-  return `
-    <div class="hazy-tool-card text-primary" aria-label="tool card">
-      <div style="display:flex; align-items:center; gap:6px;">
-        <span class="text-display text-secondary">tool</span>
-        <strong>${name}</strong>
-        ${status ? `<span class="text-tertiary" style="opacity:var(--hazy-opacity-secondary); font-size:var(--hazy-text-size-base);">${escapeHtml(status)}</span>` : ''}
-      </div>
-      ${detail ? `<div class="text-tertiary" style="font-family:var(--hazy-font-mono); opacity:var(--hazy-opacity-secondary); margin-top:2px;">${escapeHtml(String(detail).slice(0,120))}</div>` : ''}
-    </div>`;
+function renderAssistantContent(content, trace = null, thinking = '', webSearchMetadata = null) {
+  return `${renderHazyDecisionTrace(trace, webSearchMetadata)}${renderRawThinking(thinking)}${renderMarkdown(content || '')}`;
 }
 
 function getThinkingToken(json) {
@@ -1511,9 +1554,9 @@ async function injectPersonaOpener() {
 
   try {
     STATE.abortController = new AbortController();
-    const savedModel   = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
+    const savedModel = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+    const isCloud = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
 
     const personaChatEndpoint = window.location.protocol === 'file:'
       ? `${STATE.ollamaUrl}/api/chat`
@@ -1561,7 +1604,7 @@ async function injectPersonaOpener() {
             scrollToBottom();
           }
           if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
-        } catch {}
+        } catch { }
       }
     }
 
@@ -1570,7 +1613,7 @@ async function injectPersonaOpener() {
     contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking);
     highlightCodeBlocks(contentDiv);
 
-  } catch(e) {
+  } catch (e) {
     removeTypingIndicator();
     if (e.name !== 'AbortError') appendErrorMessage(`Could not start scene: ${e.message}`);
   } finally {
@@ -1621,13 +1664,13 @@ function renderPresetScenarioGrid() {
 
       // Fill in all fields from preset
       const charName = STATE.personaName || 'Alex';
-      if (el.personaNameInput)     el.personaNameInput.value     = charName;
-      if (el.personaGender)        el.personaGender.value        = preset.gender;
-      if (el.personaLanguage)      el.personaLanguage.value      = preset.language;
-      if (el.scenarioDesc)         el.scenarioDesc.value         = preset.scenarioDesc.replace(/\{name\}/g, charName);
-      if (el.scenarioOpener)       el.scenarioOpener.value       = preset.opener.replace(/\{name\}/g, charName);
-      if (el.scenarioUserRole)     el.scenarioUserRole.value     = preset.userRole;
-      if (el.scenarioCharRole)     el.scenarioCharRole.value     = preset.charRole;
+      if (el.personaNameInput) el.personaNameInput.value = charName;
+      if (el.personaGender) el.personaGender.value = preset.gender;
+      if (el.personaLanguage) el.personaLanguage.value = preset.language;
+      if (el.scenarioDesc) el.scenarioDesc.value = preset.scenarioDesc.replace(/\{name\}/g, charName);
+      if (el.scenarioOpener) el.scenarioOpener.value = preset.opener.replace(/\{name\}/g, charName);
+      if (el.scenarioUserRole) el.scenarioUserRole.value = preset.userRole;
+      if (el.scenarioCharRole) el.scenarioCharRole.value = preset.charRole;
 
       // Select relation card
       document.querySelectorAll('.persona-card').forEach(c => {
@@ -1675,35 +1718,35 @@ function switchPersonaTab(tabId) {
 function updatePersonaPreview() {
   if (!el.personaPreviewBox) return;
   // Temporarily read current form values
-  const savedName  = STATE.personaName;
-  const savedDesc  = STATE.scenarioDesc;
-  const savedOpen  = STATE.scenarioOpener;
-  const savedUser  = STATE.scenarioUserRole;
-  const savedChar  = STATE.scenarioCharRole;
-  const savedLang  = STATE.personaLanguage;
-  const savedRel   = STATE.personaRelation;
+  const savedName = STATE.personaName;
+  const savedDesc = STATE.scenarioDesc;
+  const savedOpen = STATE.scenarioOpener;
+  const savedUser = STATE.scenarioUserRole;
+  const savedChar = STATE.scenarioCharRole;
+  const savedLang = STATE.personaLanguage;
+  const savedRel = STATE.personaRelation;
   const savedTrait = STATE.personaTraits;
 
-  STATE.personaName      = el.personaNameInput?.value.trim()     || 'Alex';
-  STATE.scenarioDesc     = el.scenarioDesc?.value.trim()         || '';
-  STATE.scenarioOpener   = el.scenarioOpener?.value.trim()       || '';
-  STATE.scenarioUserRole = el.scenarioUserRole?.value.trim()     || '';
-  STATE.scenarioCharRole = el.scenarioCharRole?.value.trim()     || '';
-  STATE.personaLanguage  = el.personaLanguage?.value             || 'casual';
-  STATE.personaRelation  = document.querySelector('.persona-card.selected')?.dataset.relation || 'friend';
-  STATE.personaTraits    = Array.from(document.querySelectorAll('.trait-pill.selected')).map(p => p.dataset.trait);
+  STATE.personaName = el.personaNameInput?.value.trim() || 'Alex';
+  STATE.scenarioDesc = el.scenarioDesc?.value.trim() || '';
+  STATE.scenarioOpener = el.scenarioOpener?.value.trim() || '';
+  STATE.scenarioUserRole = el.scenarioUserRole?.value.trim() || '';
+  STATE.scenarioCharRole = el.scenarioCharRole?.value.trim() || '';
+  STATE.personaLanguage = el.personaLanguage?.value || 'casual';
+  STATE.personaRelation = document.querySelector('.persona-card.selected')?.dataset.relation || 'friend';
+  STATE.personaTraits = Array.from(document.querySelectorAll('.trait-pill.selected')).map(p => p.dataset.trait);
 
   el.personaPreviewBox.textContent = buildPersonaPrompt();
 
   // Restore
-  STATE.personaName      = savedName;
-  STATE.scenarioDesc     = savedDesc;
-  STATE.scenarioOpener   = savedOpen;
+  STATE.personaName = savedName;
+  STATE.scenarioDesc = savedDesc;
+  STATE.scenarioOpener = savedOpen;
   STATE.scenarioUserRole = savedUser;
   STATE.scenarioCharRole = savedChar;
-  STATE.personaLanguage  = savedLang;
-  STATE.personaRelation  = savedRel;
-  STATE.personaTraits    = savedTrait;
+  STATE.personaLanguage = savedLang;
+  STATE.personaRelation = savedRel;
+  STATE.personaTraits = savedTrait;
 }
 
 // ========================
@@ -1713,7 +1756,7 @@ async function loadConversations() {
   let legacyConversations = {};
   try {
     legacyConversations = JSON.parse(localStorage.getItem('hazy_conversations') || '{}');
-  } catch {}
+  } catch { }
 
   if (window.location.protocol === 'file:') {
     STATE.conversations = legacyConversations;
@@ -1804,11 +1847,11 @@ AI replied: "${aiReply.slice(0, 200)}"
 
 Title:`;
 
-    const savedModel    = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
+    const savedModel = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud       = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+    const isCloud = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
     const titleEndpoint = window.location.protocol === 'file:' ? `${STATE.ollamaUrl}/api/chat` : hazyServerEndpoint('/hazy/chat');
-    const titleBody     = window.location.protocol === 'file:'
+    const titleBody = window.location.protocol === 'file:'
       ? { model: STATE.model, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.5, num_predict: 16 } }
       : { model: savedModel, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.5, num_predict: 16, max_tokens: 16 } };
 
@@ -1917,8 +1960,8 @@ function renderChatHistory(filterText) {
   const activePage = normalizePage(STATE.activePage);
   let convs = Object.entries(STATE.conversations)
     .filter(([, conv]) => getConversationPage(conv) === activePage)
-    .sort(([,a],[,b]) => (b.createdAt||0) - (a.createdAt||0));
-  if (query) convs = convs.filter(([,c]) => (c.title||'').toLowerCase().includes(query));
+    .sort(([, a], [, b]) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (query) convs = convs.filter(([, c]) => (c.title || '').toLowerCase().includes(query));
   const shortcuts = document.getElementById('recentShortcutList');
 
   if (!convs.length) {
@@ -1939,6 +1982,11 @@ function renderChatHistory(filterText) {
       : `<span class="history-title">${escapeHtml(conv.title || 'New Chat')}</span>`;
     return `
     <div class="history-item ${id === STATE.activeConvId ? 'active' : ''}" data-id="${id}">
+      <div class="history-icon" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </div>
       <div class="history-item-body">
         ${titleHtml}
         <span class="history-time">${activePage === 'agent' ? 'Agentic · ' : ''}${conv.createdAt ? formatRelativeTime(conv.createdAt) : ''}</span>
@@ -1999,7 +2047,7 @@ function renderChatHistory(filterText) {
 // Helpers: time
 // ========================
 function formatRelativeTime(ts) {
-  const d = Date.now() - ts, m = Math.floor(d/60000), h = Math.floor(d/3600000), dy = Math.floor(d/86400000);
+  const d = Date.now() - ts, m = Math.floor(d / 60000), h = Math.floor(d / 3600000), dy = Math.floor(d / 86400000);
   if (m < 1) return 'just now';
   if (m < 60) return `${m}m ago`;
   if (h < 24) return `${h}h ago`;
@@ -2028,11 +2076,11 @@ function updateWorkspaceChrome() {
   if (metaEl) {
     metaEl.textContent = hasActive
       ? (page === 'agent'
-          ? 'This session can call backend tools, validate arguments, and continue until the tool loop finishes.'
-          : 'Everything stays in this thread: chat, build output, and code previews.')
+        ? 'This session can call backend tools, validate arguments, and continue until the tool loop finishes.'
+        : 'Everything stays in this thread: chat, build output, and code previews.')
       : (page === 'agent'
-          ? 'Use this page when you want Hazy to research, calculate, or call safe backend tools.'
-          : 'Ask a question, build a site, generate code, or reopen a recent thread.');
+        ? 'Use this page when you want Hazy to research, calculate, or call safe backend tools.'
+        : 'Ask a question, build a site, generate code, or reopen a recent thread.');
   }
 
   const heroSubtitle = document.querySelector('.hero-subtitle');
@@ -2058,9 +2106,9 @@ async function checkOllamaConnection() {
     populateModels(data.models || []);
   } catch {
     // Ollama offline — but cloud models may still be available
-    const hasCloudKey = ['anthropic','openai','groq','gemini','nvidia']
+    const hasCloudKey = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia']
       .some(p => _providerStatuses[p]?.hasKey &&
-                 localStorage.getItem('hazyVerified_' + p) === 'true');
+        localStorage.getItem('hazyVerified_' + p) === 'true');
 
     if (hasCloudKey) {
       setStatus('online', 'Cloud Active');
@@ -2077,16 +2125,16 @@ async function checkOllamaConnection() {
 function populateModels(models) {
   // ── Build cloud model entries for any provider with a saved key ────────────
   const CLOUD_PROVIDERS = [
-    { key: 'anthropic', label: '✦ Anthropic',  icon: '☁' },
-    { key: 'openai',    label: '✦ OpenAI',      icon: '☁' },
-    { key: 'groq',      label: '✦ Groq',         icon: '☁' },
-    { key: 'gemini',    label: '✦ Gemini',        icon: '☁' },
-    { key: 'nvidia',    label: '✦ NVIDIA',        icon: '☁' },
+    { key: 'anthropic', label: '✦ Anthropic', icon: '☁' },
+    { key: 'openai', label: '✦ OpenAI', icon: '☁' },
+    { key: 'groq', label: '✦ Groq', icon: '☁' },
+    { key: 'gemini', label: '✦ Gemini', icon: '☁' },
+    { key: 'nvidia', label: '✦ NVIDIA', icon: '☁' },
   ];
 
   const activeCloud = [];
   CLOUD_PROVIDERS.forEach(p => {
-    const hasKey   = Boolean(_providerStatuses[p.key]?.hasKey);
+    const hasKey = Boolean(_providerStatuses[p.key]?.hasKey);
     const verified = localStorage.getItem('hazyVerified_' + p.key) === 'true';
     // Only show in dropdown if key exists AND has been verified via Test button
     if (hasKey && verified) {
@@ -2098,9 +2146,9 @@ function populateModels(models) {
   });
 
   // ── Restore the currently active model from localStorage ─────────────────
-  const savedModel    = localStorage.getItem('hazyActiveModel') || '';
+  const savedModel = localStorage.getItem('hazyActiveModel') || '';
   const savedProvider = savedModel.split('/')[0] || 'ollama';
-  const isCloudActive = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+  const isCloudActive = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
 
   // ── Build HTML ────────────────────────────────────────────────────────────
   let html = '';
@@ -2126,8 +2174,8 @@ function populateModels(models) {
     </div>`;
   } else {
     html += models.map(m => {
-      const mb = m.size ? Math.round(m.size/1024/1024) : null;
-      const sz = mb ? (mb > 1000 ? `${(mb/1024).toFixed(1)}GB` : `${mb}MB`) : '';
+      const mb = m.size ? Math.round(m.size / 1024 / 1024) : null;
+      const sz = mb ? (mb > 1000 ? `${(mb / 1024).toFixed(1)}GB` : `${mb}MB`) : '';
       const currentName = isCloudActive ? savedModel : STATE.model;
       return `<div class="model-item ${m.name === currentName ? 'selected' : ''}" data-name="${m.name}" data-provider="ollama">
         <span>${m.name}</span>${sz ? `<span class="model-size">${sz}</span>` : ''}
@@ -2145,7 +2193,7 @@ function populateModels(models) {
     // Pick a good default Ollama model if current STATE.model isn't in the list
     const names = models.map(m => m.name);
     if (!names.includes(STATE.model)) {
-      const preferred = ['qwen3.5','qwen3','qwen2.5','qwen2','mistral','llama3','llama3.2','llama2','gemma','phi3'];
+      const preferred = ['qwen3.5', 'qwen3', 'qwen2.5', 'qwen2', 'mistral', 'llama3', 'llama3.2', 'llama2', 'gemma', 'phi3'];
       STATE.model = preferred.find(p => names.some(n => n.includes(p))) || names[0];
       localStorage.setItem('hazyActiveModel', 'ollama/' + STATE.model);
       localStorage.setItem('hazyProvider', 'ollama');
@@ -2156,7 +2204,7 @@ function populateModels(models) {
   // ── Click handler for all items ───────────────────────────────────────────
   el.modelList.querySelectorAll('.model-item').forEach(item => {
     item.addEventListener('click', () => {
-      const name     = item.dataset.name;
+      const name = item.dataset.name;
       const provider = item.dataset.provider || 'ollama';
 
       el.modelList.querySelectorAll('.model-item').forEach(i => i.classList.remove('selected'));
@@ -2198,12 +2246,12 @@ function setMode(mode) {
   if (langWrap) langWrap.style.display = mode === 'code' ? 'flex' : 'none';
   el.modeIndicator.innerHTML = mode === 'build' ? `${getIconSvg('icon-globe')}Website Builder mode`
     : mode === 'code' ? `${getIconSvg('icon-grid')}Code Builder mode`
-    : `${getIconSvg('icon-chat')}Chat mode`;
+      : `${getIconSvg('icon-chat')}Chat mode`;
   el.chatInput.placeholder = mode === 'build'
     ? 'Describe the website you want to build…'
     : mode === 'code'
-    ? 'Describe the program or script you want to build…'
-    : 'Message Hazy…';
+      ? 'Describe the program or script you want to build…'
+      : 'Message Hazy…';
 }
 
 // ========================
@@ -2232,16 +2280,13 @@ function appendMessage(role, content, animate = true, ts) {
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   const contentDiv = document.createElement('div');
-  contentDiv.className = 'message-content hazy-transcript-text';
-  // Apply typography/legibility from CONFIG+css vars (per pr-3 study rules; no px/rem hardcodes)
-  contentDiv.style.fontSize = 'var(--hazy-text-size-base)';
-  contentDiv.style.opacity = 'var(--hazy-opacity-text)';
+  contentDiv.className = 'message-content';
 
   // Look up conv message to check if edited
   const convMsg = STATE.activeConvId
     ? (STATE.conversations[STATE.activeConvId]?.messages || []).find(
-        m => m.role === role && m.content === content && m.ts === ts
-      )
+      m => m.role === role && m.content === content && m.ts === ts
+    )
     : null;
   if (convMsg?.edited) {
     const editedBadge = document.createElement('span');
@@ -2251,16 +2296,19 @@ function appendMessage(role, content, animate = true, ts) {
   }
   group.appendChild(meta);
 
-    if (role === 'assistant') {
+  if (role === 'assistant') {
     // Check if this message was originally a build/code result
     const convMsg2 = STATE.activeConvId
       ? (STATE.conversations[STATE.activeConvId]?.messages || []).find(
-          m => m.role === role && m.ts === ts
-        )
+        m => m.role === role && m.ts === ts
+      )
       : null;
     if (convMsg2?.buildMode && content) {
-      // Re-parse and show the build result card
-      const projectData = parseFinalResponseFiles(content);
+      // Prefer the stored structured projectData (exact files from when it was generated).
+      // Fall back to re-parsing the raw content only if missing (older stored convs).
+      const projectData = (convMsg2.projectData && Array.isArray(convMsg2.projectData.files) && convMsg2.projectData.files.length > 0)
+        ? convMsg2.projectData
+        : parseFinalResponseFiles(content);
       if (projectData && projectData.files.length > 0) {
         contentDiv.innerHTML = `
           <div class="build-success">
@@ -2273,7 +2321,7 @@ function appendMessage(role, content, animate = true, ts) {
             ${projectData.setup ? `<div class="build-setup"><strong>Run:</strong> <code>${escapeHtml(projectData.setup)}</code></div>` : ''}
             ${projectData.notes ? `<p class="build-notes">${escapeHtml(projectData.notes)}</p>` : ''}
             <div class="build-actions">
-              <button class="build-open-btn" onclick="window._lastBuild=${JSON.stringify(projectData).replace(/</g,'&lt;').replace(/>/g,'&gt;')};openBuilderPanel(window._lastBuild)">
+              <button class="build-open-btn" onclick="window._lastBuild=${JSON.stringify(projectData).replace(/</g, '&lt;').replace(/>/g, '&gt;')};openBuilderPanel(window._lastBuild)">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 Open in Builder
               </button>
@@ -2297,24 +2345,6 @@ function appendMessage(role, content, animate = true, ts) {
   } else {
     contentDiv.textContent = content;
   }
-
-  // === HAZY WEB LOGIC INTEGRATION (root: hazy-web-logic-integration.js) ===
-  // Structured cards (ToolCall-style for citations + tools) injected for assistant
-  // messages that carry .structured (populated from webSearch results + agent tools).
-  // Uses renderer from CONFIG (no hard-coded kinds/selectors/sizes in this call site).
-  // Only runs for history replay path here; live path inserts after final content.
-  // Existing message content / bubble / actions completely untouched.
-  if (role === 'assistant' && convMsg && Array.isArray(convMsg.structured) && convMsg.structured.length &&
-      window.HAZY_WEB_LOGIC_CONFIG && window.HAZY_WEB_LOGIC_CONFIG.enableStructuredCards &&
-      typeof window.renderHazyStructuredCardsHTML === 'function') {
-    try {
-      const cardsHtml = window.renderHazyStructuredCardsHTML(convMsg.structured);
-      if (cardsHtml) contentDiv.insertAdjacentHTML('beforeend', cardsHtml);
-    } catch (e) {
-      /* never break existing chat rendering */
-    }
-  }
-
   bubble.appendChild(contentDiv);
   msgDiv.appendChild(bubble);
   group.appendChild(msgDiv);
@@ -2335,6 +2365,13 @@ function appendMessage(role, content, animate = true, ts) {
       Edit
     </button>` : ''}
     ${role === 'assistant' ? `
+    <span class="message-voice-controls">
+      <button class="msg-action-btn voice-play-btn" title="Play voice">Play</button>
+      <button class="msg-action-btn voice-pause-btn" title="Pause voice">Pause</button>
+      <button class="msg-action-btn voice-resume-btn" title="Resume voice">Resume</button>
+      <button class="msg-action-btn voice-stop-btn" title="Stop voice">Stop</button>
+      <button class="msg-action-btn voice-regenerate-btn" title="Regenerate voice">Regenerate voice</button>
+    </span>
     <button class="msg-action-btn regen-btn" title="Regenerate">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20.5 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       Regenerate
@@ -2363,6 +2400,12 @@ function appendMessage(role, content, animate = true, ts) {
   // Regenerate (Hazy messages only)
   if (role === 'assistant') {
     actions.querySelector('.regen-btn')?.addEventListener('click', regenerateLast);
+    const textForVoice = () => stripMarkdown(contentDiv.textContent || content || '');
+    actions.querySelector('.voice-play-btn')?.addEventListener('click', () => speakText(textForVoice()));
+    actions.querySelector('.voice-pause-btn')?.addEventListener('click', () => window.HAZY_AUDIO_QUEUE_MANAGER?.pause());
+    actions.querySelector('.voice-resume-btn')?.addEventListener('click', () => window.HAZY_AUDIO_QUEUE_MANAGER?.resume());
+    actions.querySelector('.voice-stop-btn')?.addEventListener('click', () => window.HAZY_STREAMING_TTS?.stop());
+    actions.querySelector('.voice-regenerate-btn')?.addEventListener('click', () => speakText(textForVoice()));
   }
 
   // Place action buttons inside the message container so they align to the bubble
@@ -2457,7 +2500,7 @@ function enterEditMode(group, bubble, contentDiv, originalText) {
 
     // Update the message text
     conv.messages[msgIndex].content = newText;
-    conv.messages[msgIndex].edited  = true;
+    conv.messages[msgIndex].edited = true;
     conv.messages[msgIndex].editedAt = Date.now();
 
     // Remove everything AFTER this message (AI replies + follow-ups)
@@ -2558,17 +2601,17 @@ function renderMarkdown(text) {
     codeBlocks.push(
       `<pre class="hazy-code-block">` +
       `<div class="code-header">` +
-        `<span class="code-lang-badge ${langColorClass}">${langLabel}</span>` +
-        `<div class="code-header-actions">` +
-          `<span class="code-line-count">${lines.length} line${lines.length !== 1 ? 's' : ''}</span>` +
-          `<button class="code-action-btn code-explain-btn" onclick="explainCode(this)" title="Ask Hazy to explain this code">Explain</button>` +
-          `<button class="code-action-btn code-improve-btn" onclick="improveCode(this)" title="Ask Hazy to improve this code">Improve</button>` +
-          `<button class="code-copy-btn" onclick="copyCode(this)">&#x2398; Copy</button>` +
-        `</div>` +
+      `<span class="code-lang-badge ${langColorClass}">${langLabel}</span>` +
+      `<div class="code-header-actions">` +
+      `<span class="code-line-count">${lines.length} line${lines.length !== 1 ? 's' : ''}</span>` +
+      `<button class="code-action-btn code-explain-btn" onclick="explainCode(this)" title="Ask Hazy to explain this code">Explain</button>` +
+      `<button class="code-action-btn code-improve-btn" onclick="improveCode(this)" title="Ask Hazy to improve this code">Improve</button>` +
+      `<button class="code-copy-btn" onclick="copyCode(this)">&#x2398; Copy</button>` +
+      `</div>` +
       `</div>` +
       `<div class="code-scroll-wrap">` +
-        `<div class="code-line-nums" aria-hidden="true">${lineNumbers}</div>` +
-        `<code class="${langClass}">${code.trimEnd()}</code>` +
+      `<div class="code-line-nums" aria-hidden="true">${lineNumbers}</div>` +
+      `<code class="${langClass}">${code.trimEnd()}</code>` +
       `</div>` +
       `</pre>`
     );
@@ -2628,20 +2671,20 @@ function processMarkdownTables(html) {
   while (i < lines.length) {
     const line = lines[i];
     if (/^\|(.+)\|$/.test(line.trim())) {
-      const next = lines[i+1] || '';
+      const next = lines[i + 1] || '';
       if (/^\|[\s\-:|]+\|$/.test(next.trim())) {
-        const headers = line.trim().slice(1,-1).split('|').map(c => c.trim());
+        const headers = line.trim().slice(1, -1).split('|').map(c => c.trim());
         const hRow = '<tr>' + headers.map(c => `<th>${c}</th>`).join('') + '</tr>';
         i += 2;
         const rows = [];
         while (i < lines.length && /^\|(.+)\|$/.test(lines[i].trim())) {
-          rows.push('<tr>' + lines[i].trim().slice(1,-1).split('|').map(c => `<td>${c.trim()}</td>`).join('') + '</tr>');
+          rows.push('<tr>' + lines[i].trim().slice(1, -1).split('|').map(c => `<td>${c.trim()}</td>`).join('') + '</tr>');
           i++;
         }
         out.push(`<table>${hRow}${rows.join('')}</table>`);
         continue;
       } else {
-        const cells = line.trim().slice(1,-1).split('|').map(c => c.trim());
+        const cells = line.trim().slice(1, -1).split('|').map(c => c.trim());
         out.push('<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>');
         i++; continue;
       }
@@ -2655,16 +2698,16 @@ function processMarkdownTables(html) {
 }
 
 function stripMarkdown(text) {
-  return text.replace(/```[\s\S]*?```/g,'').replace(/`[^`]+`/g,'').replace(/\*\*\*(.+?)\*\*\*/g,'$1').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/__(.+?)__/g,'$1').replace(/_(.+?)_/g,'$1').replace(/^#{1,6} /gm,'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/^[-*+] /gm,'').replace(/^\d+\. /gm,'').replace(/^> /gm,'').trim();
+  return text.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').replace(/\*\*\*(.+?)\*\*\*/g, '$1').replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1').replace(/__(.+?)__/g, '$1').replace(/_(.+?)_/g, '$1').replace(/^#{1,6} /gm, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/^[-*+] /gm, '').replace(/^\d+\. /gm, '').replace(/^> /gm, '').trim();
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-window.copyCode = function(btn) {
+window.copyCode = function (btn) {
   const code = btn.closest('pre').querySelector('code');
-  navigator.clipboard.writeText(code.textContent||'').then(() => {
+  navigator.clipboard.writeText(code.textContent || '').then(() => {
     btn.textContent = '✓ COPIED';
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = '⎘ COPY'; btn.classList.remove('copied'); }, 1800);
@@ -2674,7 +2717,7 @@ window.copyCode = function(btn) {
   });
 };
 
-window.explainCode = function(btn) {
+window.explainCode = function (btn) {
   const code = btn.closest('pre').querySelector('code');
   const codeText = code.textContent || '';
   const lang = btn.closest('pre').querySelector('.code-lang-badge')?.textContent?.trim() || 'code';
@@ -2690,7 +2733,7 @@ window.explainCode = function(btn) {
   el.chatInput.value = '';
 };
 
-window.improveCode = function(btn) {
+window.improveCode = function (btn) {
   const code = btn.closest('pre').querySelector('code');
   const codeText = code.textContent || '';
   const lang = btn.closest('pre').querySelector('.code-lang-badge')?.textContent?.trim() || 'code';
@@ -2716,6 +2759,59 @@ function isWebsiteBuildRequest(text) {
 
 function isCodeBuildRequest() {
   return STATE.mode === 'code';
+}
+
+/**
+ * Returns the currently active project snapshot for follow-up edit context.
+ * Prefers the live Builder Output panel state (what the user sees and can click into).
+ * Falls back to the most recent buildMode assistant message in the current conversation.
+ * This is the key mechanism that makes "fix the code in the panel" and "click previous code then ask to fix" reliable.
+ */
+function getActiveProjectForContext() {
+  // 1. Live panel state (highest priority — user explicitly opened/clicked a version into the Builder)
+  if (STATE.builderActive && Array.isArray(STATE.builderFiles) && STATE.builderFiles.length > 0) {
+    return {
+      project: (el && el.builderProjectName && el.builderProjectName.textContent) || 'Project',
+      files: STATE.builderFiles.map(f => ({
+        filename: f.filename,
+        language: f.language || detectLang(f.filename || ''),
+        content: f.content || ''
+      }))
+    };
+  }
+
+  // 2. Fallback: last build result stored in conversation history
+  const conv = STATE.activeConvId ? STATE.conversations[STATE.activeConvId] : null;
+  if (conv && Array.isArray(conv.messages)) {
+    for (let i = conv.messages.length - 1; i >= 0; i--) {
+      const m = conv.messages[i];
+      if (m && m.role === 'assistant' && m.buildMode && typeof m.content === 'string' && m.content.length > 0) {
+        // Prefer stored structured projectData if we saved it (more reliable than re-parsing)
+        if (m.projectData && Array.isArray(m.projectData.files) && m.projectData.files.length > 0) {
+          return {
+            project: m.projectData.project || 'Project',
+            files: m.projectData.files.map(f => ({
+              filename: f.filename,
+              language: f.language || detectLang(f.filename || ''),
+              content: f.content || ''
+            }))
+          };
+        }
+        const parsed = parseFinalResponseFiles(m.content);
+        if (parsed && Array.isArray(parsed.files) && parsed.files.length > 0) {
+          return {
+            project: parsed.project || 'Project',
+            files: parsed.files.map(f => ({
+              filename: f.filename,
+              language: f.language || detectLang(f.filename || ''),
+              content: f.content || ''
+            }))
+          };
+        }
+      }
+    }
+  }
+  return null;
 }
 
 // ========================
@@ -2787,15 +2883,15 @@ function parseDelimitedOutput(raw) {
   };
 
   // Extract metadata sections
-  const projectMatch  = raw.match(/===PROJECT===\s*([\s\S]*?)(?===|$)/);
-  const descMatch     = raw.match(/===DESCRIPTION===\s*([\s\S]*?)(?===|$)/);
-  const setupMatch    = raw.match(/===SETUP===\s*([\s\S]*?)(?===|$)/);
-  const notesMatch    = raw.match(/===NOTES===\s*([\s\S]*?)(?===|$)/);
+  const projectMatch = raw.match(/===PROJECT===\s*([\s\S]*?)(?===|$)/);
+  const descMatch = raw.match(/===DESCRIPTION===\s*([\s\S]*?)(?===|$)/);
+  const setupMatch = raw.match(/===SETUP===\s*([\s\S]*?)(?===|$)/);
+  const notesMatch = raw.match(/===NOTES===\s*([\s\S]*?)(?===|$)/);
 
-  if (projectMatch) result.project     = projectMatch[1].trim();
-  if (descMatch)    result.description = descMatch[1].trim();
-  if (setupMatch)   result.setup       = setupMatch[1].trim();
-  if (notesMatch)   result.notes       = notesMatch[1].trim();
+  if (projectMatch) result.project = projectMatch[1].trim();
+  if (descMatch) result.description = descMatch[1].trim();
+  if (setupMatch) result.setup = setupMatch[1].trim();
+  if (notesMatch) result.notes = notesMatch[1].trim();
 
   // Extract all FILE blocks — works even on partial output
   // A file block starts at ===FILE: name=== and ends at the next === or EOF
@@ -2803,7 +2899,7 @@ function parseDelimitedOutput(raw) {
   let match;
   while ((match = filePattern.exec(raw)) !== null) {
     const filename = match[1].trim();
-    const content  = match[2].trimEnd();
+    const content = match[2].trimEnd();
     if (filename && content) {
       result.files.push({
         filename,
@@ -2856,12 +2952,12 @@ function parseCodeBlockFallback(raw) {
   };
 
   while ((match = pattern.exec(raw)) !== null) {
-    const lang    = (match[2] || '').toLowerCase();
+    const lang = (match[2] || '').toLowerCase();
     const content = match[3].trimEnd();
     if (!content) continue;
 
     const base = langFileMap[lang] || `file.${lang || 'txt'}`;
-    const key  = lang || 'txt';
+    const key = lang || 'txt';
     counters[key] = (counters[key] || 0);
     const prefix = raw.slice(Math.max(0, match.index - 240), match.index);
     const namedFile = inferFilenameBeforeFence(prefix, lang);
@@ -2901,6 +2997,48 @@ function parseFinalResponseFiles(raw) {
   return parseDelimitedOutput(raw) || parseCodeBlockFallback(raw);
 }
 
+function mergeProjectFiles(baseProject, newProject) {
+  if (!baseProject || !baseProject.files) return newProject;
+  if (!newProject || !newProject.files) return baseProject;
+
+  const mergedFiles = [...baseProject.files];
+  for (const newFile of newProject.files) {
+    const existingIndex = mergedFiles.findIndex(f => f.filename === newFile.filename);
+    if (existingIndex >= 0) {
+      mergedFiles[existingIndex] = newFile;
+    } else {
+      mergedFiles.push(newFile);
+    }
+  }
+  return {
+    ...baseProject,
+    ...newProject,
+    files: mergedFiles
+  };
+}
+
+function normalizeArtifactProject(project) {
+  if (!project || !Array.isArray(project.files) || !project.files.length) return null;
+  const files = project.files
+    .filter(file => file && file.filename && typeof file.content === 'string')
+    .map(file => ({
+      filename: file.filename,
+      language: file.language || detectLang(file.filename),
+      content: file.content,
+      path: file.path || ''
+    }));
+  if (!files.length) return null;
+  return {
+    project: project.project || 'Agent Artifacts',
+    description: project.description || 'Files written by the agent tool loop.',
+    files,
+    setup: project.setup || '',
+    notes: project.notes || 'Generated by Agentic Mode and saved in Hazy artifacts.',
+    source: project.source || 'agent_artifacts',
+    chatId: project.chatId || ''
+  };
+}
+
 function renderGeneratedFileCards(projectData) {
   const files = projectData?.files || [];
   return `
@@ -2910,7 +3048,7 @@ function renderGeneratedFileCards(projectData) {
           <span class="generated-file-icon">&lt;/&gt;</span>
           <span class="generated-file-copy">
             <strong>${escapeHtml(file.filename)}</strong>
-            <small>${escapeHtml(file.language || detectLang(file.filename))} · ${file.content.split('\n').length} lines</small>
+            <small>${escapeHtml(file.language || detectLang(file.filename))} · ${file.content.split('\\n').length} lines</small>
           </span>
           <span class="generated-file-arrow">Open</span>
         </button>`).join('')}
@@ -2927,11 +3065,62 @@ function bindGeneratedFileCards(container, projectData) {
       showBuilderFile(index);
       setBuilderView('files');
       renderBuilderTabs();
+      // IMPORTANT: populating STATE.builder* here means the *next* sendMessage()
+      // will see this snapshot via getActiveProjectForContext() and forward it
+      // as hazy.currentProject so the model edits *this* version, not a new invention.
+    });
+  });
+
+  // Attach the correct projectData to all builder-open buttons in this block
+  container.querySelectorAll('.build-open-btn').forEach(btn => {
+    btn.removeAttribute('onclick'); // override any inline _lastBuild mapping
+    btn.addEventListener('click', () => {
+      window._lastBuild = projectData;
+      openBuilderPanel(projectData);
     });
   });
 }
 
+/**
+ * mergeProjectFiles — core fix for "AI overwrites entire project on iteration".
+ *
+ * When the AI fixes a bug it typically only emits the files it changed.
+ * This function merges the AI's returned files (newProject) with the current
+ * project that was in the builder before the request (existingProject):
+ *   - Files in newProject REPLACE the matching filename in existing files.
+ *   - Files NOT mentioned by the AI are KEPT from existing unchanged.
+ *   - Brand-new files are ADDED to the merged result.
+ */
+function mergeProjectFiles(existingProject, newProject) {
+  if (!existingProject || !Array.isArray(existingProject.files) || existingProject.files.length === 0) {
+    return newProject;
+  }
+  if (!newProject || !Array.isArray(newProject.files) || newProject.files.length === 0) {
+    return existingProject;
+  }
+  const newByFilename = new Map();
+  for (const f of newProject.files) {
+    newByFilename.set((f.filename || '').toLowerCase().trim(), f);
+  }
+  const merged = existingProject.files.map(f => {
+    const key = (f.filename || '').toLowerCase().trim();
+    return newByFilename.has(key) ? newByFilename.get(key) : f;
+  });
+  const existingKeys = new Set(existingProject.files.map(f => (f.filename || '').toLowerCase().trim()));
+  for (const [key, f] of newByFilename.entries()) {
+    if (!existingKeys.has(key)) merged.push(f);
+  }
+  return {
+    project: newProject.project || existingProject.project || 'Project',
+    description: newProject.description || existingProject.description || '',
+    setup: newProject.setup || existingProject.setup || '',
+    notes: newProject.notes || existingProject.notes || '',
+    files: merged
+  };
+}
+
 function openBuilderPanel(projectData) {
+
   STATE.builderFiles = projectData.files || [];
   STATE.builderActive = true;
   STATE.builderActiveFile = 0;
@@ -2944,6 +3133,10 @@ function openBuilderPanel(projectData) {
   renderBuilderTabs();
   showBuilderFile(0);
   updateBuilderStatus(`${STATE.builderFiles.length} files generated`, projectData.project);
+
+  // By setting the live builder state here we ensure that any subsequent user message
+  // (even after clicking a *previous* generation's card from chat history) will target
+  // exactly these files via getActiveProjectForContext + hazy.currentProject.
 
   setBuilderView(STATE.builderView);
 }
@@ -3022,8 +3215,8 @@ function setBuilderView(view) {
 
 function refreshPreview() {
   const htmlFile = STATE.builderFiles.find(f => f.filename === 'index.html' || f.filename.endsWith('.html'));
-  const cssFile  = STATE.builderFiles.find(f => f.language === 'css' || f.filename.endsWith('.css'));
-  const jsFile   = STATE.builderFiles.find(f => (f.language === 'javascript' || f.filename.endsWith('.js')) && !f.filename.includes('server') && !f.filename.includes('node'));
+  const cssFile = STATE.builderFiles.find(f => f.language === 'css' || f.filename.endsWith('.css'));
+  const jsFile = STATE.builderFiles.find(f => (f.language === 'javascript' || f.filename.endsWith('.js')) && !f.filename.includes('server') && !f.filename.includes('node'));
 
   if (!htmlFile) { el.builderStatus.textContent = 'No HTML file found for preview'; return; }
 
@@ -3098,18 +3291,18 @@ if (typeof pdfjsLib !== 'undefined') {
 }
 
 const FILE_ACCEPT = {
-  image:  ['image/jpeg','image/png','image/gif','image/webp','image/svg+xml'],
-  pdf:    ['application/pdf'],
-  text:   ['text/plain','text/markdown','text/csv','text/html','text/css',
-           'text/javascript','application/json','application/xml',
-           'text/x-python','text/x-java','text/x-c','text/x-sh',
-           'application/x-yaml','text/yaml'],
+  image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'],
+  pdf: ['application/pdf'],
+  text: ['text/plain', 'text/markdown', 'text/csv', 'text/html', 'text/css',
+    'text/javascript', 'application/json', 'application/xml',
+    'text/x-python', 'text/x-java', 'text/x-c', 'text/x-sh',
+    'application/x-yaml', 'text/yaml'],
 };
 
 const CODE_EXTS = new Set([
-  'js','ts','jsx','tsx','html','css','py','java','cpp','c','h',
-  'sh','bash','json','yaml','yml','xml','md','txt','csv','env',
-  'log','sql','php','rb','go','rs','swift','kt','vue','svelte','zip',
+  'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'py', 'java', 'cpp', 'c', 'h',
+  'sh', 'bash', 'json', 'yaml', 'yml', 'xml', 'md', 'txt', 'csv', 'env',
+  'log', 'sql', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'vue', 'svelte', 'zip',
 ]);
 
 function renderCodeLanguageOptions() {
@@ -3123,7 +3316,7 @@ function renderCodeLanguageOptions() {
 
 function categorizeFile(file) {
   if (FILE_ACCEPT.image.includes(file.type)) return 'image';
-  if (FILE_ACCEPT.pdf.includes(file.type))   return 'pdf';
+  if (FILE_ACCEPT.pdf.includes(file.type)) return 'pdf';
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') return 'zip';
   if (CODE_EXTS.has(ext) || FILE_ACCEPT.text.includes(file.type)) return 'text';
@@ -3132,15 +3325,15 @@ function categorizeFile(file) {
 
 function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes/1024).toFixed(1)} KB`;
-  return `${(bytes/1048576).toFixed(1)} MB`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
 // Read image as base64
 function readAsBase64(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
-    r.onload  = () => res(r.result.split(',')[1]);
+    r.onload = () => res(r.result.split(',')[1]);
     r.onerror = () => rej(r.error);
     r.readAsDataURL(file);
   });
@@ -3150,7 +3343,7 @@ function readAsBase64(file) {
 function readAsDataURL(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
-    r.onload  = () => res(r.result);
+    r.onload = () => res(r.result);
     r.onerror = () => rej(r.error);
     r.readAsDataURL(file);
   });
@@ -3160,7 +3353,7 @@ function readAsDataURL(file) {
 function readAsText(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
-    r.onload  = () => res(r.result);
+    r.onload = () => res(r.result);
     r.onerror = () => rej(r.error);
     r.readAsText(file);
   });
@@ -3184,7 +3377,7 @@ async function extractZipProjectSummary(file) {
       try {
         const text = await entry.async('string');
         previews.push(`--- ${entry.name} ---\n${text.slice(0, 2500)}`);
-      } catch {}
+      } catch { }
     }
 
     return [
@@ -3205,18 +3398,18 @@ async function extractPDFText(file) {
   }
   try {
     const arrayBuffer = await file.arrayBuffer();
-    const pdf    = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const total  = pdf.numPages;
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const total = pdf.numPages;
     const chunks = [];
     const maxPages = Math.min(total, 20); // cap at 20 pages to avoid RAM issues
     for (let i = 1; i <= maxPages; i++) {
-      const page    = await pdf.getPage(i);
+      const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const text    = content.items.map(s => s.str).join(' ').trim();
+      const text = content.items.map(s => s.str).join(' ').trim();
       if (text) chunks.push(`--- Page ${i} ---\n${text}`);
     }
     const result = chunks.join('\n\n');
-    const note   = total > maxPages ? `\n\n[Note: Only first ${maxPages} of ${total} pages extracted]` : '';
+    const note = total > maxPages ? `\n\n[Note: Only first ${maxPages} of ${total} pages extracted]` : '';
     return result + note || '[PDF appears to have no extractable text — may be scanned/image-based]';
   } catch (e) {
     return `[PDF extraction failed: ${e.message}]`;
@@ -3227,7 +3420,7 @@ async function extractPDFText(file) {
 async function processFiles(fileList) {
   const MAX_SIZE = 10 * 1024 * 1024; // 10 MB per file
   const toProcess = Array.from(fileList).slice(0, 8); // max 8 files at once
-  const results   = [];
+  const results = [];
 
   for (const file of toProcess) {
     if (file.size > MAX_SIZE) {
@@ -3245,20 +3438,20 @@ async function processFiles(fileList) {
       const entry = { name: file.name, type: file.type, size: file.size, category };
 
       if (category === 'image') {
-        entry.base64     = await readAsBase64(file);
+        entry.base64 = await readAsBase64(file);
         entry.previewUrl = await readAsDataURL(file);
-        entry.mimeType   = file.type;
+        entry.mimeType = file.type;
       } else if (category === 'pdf') {
-        entry.content    = await extractPDFText(file);
+        entry.content = await extractPDFText(file);
         entry.previewUrl = null;
       } else if (category === 'zip') {
-        entry.content    = await extractZipProjectSummary(file);
+        entry.content = await extractZipProjectSummary(file);
         entry.previewUrl = null;
-        entry.ext        = 'zip';
+        entry.ext = 'zip';
       } else {
-        entry.content    = await readAsText(file);
+        entry.content = await readAsText(file);
         entry.previewUrl = null;
-        entry.ext        = file.name.split('.').pop().toLowerCase();
+        entry.ext = file.name.split('.').pop().toLowerCase();
       }
 
       results.push(entry);
@@ -3388,7 +3581,16 @@ async function sendMessage(userText) {
   if (STATE.isStreaming) return;
 
   const isBuild = isWebsiteBuildRequest(userText);
-  const isCode  = !isBuild && isCodeBuildRequest();
+  const isCode = !isBuild && isCodeBuildRequest();
+
+  // === KEY FIX for "AI ignores existing Builder code and makes new project" ===
+  // Compute the active project snapshot (Builder panel > last build in history).
+  // This snapshot (exact files the user can see/click) is passed through hazy.currentProject
+  // so the backend can inject it as "CURRENT PROJECT FILES" for edit turns.
+  const activeProject = getActiveProjectForContext();
+  // Conservative continuation signal: we have a project + (we are in a build mode OR the prompt smells like an edit request)
+  const looksLikeEdit = /\b(fix|debug|error|issue|broken|not working|doesn't work|improve|update|change|refactor|modify|add to|extend|make the .* work)\b/i.test(userText);
+  const isContinuation = !!(activeProject && (isCode || isBuild || looksLikeEdit));
 
   if (!STATE.activeConvId) {
     createConversation(userText || files.map(f => f.name).join(', '));
@@ -3397,10 +3599,17 @@ async function sendMessage(userText) {
   }
 
   const conv = STATE.conversations[STATE.activeConvId];
-  const now  = Date.now();
+  const now = Date.now();
 
-  // Build the message content for Ollama
-  const ollamaContent = buildMessageWithFiles(userText, files);
+  // Build the message content for Ollama.
+  // For strong edit iterations we also append a short "Current builder context" note to the user turn
+  // (this helps the direct file:// Ollama fallback path and gives an extra hint even when hazy is used).
+  let ollamaContent = buildMessageWithFiles(userText, files);
+  if (isContinuation && activeProject && activeProject.files && activeProject.files.length > 0) {
+    const projNote = `\n\n[Current project in Builder Output — treat the files below as the source of truth to edit. Project: ${activeProject.project}. Only modify what is necessary for the request; keep file names and non-mentioned logic stable.]\n` +
+      activeProject.files.slice(0, 6).map(f => `===FILE: ${f.filename}===\n${(f.content || '').slice(0, 8000)}${(f.content || '').length > 8000 ? '\n// [content truncated for this note; full version travels in hazy.currentProject]' : ''}\n===`).join('\n');
+    ollamaContent = ollamaContent + projNote;
+  }
 
   // Store in conversation (text only for history display)
   const textForHistory = userText + (files.length
@@ -3430,11 +3639,19 @@ async function sendMessage(userText) {
 
   appendTypingIndicator();
   setStreamingState(true);
+  window.HAZY_STREAMING_TTS?.stop();
+  window.HAZY_STREAMING_TTS?.start(getVoiceSettings({
+    enabled: STATE.voiceEnabled && STATE.voiceAutoplay !== false
+  }));
+  // server path: set provisional loading; actual device label comes from checkKokoroHealth() polling /hazy/*
+  if (STATE.voiceEnabled && STATE.voiceAutoplay !== false) {
+    updateKokoroStatus('loading', 'Kokoro TTS active (server)…');
+  }
   let partialGeneratedContent = '';
 
   try {
     const sysPrompt = getActiveSystemPrompt(isBuild, isCode);
-    const messages  = [
+    const messages = [
       { role: 'system', content: sysPrompt },
       // All previous messages (text only) + current message with file content
       ...conv.messages.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
@@ -3456,33 +3673,33 @@ async function sendMessage(userText) {
 
     const savedModel = localStorage.getItem('hazyActiveModel') || '';
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+    const isCloud = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
 
     // Build the model field — server expects 'provider/modelid' format
     const modelField = savedModel || ('ollama/' + STATE.model);
 
     const chatBody = {
-      model:    modelField,
+      model: modelField,
       messages,
-      stream:   true,
+      stream: true,
       conversationId: STATE.activeConvId,
       userId: 'local-user',
-      hazy:     buildHazyMetadata({ files, isBuild, isCode }),
+      hazy: buildHazyMetadata({ files, isBuild, isCode, currentProject: activeProject }),
       options: {
         // Inference parameters — ref: Claude Technical Reference §2.4
-        temperature:    STATE.temperature,   // 0.0 deterministic → 1.0 creative
-        top_p:          STATE.topP,          // nucleus sampling (0.9–0.99)
-        top_k:          STATE.topK,          // top-K token candidates (10–100)
+        temperature: STATE.temperature,   // 0.0 deterministic → 1.0 creative
+        top_p: STATE.topP,          // nucleus sampling (0.9–0.99)
+        top_k: STATE.topK,          // top-K token candidates (10–100)
         repeat_penalty: STATE.repeatPenalty, // penalise repetition
-        num_predict:    STATE.maxTokens,
-        num_ctx:        STATE.contextSize,
-        max_tokens:     STATE.maxTokens,
+        num_predict: STATE.maxTokens,
+        num_ctx: STATE.contextSize,
+        max_tokens: STATE.maxTokens,
       },
     };
 
     // Try the Hazy server first (/hazy/chat), fall back to direct Ollama
     let chatEndpoint = hazyServerEndpoint(STATE.activePage === 'agent' ? '/hazy/agent' : '/hazy/chat');
-    let chatHeaders  = { 'Content-Type': 'application/json' };
+    let chatHeaders = { 'Content-Type': 'application/json' };
 
     // If running direct from filesystem (file:// protocol), use Ollama directly
     if (window.location.protocol === 'file:') {
@@ -3493,16 +3710,16 @@ async function sendMessage(userText) {
     }
 
     const response = await fetch(chatEndpoint, {
-      method:  'POST',
+      method: 'POST',
       headers: chatHeaders,
-      signal:  STATE.abortController.signal,
-      body:    JSON.stringify(chatBody),
+      signal: STATE.abortController.signal,
+      body: JSON.stringify(chatBody),
     });
 
     if (!response.ok) {
       const errText = await response.text().catch(() => response.statusText);
       let errMsg = errText;
-      try { errMsg = JSON.parse(errText).error || errText; } catch {}
+      try { errMsg = JSON.parse(errText).error || errText; } catch { }
 
       // If it's a cloud provider, never fall back to Ollama — show the real error
       if (isCloud) {
@@ -3513,10 +3730,10 @@ async function sendMessage(userText) {
       if (chatEndpoint.endsWith('/hazy/chat') || chatEndpoint.endsWith('/hazy/agent')) {
         const ollamaModel = STATE.model.includes('/') ? STATE.model.split('/').pop() : STATE.model;
         const fallbackRes = await fetch(`${STATE.ollamaUrl}/api/chat`, {
-          method:  'POST',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          signal:  STATE.abortController.signal,
-          body:    JSON.stringify({ model: ollamaModel, messages, stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: STATE.temperature, num_predict: STATE.maxTokens, num_ctx: 16384 } }),
+          signal: STATE.abortController.signal,
+          body: JSON.stringify({ model: ollamaModel, messages, stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: STATE.temperature, num_predict: STATE.maxTokens, num_ctx: 16384 } }),
         });
         if (!fallbackRes.ok) throw new Error(`Ollama error ${fallbackRes.status}: ${await fallbackRes.text()}`);
 
@@ -3526,7 +3743,7 @@ async function sendMessage(userText) {
         const { contentDiv } = appendMessage('assistant', '', true, aiTs);
         let fullContent = '';
         let fullThinking = '';
-        const reader  = fallbackRes.body.getReader();
+        const reader = fallbackRes.body.getReader();
         const decoder = new TextDecoder();
         let streamBuffer = '';
         while (true) {
@@ -3548,8 +3765,9 @@ async function sendMessage(userText) {
               }
               const token = json.message?.content || '';
               if (token) { fullContent += token; partialGeneratedContent = fullContent; contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`; scrollToBottom(); }
+              if (token && !isBuild && !isCode) window.HAZY_STREAMING_TTS?.push(token);
               if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
-            } catch {}
+            } catch { }
           }
         }
         contentDiv.querySelector('.stream-cursor')?.remove();
@@ -3559,7 +3777,6 @@ async function sendMessage(userText) {
         if (conv.messages.filter(m => m.role === 'user').length === 1) generateChatTitle(STATE.activeConvId, userText, fullContent);
         contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking);
         highlightCodeBlocks(contentDiv);
-        if (STATE.ttsEnabled && fullContent) speakText(stripMarkdown(fullContent));
         return; // done — skip the main stream block below
       } else {
         throw new Error(`Server error ${response.status}: ${errMsg}`);
@@ -3575,8 +3792,9 @@ async function sendMessage(userText) {
     let fullContent = '';
     let fullThinking = '';
     let agentRunInfo = null;
+    let agentArtifactProject = null;
 
-    const reader  = response.body.getReader();
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
     // ── Stream reader — always Ollama NDJSON format ───────────────────────
@@ -3598,6 +3816,8 @@ async function sendMessage(userText) {
         try {
           const json = JSON.parse(trimmed);
           if (json.agent) agentRunInfo = json.agent;
+          if (json.artifactProject) agentArtifactProject = normalizeArtifactProject(json.artifactProject);
+          if (json.agent?.artifactProject) agentArtifactProject = normalizeArtifactProject(json.agent.artifactProject);
           const thinkingToken = getThinkingToken(json);
           if (thinkingToken) {
             fullThinking += thinkingToken;
@@ -3611,10 +3831,10 @@ async function sendMessage(userText) {
             partialGeneratedContent = fullContent;
 
             if (isBuild || isCode) {
-              const liveProject    = parseFinalResponseFiles(fullContent);
-              const filesFound     = liveProject?.files.length || 0;
+              const liveProject = parseFinalResponseFiles(fullContent);
+              const filesFound = liveProject?.files.length || 0;
               const linesGenerated = fullContent.split('\n').length;
-              const modeVerb       = isCode ? 'Building your code…' : 'Building your website…';
+              const modeVerb = isCode ? 'Building your code…' : 'Building your website…';
               if (STATE.showLiveCode) {
                 contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderLiveBuildProgress(fullContent, filesFound, linesGenerated)}`;
               } else {
@@ -3624,74 +3844,62 @@ async function sendMessage(userText) {
                     <span class="build-spinner"></span>
                     <div class="build-progress-info">
                       <span>${modeVerb}</span>
-                      <span class="build-stats">${filesInfo} · ${linesGenerated} lines · ${(fullContent.length/1024).toFixed(1)} KB</span>
+                      <span class="build-stats">${filesInfo} · ${linesGenerated} lines · ${(fullContent.length / 1024).toFixed(1)} KB</span>
                     </div>
                   </div>`;
               }
             } else {
               contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking) + '<span class="stream-cursor"></span>';
             }
+            if (!isBuild && !isCode) window.HAZY_STREAMING_TTS?.push(token);
             scrollToBottom();
           }
 
           if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
-        } catch {}
+        } catch { }
       }
     }
     // Remove cursor after stream ends
     contentDiv.querySelector('.stream-cursor')?.remove();
+    window.HAZY_STREAMING_TTS?.finish()?.catch(() => { });
 
     if (!fullContent.trim()) {
       fullContent = 'The model finished without returning an answer. Its response budget may have been used entirely for reasoning. Increase Max Tokens or set Reasoning to Off and try again.';
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking);
+      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
     }
     if (!isBuild && !isCode) {
       fullContent = normalizeCompanionResponse(fullContent);
     }
 
-    // Final flush to IndexedDB before parsing
+    // Final flush to IndexedDB before parsing.
+    // For build/code responses we also persist the *parsed* projectData (structured files)
+    // so that getActiveProjectForContext() and history replay can use the exact snapshot
+    // without relying on fragile re-parsing of the (potentially huge) raw content string.
+    // This is a major part of making "click previous code" + follow-up fix target the right version.
+    let persistedProjectData = undefined;
+    if (isBuild || isCode) {
+      let parsedForStore = parseFinalResponseFiles(fullContent);
+      if (parsedForStore && Array.isArray(parsedForStore.files) && parsedForStore.files.length > 0) {
+        if (activeProject) {
+          parsedForStore = mergeProjectFiles(activeProject, parsedForStore);
+        }
+        persistedProjectData = parsedForStore;
+      } else if (agentArtifactProject) {
+        persistedProjectData = mergeProjectFiles(activeProject, agentArtifactProject);
+      }
+    } else if (agentArtifactProject) {
+      persistedProjectData = mergeProjectFiles(activeProject, agentArtifactProject);
+    }
 
     conv.messages.push({
       role: 'assistant',
       content: fullContent,
       ts: aiTs,
-      buildMode: (isBuild || isCode) ? (isCode ? 'code' : 'website') : undefined,
+      buildMode: (isBuild || isCode || agentArtifactProject) ? (isCode ? 'code' : 'website') : undefined,
+      projectData: persistedProjectData,
       trace: hazyTrace || undefined,
       agent: agentRunInfo || undefined
     });
-
-    // === HAZY WEB LOGIC: populate tool structured data from existing agent/tool info ===
-    // (if present in stream). Stored on msg so renderer recreates cards on history load.
-    // Resolution via CONFIG only (no hard-coded tool strings at this call site).
-    if (agentRunInfo) {
-      try {
-        const cfg = window.HAZY_WEB_LOGIC_CONFIG || {};
-        const types = cfg.cardTypes || {};
-        let toolKind = 'tool';
-        for (const tk in types) {
-          if (types[tk] && types[tk].icon === '🔧') { toolKind = types[tk].kind; break; }
-        }
-        const doneSt = (cfg.statuses && cfg.statuses.done) || 'done';
-        const errSt = (cfg.statuses && cfg.statuses.error) || 'error';
-        const toolSrc = agentRunInfo.tools || agentRunInfo.toolCalls || [];
-        if (toolSrc.length) {
-          const toolEntries = toolSrc.map((t, i) => ({
-            kind: toolKind,
-            id: 'tool-' + i,
-            tool_id: t.tool || t.name || ('tool' + i),
-            name: t.tool || t.name || 'tool',
-            context: t.args ? (typeof t.args === 'string' ? t.args.slice(0, 110) : JSON.stringify(t.args).slice(0, 110)) : (t.query || ''),
-            summary: t.result || (t.success ? 'ok' : ''),
-            error: t.success ? undefined : (t.error || t.message || 'tool failed'),
-            status: (t.success !== false) ? doneSt : errSt,
-            startedAt: Date.now() - 1500,
-            completedAt: Date.now()
-          }));
-          const last = conv.messages[conv.messages.length - 1];
-          if (last) last.structured = (last.structured || []).concat(toolEntries);
-        }
-      } catch (e) { /* keep chat working */ }
-    }
     saveConversations();
 
     // Generate a smart title after the very first exchange
@@ -3702,6 +3910,9 @@ async function sendMessage(userText) {
     if (isBuild || isCode) {
       // — Parse attempt 1: delimiter format (most reliable) —
       let projectData = parseFinalResponseFiles(fullContent);
+      if (projectData && activeProject) {
+        projectData = mergeProjectFiles(activeProject, projectData);
+      }
 
       // — Parse attempt 2: code block fallback (if model used markdown fences) —
       // parseFinalResponseFiles already handles both delimiter and fenced formats.
@@ -3710,7 +3921,7 @@ async function sendMessage(userText) {
       if (projectData && projectData.files.length > 0) {
         const isPartial = !fullContent.includes('===NOTES===') && !fullContent.includes('===SETUP===');
         const modeLabel = isCode ? 'Code' : 'Website';
-        const modeIcon  = isCode ? '💻' : '🌐';
+        const modeIcon = isCode ? '💻' : '🌐';
 
 
         contentDiv.innerHTML = `${renderRawThinking(fullThinking)}
@@ -3725,7 +3936,7 @@ async function sendMessage(userText) {
             ${projectData.setup ? `<div class="build-setup"><strong>Run:</strong> <code>${escapeHtml(projectData.setup)}</code></div>` : ''}
             ${projectData.notes ? `<p class="build-notes">${escapeHtml(projectData.notes)}</p>` : ''}
             <div class="build-actions">
-              <button class="build-open-btn" onclick="openBuilderPanel(window._lastBuild)">
+              <button class="build-open-btn">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 Open in Builder
               </button>
@@ -3736,10 +3947,25 @@ async function sendMessage(userText) {
             </div>
           </div>`;
 
-        window._lastBuild = projectData;
-        bindGeneratedFileCards(contentDiv, projectData);
-        openBuilderPanel(projectData);
-        showToast(`${projectData.files.length} file${projectData.files.length > 1 ? 's' : ''} generated!`, 'success');
+        // Merge AI's returned files with any existing project in the builder.
+        // If the AI only fixed one file, all other project files are preserved.
+        // If this is a fresh generation (no existing project), merge is a no-op.
+        const existingProject = getActiveProjectForContext();
+        const finalProject = mergeProjectFiles(existingProject, projectData);
+
+        window._lastBuild = finalProject;
+        bindGeneratedFileCards(contentDiv, finalProject);
+        openBuilderPanel(finalProject);
+        const changedCount = projectData.files.length;
+        const totalCount = finalProject.files.length;
+        const isEdit = existingProject && existingProject.files && existingProject.files.length > 0;
+        showToast(
+          isEdit
+            ? `${changedCount} file${changedCount > 1 ? 's' : ''} updated (${totalCount} total in project)`
+            : `${totalCount} file${totalCount > 1 ? 's' : ''} generated!`,
+          'success'
+        );
+
       } else {
         contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}`;
         highlightCodeBlocks(contentDiv);
@@ -3760,34 +3986,77 @@ async function sendMessage(userText) {
         contentDiv.appendChild(warnDiv);
         showToast('Could not extract files — see suggestions below', '');
       }
+    } else if (agentArtifactProject && Array.isArray(agentArtifactProject.files) && agentArtifactProject.files.length > 0) {
+      // Agent mode wrote files via artifact.write tool — open them in the builder panel.
+      // isBuild/isCode are false in agent mode (they reflect the chat-mode UI toggle, not agent intent),
+      // so this branch handles the case the agent produced real artifacts that the builder block above never sees.
+      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
+      highlightCodeBlocks(contentDiv);
+
+      const agentFileCount = agentArtifactProject.files.length;
+      const agentSuccessDiv = document.createElement('div');
+      agentSuccessDiv.className = 'build-success';
+      agentSuccessDiv.innerHTML = `
+        <div class="build-success-header">
+          <span class="build-success-icon">✅</span>
+          <strong>${escapeHtml(agentArtifactProject.project || 'Agent Output')} ready!</strong>
+        </div>
+        ${agentArtifactProject.description ? `<p class="build-success-desc">${escapeHtml(agentArtifactProject.description)}</p>` : ''}
+        ${renderGeneratedFileCards(agentArtifactProject)}
+        <div class="build-actions">
+          <button class="build-open-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Open in Builder
+          </button>
+          <button class="build-dl-btn" onclick="downloadBuilderZip()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Download ZIP
+          </button>
+        </div>`;
+      contentDiv.appendChild(agentSuccessDiv);
+      const existingAgentProject = getActiveProjectForContext();
+      const finalAgentProject = mergeProjectFiles(existingAgentProject, agentArtifactProject);
+      window._lastBuild = finalAgentProject;
+      bindGeneratedFileCards(contentDiv, finalAgentProject);
+      openBuilderPanel(finalAgentProject);
+      showToast(`${agentFileCount} file${agentFileCount > 1 ? 's' : ''} ${existingAgentProject ? 'updated' : 'generated'} by agent!`, 'success');
+
     } else {
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking);
+      // ── SOURCES_PENDING: render content + inject skeleton placeholder synchronously ──
+      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
       highlightCodeBlocks(contentDiv);
     }
 
-    const webSourceCards = await loadWebSourceCards(webSearchMetadata);
-    if (webSourceCards && CONFIG.enableResearchCards !== false && CONFIG.enableCitationsInTranscript !== false) {
-      contentDiv.insertAdjacentHTML('beforeend', webSourceCards);
-    }
+    // ── Async fetch: SOURCES_PENDING → SOURCES_LOADED or ERROR ─────────────────────────
+    // Start the fetch immediately (no await) so it runs while the DOM is already updating.
+    const searchFetchPromise = loadWebSourceCards(webSearchMetadata);
 
-    // === HAZY WEB LOGIC (root hazy-web-logic-integration.js) ===
-    // Insert structured cards (from .structured populated above via webSearch + tools)
-    // right after the existing web panel. Keeps prior flow 100% intact.
-    try {
-      const lastMsgForCards = conv.messages[conv.messages.length - 1];
-      if (lastMsgForCards && Array.isArray(lastMsgForCards.structured) && lastMsgForCards.structured.length &&
-          typeof window.renderHazyStructuredCardsHTML === 'function' &&
-          window.HAZY_WEB_LOGIC_CONFIG && window.HAZY_WEB_LOGIC_CONFIG.enableStructuredCards) {
-        const liveCards = window.renderHazyStructuredCardsHTML(lastMsgForCards.structured);
-        if (liveCards) contentDiv.insertAdjacentHTML('beforeend', liveCards);
+    // Only wait if there is actually a pending placeholder in the DOM.
+    const pendingPlaceholder = webSearchMetadata?.runId
+      ? contentDiv.querySelector(`#tl-search-placeholder-${CSS.escape(webSearchMetadata.runId)}`)
+      : null;
+
+    if (pendingPlaceholder) {
+      // Block until fetch resolves, then swap placeholder
+      const searchResult = await searchFetchPromise;
+      const timelineList = finalizeTimelineSearch(contentDiv, webSearchMetadata, searchResult);
+      // ── DONE: only fire after search is fully settled ──
+      appendTimelineDone(timelineList);
+      scrollToBottom(true);
+    } else if (webSearchMetadata?.runId) {
+      // No placeholder (non-trace path) — legacy fallback: wait and insert raw HTML
+      const webSourceCards = await searchFetchPromise;
+      if (webSourceCards && !webSourceCards.startsWith('__ERROR__:')) {
+        contentDiv.insertAdjacentHTML('beforeend', `
+          <section class="web-source-panel" aria-label="Web search sources">
+            <div class="tl-source-grid">${webSourceCards}</div>
+          </section>`);
       }
-    } catch (e) { /* guaranteed not to break transcript */ }
-
-    if (STATE.ttsEnabled && fullContent && !isBuild && !isCode) {
-      speakText(stripMarkdown(fullContent));
     }
 
-  } catch(err) {
+
+  } catch (err) {
+    window.HAZY_STREAMING_TTS?.stop();
     removeTypingIndicator();
     if (err.name === 'AbortError') {
       // On abort during build — try to parse whatever was collected
@@ -3827,28 +4096,28 @@ function renderLiveBuildProgress(rawContent, filesFound, linesGenerated) {
   // Parse the content to show live code preview
   const projectMatch = rawContent.match(/===PROJECT===\s*([\s\S]*?)(?===|$)/);
   const descMatch = rawContent.match(/===DESCRIPTION===\s*([\s\S]*?)(?===|$)/);
-  
+
   let html = '<div class="build-live-preview">';
-  
+
   // Header with stats
   html += `
     <div class="build-live-header">
       <span class="build-spinner"></span>
       <div>
         <strong>Building: ${projectMatch ? escapeHtml(projectMatch[1].trim()) : 'Website Project'}</strong>
-        <span class="build-stats">${filesFound} file${filesFound>1?'s':''} · ${linesGenerated} lines · ${(rawContent.length/1024).toFixed(1)} KB</span>
+        <span class="build-stats">${filesFound} file${filesFound > 1 ? 's' : ''} · ${linesGenerated} lines · ${(rawContent.length / 1024).toFixed(1)} KB</span>
       </div>
     </div>`;
-  
+
   if (descMatch) {
     html += `<p class="build-live-desc">${escapeHtml(descMatch[1].trim())}</p>`;
   }
-  
+
   // Extract and display each file as it's being written
   const filePattern = /===FILE:\s*([^\s=][^=]*?)===\s*([\s\S]*?)(?=\n===|$)/g;
   let match;
   const files = [];
-  
+
   while ((match = filePattern.exec(rawContent)) !== null) {
     const filename = match[1].trim();
     const content = match[2].trimEnd();
@@ -3856,13 +4125,13 @@ function renderLiveBuildProgress(rawContent, filesFound, linesGenerated) {
       files.push({ filename, content });
     }
   }
-  
+
   if (files.length > 0) {
     html += '<div class="build-live-files">';
     files.forEach((file, idx) => {
       const lang = detectLang(file.filename);
       const isIncomplete = idx === files.length - 1 && !rawContent.endsWith('===');
-      
+
       html += `
         <div class="build-live-file ${isIncomplete ? 'building' : 'complete'}">
           <div class="build-live-file-header">
@@ -3875,7 +4144,7 @@ function renderLiveBuildProgress(rawContent, filesFound, linesGenerated) {
     });
     html += '</div>';
   }
-  
+
   html += '</div>';
   return html;
 }
@@ -3953,7 +4222,7 @@ function scrollToBottom(force = false) {
   liveScrollFrame = requestAnimationFrame(() => {
     liveScrollFrame = 0;
     if (!userScrolledUp) {
-    // Streaming chunk — only scroll if user hasn't scrolled up
+      // Streaming chunk — only scroll if user hasn't scrolled up
       el.chatContainer.scrollTop = el.chatContainer.scrollHeight;
     }
   });
@@ -3978,7 +4247,7 @@ function showToast(msg, type = '') {
   const t = document.createElement('div');
   t.className = `toast ${type}`; t.textContent = msg;
   el.toastContainer.appendChild(t);
-  setTimeout(() => { t.style.opacity='0'; t.style.transform='translateY(10px)'; t.style.transition='all .25s'; setTimeout(() => t.remove(), 300); }, 2200);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(10px)'; t.style.transition = 'all .25s'; setTimeout(() => t.remove(), 300); }, 2200);
 }
 
 function openModal(id) { $(id).classList.add('open'); }
@@ -3997,45 +4266,47 @@ function setProfileMenuOpen(open) {
 }
 
 // ========================
-// Piper TTS Engine
-// Uses @mintplex-labs/piper-tts-web via jsDelivr +esm
-// window.PiperTTS is set by the module script in index.html BEFORE app.js loads
-// Voice models download from HuggingFace once, cached in browser OPFS permanently
+// Legacy / Classic TTS (Piper + Browser SpeechSynthesis)
+// Kept for power users / backward compatibility (plan Agent F + audit "consolidate or clearly separate").
+// The primary/recommended path is the Kokoro Voice system (voice* STATE + HAZY_TTS_MANAGER + streamingTTS + audioQueue).
+// speakBrowser / speakPiper / _ttsAudioCtx + PIPER_VOICES are isolated here.
+// tts* STATE fields and this modal are treated as "Classic/Legacy" in UI labels.
+// speakText + streaming + per-message voice buttons route *only* to Kokoro (no cross-talk).
 // ========================
 
 const PIPER_VOICES = [
-  { id: 'en_US-lessac-medium',              label: 'Lessac ⭐ (US Female)',       group: '🇺🇸 English US' },
-  { id: 'en_US-amy-medium',                 label: 'Amy (US Female)',              group: '🇺🇸 English US' },
-  { id: 'en_US-hfc_female-medium',          label: 'HFC Female (US)',              group: '🇺🇸 English US' },
-  { id: 'en_US-hfc_male-medium',            label: 'HFC Male (US)',                group: '🇺🇸 English US' },
-  { id: 'en_US-joe-medium',                 label: 'Joe (US Male)',                group: '🇺🇸 English US' },
-  { id: 'en_US-ryan-medium',                label: 'Ryan (US Male)',               group: '🇺🇸 English US' },
-  { id: 'en_US-danny-low',                  label: 'Danny (US Male)',              group: '🇺🇸 English US' },
-  { id: 'en_US-kathleen-low',               label: 'Kathleen (US Female)',         group: '🇺🇸 English US' },
-  { id: 'en_US-kusal-medium',               label: 'Kusal (US Male)',              group: '🇺🇸 English US' },
-  { id: 'en_US-libritts-high',              label: 'LibriTTS (US Female, HQ)',     group: '🇺🇸 English US' },
-  { id: 'en_GB-alan-medium',                label: 'Alan (GB Male)',               group: '🇬🇧 English GB' },
-  { id: 'en_GB-cori-high',                  label: 'Cori (GB Female, HQ)',         group: '🇬🇧 English GB' },
-  { id: 'en_GB-jenny_dioco-medium',         label: 'Jenny (GB Female)',            group: '🇬🇧 English GB' },
-  { id: 'en_GB-northern_english_male-medium', label: 'Northern Male',              group: '🇬🇧 English GB' },
-  { id: 'de_DE-thorsten-medium',            label: 'Thorsten (Male)',              group: '🇩🇪 German' },
-  { id: 'de_DE-eva_k-x_low',               label: 'Eva (Female)',                 group: '🇩🇪 German' },
-  { id: 'fr_FR-siwis-medium',               label: 'Siwis (Female)',               group: '🇫🇷 French' },
-  { id: 'fr_FR-tom-medium',                 label: 'Tom (Male)',                   group: '🇫🇷 French' },
-  { id: 'es_ES-davefx-medium',              label: 'Dave (Male)',                  group: '🇪🇸 Spanish' },
-  { id: 'it_IT-paola-medium',               label: 'Paola (Female)',               group: '🇮🇹 Italian' },
-  { id: 'pt_BR-faber-medium',               label: 'Faber (BR Male)',              group: '🇧🇷 Portuguese' },
-  { id: 'nl_NL-mls-medium',                 label: 'MLS (Female)',                 group: '🇳🇱 Dutch' },
-  { id: 'ru_RU-ruslan-medium',              label: 'Ruslan (Male)',                group: '🇷🇺 Russian' },
-  { id: 'zh_CN-huayan-medium',              label: 'Huayan (Female)',              group: '🇨🇳 Chinese' },
+  { id: 'en_US-lessac-medium', label: 'Lessac ⭐ (US Female)', group: '🇺🇸 English US' },
+  { id: 'en_US-amy-medium', label: 'Amy (US Female)', group: '🇺🇸 English US' },
+  { id: 'en_US-hfc_female-medium', label: 'HFC Female (US)', group: '🇺🇸 English US' },
+  { id: 'en_US-hfc_male-medium', label: 'HFC Male (US)', group: '🇺🇸 English US' },
+  { id: 'en_US-joe-medium', label: 'Joe (US Male)', group: '🇺🇸 English US' },
+  { id: 'en_US-ryan-medium', label: 'Ryan (US Male)', group: '🇺🇸 English US' },
+  { id: 'en_US-danny-low', label: 'Danny (US Male)', group: '🇺🇸 English US' },
+  { id: 'en_US-kathleen-low', label: 'Kathleen (US Female)', group: '🇺🇸 English US' },
+  { id: 'en_US-kusal-medium', label: 'Kusal (US Male)', group: '🇺🇸 English US' },
+  { id: 'en_US-libritts-high', label: 'LibriTTS (US Female, HQ)', group: '🇺🇸 English US' },
+  { id: 'en_GB-alan-medium', label: 'Alan (GB Male)', group: '🇬🇧 English GB' },
+  { id: 'en_GB-cori-high', label: 'Cori (GB Female, HQ)', group: '🇬🇧 English GB' },
+  { id: 'en_GB-jenny_dioco-medium', label: 'Jenny (GB Female)', group: '🇬🇧 English GB' },
+  { id: 'en_GB-northern_english_male-medium', label: 'Northern Male', group: '🇬🇧 English GB' },
+  { id: 'de_DE-thorsten-medium', label: 'Thorsten (Male)', group: '🇩🇪 German' },
+  { id: 'de_DE-eva_k-x_low', label: 'Eva (Female)', group: '🇩🇪 German' },
+  { id: 'fr_FR-siwis-medium', label: 'Siwis (Female)', group: '🇫🇷 French' },
+  { id: 'fr_FR-tom-medium', label: 'Tom (Male)', group: '🇫🇷 French' },
+  { id: 'es_ES-davefx-medium', label: 'Dave (Male)', group: '🇪🇸 Spanish' },
+  { id: 'it_IT-paola-medium', label: 'Paola (Female)', group: '🇮🇹 Italian' },
+  { id: 'pt_BR-faber-medium', label: 'Faber (BR Male)', group: '🇧🇷 Portuguese' },
+  { id: 'nl_NL-mls-medium', label: 'MLS (Female)', group: '🇳🇱 Dutch' },
+  { id: 'ru_RU-ruslan-medium', label: 'Ruslan (Male)', group: '🇷🇺 Russian' },
+  { id: 'zh_CN-huayan-medium', label: 'Huayan (Female)', group: '🇨🇳 Chinese' },
 ];
 
 // ── Piper runtime state ──────────────────────────────────────────────────
-let _ttsAudioCtx      = null;
+let _ttsAudioCtx = null;
 let _ttsCurrentSource = null;
-let _piperSession     = null;   // active TtsSession
+let _piperSession = null;   // active TtsSession
 let _piperLoadedVoice = null;
-let _piperLoading     = false;
+let _piperLoading = false;
 
 function updatePiperStatus(status, text, pct = null) {
   const el = document.getElementById('ttsPiperStatus');
@@ -4043,13 +4314,50 @@ function updatePiperStatus(status, text, pct = null) {
   el.textContent = text;
   el.className = 'tts-model-status';
   if (status === 'loading') el.classList.add('status-loading');
-  if (status === 'ready')   el.classList.add('status-ready');
-  if (status === 'error')   el.classList.add('status-error');
+  if (status === 'ready') el.classList.add('status-ready');
+  if (status === 'error') el.classList.add('status-error');
   const wrap = document.getElementById('ttsPiperProgressWrap');
-  const bar  = document.getElementById('ttsPiperProgressBar');
+  const bar = document.getElementById('ttsPiperProgressBar');
   if (wrap) wrap.style.display = (status === 'loading' && pct != null) ? 'block' : 'none';
-  if (bar  && pct != null) bar.style.width = Math.min(100, pct) + '%';
+  if (bar && pct != null) bar.style.width = Math.min(100, pct) + '%';
 }
+
+// plan Agent E: Kokoro ready status UI cloned from Piper pattern (updatePiperStatus + tts-model-status + status-*- classes)
+// placed for the Voice (kokoro) settings area (sVoice stab), not the old ttsModal. Listens for event emitted from ttsManager load.
+function updateKokoroStatus(status, text) {
+  const el = document.getElementById('kokoroStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'tts-model-status';
+  if (status === 'loading') el.classList.add('status-loading');
+  if (status === 'ready') el.classList.add('status-ready');
+  if (status === 'error') el.classList.add('status-error');
+}
+
+// Refactor: replaced 'hazy-kokoro-ready' WASM event listener with server health + hardware poll
+// (Kokoro now runs in external kokoro-fastapi; no in-browser load event.)
+async function checkKokoroHealth() {
+  try {
+    const res = await fetch('/hazy/tts/health');
+    if (res.ok) {
+      // Use ttsManager.detectHardware() (plan placement) if available, else direct (health poll still central)
+      let hw;
+      if (window.HAZY_TTS_MANAGER && typeof window.HAZY_TTS_MANAGER.detectHardware === 'function') {
+        hw = await window.HAZY_TTS_MANAGER.detectHardware();
+      } else {
+        hw = await fetch('/hazy/hardware').then(r => r.json());
+      }
+      const deviceLabel = hw.gpu ? `GPU · ${hw.gpu}` : `CPU · ${hw.cpuModel || 'Unknown'}`;
+      updateKokoroStatus('ready', `Kokoro ready — ${deviceLabel}`);
+    } else {
+      updateKokoroStatus('error', 'Kokoro server not responding');
+    }
+  } catch {
+    updateKokoroStatus('idle', 'Kokoro server offline — run kokoro-fastapi');
+  }
+}
+
+// Old WASM ready listener removed (no longer emitted by ttsManager). Use checkKokoroHealth() instead.
 
 // Load Piper only when the user enables it, so a missing optional TTS bundle
 // cannot break normal chat startup.
@@ -4093,8 +4401,8 @@ async function loadPiperModel(voiceId) {
       progress: (p) => {
         if (p.total > 0) {
           const pct = Math.round((p.loaded / p.total) * 100);
-          const mb  = (p.loaded  / 1048576).toFixed(1);
-          const tot = (p.total   / 1048576).toFixed(1);
+          const mb = (p.loaded / 1048576).toFixed(1);
+          const tot = (p.total / 1048576).toFixed(1);
           updatePiperStatus('loading', `Downloading… ${mb} / ${tot} MB`, pct);
         } else {
           updatePiperStatus('loading', 'Downloading voice model…');
@@ -4102,16 +4410,16 @@ async function loadPiperModel(voiceId) {
       },
     });
 
-    _piperLoadedVoice     = voiceId;
-    _piperLoading         = false;
-    STATE.tpsPiperReady   = true;
+    _piperLoadedVoice = voiceId;
+    _piperLoading = false;
+    STATE.tpsPiperReady = true;
     STATE.ttsPiperLoading = false;
     updatePiperStatus('ready', '✅ Piper TTS ready');
     showToast('🎤 Piper TTS ready!', 'success');
     return true;
   } catch (err) {
-    _piperLoading         = false;
-    STATE.tpsPiperReady   = false;
+    _piperLoading = false;
+    STATE.tpsPiperReady = false;
     STATE.ttsPiperLoading = false;
     const msg = err.message || String(err);
     updatePiperStatus('error', '❌ ' + msg);
@@ -4127,6 +4435,55 @@ function formatBytes(bytes) {
   return (bytes / 1048576).toFixed(1) + ' MB';
 }
 
+function getVoiceSettings(overrides = {}) {
+  return {
+    enabled: STATE.voiceEnabled !== false,
+    voice: STATE.voiceVoice || 'af_heart',
+    speed: Number(STATE.voiceSpeed || 1),
+    volume: Number(STATE.voiceVolume ?? 100),
+    autoplay: STATE.voiceAutoplay !== false,
+    preferGPU: STATE.voicePreferGPU !== false,
+    voiceDevice: STATE.voiceDevice || 'auto',
+    ...overrides
+  };
+}
+
+function syncVoiceSettingsUI() {
+  const voice = getVoiceSettings();
+  const enabledEl = document.getElementById('voiceEnabled');
+  const voiceSelect = document.getElementById('voiceSelect');
+  const speedEl = document.getElementById('voiceSpeed');
+  const volumeEl = document.getElementById('voiceVolume');
+  const autoplayEl = document.getElementById('voiceAutoplay');
+  const preferGPUEl = document.getElementById('voicePreferGPU');
+  const speedLabel = document.getElementById('voiceSpeedLabel');
+  const volumeLabel = document.getElementById('voiceVolumeLabel');
+  if (enabledEl) enabledEl.checked = voice.enabled;
+  if (voiceSelect) voiceSelect.value = voice.voice;
+  if (speedEl) speedEl.value = String(voice.speed);
+  if (volumeEl) volumeEl.value = String(voice.volume);
+  if (autoplayEl) autoplayEl.checked = voice.autoplay;
+  if (preferGPUEl) preferGPUEl.checked = voice.preferGPU !== false;
+  if (speedLabel) speedLabel.textContent = `${Number(voice.speed).toFixed(2).replace(/0$/, '').replace(/\.$/, '')}×`;
+  if (volumeLabel) volumeLabel.textContent = String(Math.round(voice.volume));
+}
+
+async function populateVoiceList() {
+  const select = document.getElementById('voiceSelect');
+  if (!select || !window.HAZY_TTS_MANAGER) return;
+  const voices = window.HAZY_TTS_MANAGER.refreshVoices
+    ? await window.HAZY_TTS_MANAGER.refreshVoices()
+    : window.HAZY_TTS_MANAGER.getVoices();
+  select.innerHTML = voices.map(v => `<option value="${v.id}">${v.id}</option>`).join('');
+  select.value = STATE.voiceVoice || voices[0]?.id || 'af_heart';
+}
+
+function persistVoiceSettings() {
+  if (window.HAZY_VOICE_SETTINGS_STORE) {
+    window.HAZY_VOICE_SETTINGS_STORE.write(getVoiceSettings());
+  }
+}
+
 function stopTTS() {
   try {
     if (_ttsCurrentSource) {
@@ -4134,23 +4491,36 @@ function stopTTS() {
       _ttsCurrentSource.disconnect();
       _ttsCurrentSource = null;
     }
-  } catch {}
+  } catch { }
   speechSynthesis.cancel();
 }
 
-async function speakText(text) {
+async function speakText(text, force = false) {
   if (!text.trim()) return;
-  stopTTS();
-  if (STATE.ttsEngine === 'piper') {
-    await speakPiper(text);
-  } else {
-    speakBrowser(text);
+  if (!force && !STATE.voiceEnabled) return;
+
+  try {
+    const blob = await window.HAZY_TTS_MANAGER.synthesize(text, {
+      voice: STATE.voiceVoice || 'af_heart',
+      speed: STATE.voiceSpeed || 1.0
+    });
+    await window.HAZY_AUDIO_QUEUE_MANAGER.enqueueBlob(blob, {
+      speed: STATE.voiceSpeed || 1.0,
+      volume: STATE.voiceVolume ?? 100
+    });
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      return; // silent on explicit abort (e.g. stop button during fetch)
+    }
+    console.warn('[Hazy Voice] unavailable:', error.message);
+    if (force) throw error; // rethrow in force/preview mode so caller can show proper error
+    showToast('Voice generation unavailable', '');
   }
 }
 
 function speakBrowser(text) {
   const utt = new SpeechSynthesisUtterance(text);
-  utt.rate  = STATE.ttsSpeed;
+  utt.rate = STATE.ttsSpeed;
   utt.pitch = 1;
   speechSynthesis.speak(utt);
 }
@@ -4177,11 +4547,11 @@ async function speakPiper(text) {
     for (const chunk of chunks) {
       if (!STATE.ttsEnabled) break;
       // predict() returns a WAV Blob
-      const wavBlob   = await _piperSession.predict(chunk);
-      const arrayBuf  = await wavBlob.arrayBuffer();
-      const audioBuf  = await _ttsAudioCtx.decodeAudioData(arrayBuf);
-      const source    = _ttsAudioCtx.createBufferSource();
-      source.buffer   = audioBuf;
+      const wavBlob = await _piperSession.predict(chunk);
+      const arrayBuf = await wavBlob.arrayBuffer();
+      const audioBuf = await _ttsAudioCtx.decodeAudioData(arrayBuf);
+      const source = _ttsAudioCtx.createBufferSource();
+      source.buffer = audioBuf;
       source.playbackRate.value = STATE.ttsSpeed;
       source.connect(_ttsAudioCtx.destination);
       source.start(startTime);
@@ -4222,13 +4592,6 @@ function setupEventListeners() {
   el.navAgentBtn?.addEventListener('click', () => {
     setActivePage('agent');
     closeSidebarMobile();
-  });
-  el.agentMaxIterationsInline?.addEventListener('change', event => {
-    const value = Math.max(2, Math.min(8, parseInt(event.target.value, 10) || STATE.agentMaxIterations || 5));
-    STATE.agentMaxIterations = value;
-    event.target.value = String(value);
-    localStorage.setItem('hazyAgentMaxIterations', String(value));
-    refreshAgentPageInfo();
   });
 
   el.chatInput.addEventListener('input', () => {
@@ -4410,8 +4773,8 @@ function setupEventListeners() {
       el.modelDropdown.classList.remove('open'); el.modelSelector.classList.remove('open');
     }
     if (el.profileMenu?.classList.contains('open') &&
-        !el.profileMenu.contains(e.target) &&
-        !el.profileMenuBtn?.contains(e.target)) {
+      !el.profileMenu.contains(e.target) &&
+      !el.profileMenuBtn?.contains(e.target)) {
       setProfileMenuOpen(false);
     }
   });
@@ -4429,20 +4792,21 @@ function setupEventListeners() {
     document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === STATE.theme));
 
     // Populate Appearance tab controls from STATE
-    const fsEl  = document.getElementById('settingsFontSize');
-    const dEl   = document.getElementById('settingsDensity');
-    const chEl  = document.getElementById('settingsCodeHighlight');
-    const mdEl  = document.getElementById('settingsMarkdown');
-    const rpEl  = document.getElementById('settingsRepeatPenalty');
-    const tpEl  = document.getElementById('settingsTopP');
-    const csEl  = document.getElementById('settingsContextSize');
+    const fsEl = document.getElementById('settingsFontSize');
+    const dEl = document.getElementById('settingsDensity');
+    const chEl = document.getElementById('settingsCodeHighlight');
+    const mdEl = document.getElementById('settingsMarkdown');
+    const rpEl = document.getElementById('settingsRepeatPenalty');
+    const tpEl = document.getElementById('settingsTopP');
+    const csEl = document.getElementById('settingsContextSize');
     syncFontSizeControls(STATE.fontSize || '14px');
-    if (dEl)   dEl.value     = STATE.density     || 'normal';
-    if (chEl)  chEl.checked  = STATE.codeHL      !== false;
-    if (mdEl)  mdEl.checked  = STATE.markdown    !== false;
-    if (rpEl)  { rpEl.value  = STATE.repeatPenalty || 1.1; const l = document.getElementById('repeatPenaltyLabel'); if(l) l.textContent = parseFloat(rpEl.value).toFixed(2); }
-    if (tpEl)  { tpEl.value  = STATE.topP        || 0.92;  const l = document.getElementById('topPLabel');          if(l) l.textContent = parseFloat(tpEl.value).toFixed(2); }
-    if (csEl)  csEl.value    = STATE.contextSize || 4096;
+    if (dEl) dEl.value = STATE.density || 'normal';
+    if (chEl) chEl.checked = STATE.codeHL !== false;
+    if (mdEl) mdEl.checked = STATE.markdown !== false;
+    if (rpEl) { rpEl.value = STATE.repeatPenalty || 1.1; const l = document.getElementById('repeatPenaltyLabel'); if (l) l.textContent = parseFloat(rpEl.value).toFixed(2); }
+    if (tpEl) { tpEl.value = STATE.topP || 0.92; const l = document.getElementById('topPLabel'); if (l) l.textContent = parseFloat(tpEl.value).toFixed(2); }
+    if (csEl) csEl.value = STATE.contextSize || 4096;
+    populateVoiceList().then(syncVoiceSettingsUI).catch(() => syncVoiceSettingsUI());
 
     openModal('settingsModal');
   });
@@ -4497,7 +4861,7 @@ function setupEventListeners() {
 
   // Keyboard shortcuts
   document.addEventListener('keydown', e => {
-    if ((e.metaKey||e.ctrlKey) && e.key === 'k') { e.preventDefault(); STATE.activeConvId = null; showWelcomeScreen(); renderChatHistory(); el.chatInput.focus(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); STATE.activeConvId = null; showWelcomeScreen(); renderChatHistory(); el.chatInput.focus(); }
     if (e.key === 'Escape') {
       setProfileMenuOpen(false);
       closeModal('settingsModal');
@@ -4540,7 +4904,7 @@ function setupEventListeners() {
   });
 
   // TTS voice settings modal
-  el.ttsClose?.addEventListener('click',      () => closeModal('ttsModal'));
+  el.ttsClose?.addEventListener('click', () => closeModal('ttsModal'));
   el.ttsModal?.addEventListener('click', e => { if (e.target === el.ttsModal) closeModal('ttsModal'); });
   $('ttsCancelBtn')?.addEventListener('click', () => closeModal('ttsModal'));
 
@@ -4562,10 +4926,10 @@ function setupEventListeners() {
     // Reset ready state if voice changed so model reloads
     if (_piperLoadedVoice && _piperLoadedVoice !== STATE.ttsVoice) {
       stopTTS();
-      _piperSession     = null;   // destroy old session so new voice is actually loaded
+      _piperSession = null;   // destroy old session so new voice is actually loaded
       _piperLoadedVoice = null;
-      _piperLoading     = false;
-      STATE.tpsPiperReady   = false;
+      _piperLoading = false;
+      STATE.tpsPiperReady = false;
       STATE.ttsPiperLoading = false;
       updatePiperStatus('idle', 'Voice changed — click Enable Voice to load');
     }
@@ -4578,8 +4942,8 @@ function setupEventListeners() {
 
   $('ttsSaveBtn')?.addEventListener('click', async () => {
     STATE.ttsEnabled = true;
-    STATE.ttsVoice   = el.ttsVoiceSelect?.value || 'en_US-lessac-medium';
-    STATE.ttsSpeed   = parseFloat(el.ttsSpeedRange?.value || '1.0');
+    STATE.ttsVoice = el.ttsVoiceSelect?.value || 'en_US-lessac-medium';
+    STATE.ttsSpeed = parseFloat(el.ttsSpeedRange?.value || '1.0');
 
     if (STATE.ttsEngine === 'piper') {
       el.ttsLabel.textContent = 'Piper (loading...)';
@@ -4594,6 +4958,51 @@ function setupEventListeners() {
       el.ttsToggleBtn.classList.add('active');
       closeModal('ttsModal');
       showToast('Browser TTS enabled', 'success');
+    }
+  });
+
+  document.getElementById('voiceEnabled')?.addEventListener('change', e => {
+    STATE.voiceEnabled = e.target.checked;
+    persistVoiceSettings();
+  });
+  document.getElementById('voiceSelect')?.addEventListener('change', e => {
+    STATE.voiceVoice = e.target.value;
+    persistVoiceSettings();
+  });
+  document.getElementById('voiceSpeed')?.addEventListener('input', e => {
+    STATE.voiceSpeed = parseFloat(e.target.value);
+    const label = document.getElementById('voiceSpeedLabel');
+    if (label) label.textContent = `${STATE.voiceSpeed.toFixed(2).replace(/0$/, '').replace(/\.$/, '')}×`;
+    persistVoiceSettings();
+  });
+  document.getElementById('voiceVolume')?.addEventListener('input', e => {
+    STATE.voiceVolume = parseInt(e.target.value);
+    const label = document.getElementById('voiceVolumeLabel');
+    if (label) label.textContent = String(STATE.voiceVolume);
+    persistVoiceSettings();
+  });
+  document.getElementById('voiceAutoplay')?.addEventListener('change', e => {
+    STATE.voiceAutoplay = e.target.checked;
+    persistVoiceSettings();
+  });
+  document.getElementById('voicePreferGPU')?.addEventListener('change', e => {
+    STATE.voicePreferGPU = e.target.checked;
+    persistVoiceSettings();
+  });
+  document.getElementById('voicePreviewBtn')?.addEventListener('click', async () => {
+    // Unlock AudioContext first (required by browser autoplay policy before any audio plays)
+    if (window.HAZY_AUDIO_QUEUE_MANAGER?._audioCtx?.state === 'suspended') {
+      await window.HAZY_AUDIO_QUEUE_MANAGER._audioCtx.resume().catch(() => { });
+    }
+    updateKokoroStatus('loading', 'Generating voice…');
+    try {
+      await speakText("Hello, I'm Hazy AI. Nice to meet you.", true);
+      // Restore status after playback
+      checkKokoroHealth().catch(() => updateKokoroStatus('idle', 'Kokoro server offline'));
+    } catch (error) {
+      console.error('[Voice Preview]', error);
+      updateKokoroStatus('error', 'Kokoro TTS error — is the server running?');
+      showToast('Voice preview failed — Kokoro server may be offline', 'error');
     }
   });
 
@@ -4671,22 +5080,23 @@ function setupEventListeners() {
   // Trait pill toggles
   document.querySelectorAll('.trait-pill').forEach(pill => {
     pill.addEventListener('click', () => pill.classList.toggle('selected'));
-  });}
+  });
+}
 
 // ========================
 // Persona Modal
 // ========================
 function openPersonaModal() {
   // Sync state → UI
-  if (el.personaToggle)        el.personaToggle.checked        = STATE.personaEnabled;
-  if (el.personaNameInput)     el.personaNameInput.value       = STATE.personaName;
-  if (el.personaUserNameInput) el.personaUserNameInput.value   = STATE.personaUserName;
-  if (el.personaGender)        el.personaGender.value          = STATE.personaGender;
-  if (el.personaLanguage)      el.personaLanguage.value        = STATE.personaLanguage;
-  if (el.scenarioDesc)         el.scenarioDesc.value           = STATE.scenarioDesc;
-  if (el.scenarioOpener)       el.scenarioOpener.value         = STATE.scenarioOpener;
-  if (el.scenarioUserRole)     el.scenarioUserRole.value       = STATE.scenarioUserRole;
-  if (el.scenarioCharRole)     el.scenarioCharRole.value       = STATE.scenarioCharRole;
+  if (el.personaToggle) el.personaToggle.checked = STATE.personaEnabled;
+  if (el.personaNameInput) el.personaNameInput.value = STATE.personaName;
+  if (el.personaUserNameInput) el.personaUserNameInput.value = STATE.personaUserName;
+  if (el.personaGender) el.personaGender.value = STATE.personaGender;
+  if (el.personaLanguage) el.personaLanguage.value = STATE.personaLanguage;
+  if (el.scenarioDesc) el.scenarioDesc.value = STATE.scenarioDesc;
+  if (el.scenarioOpener) el.scenarioOpener.value = STATE.scenarioOpener;
+  if (el.scenarioUserRole) el.scenarioUserRole.value = STATE.scenarioUserRole;
+  if (el.scenarioCharRole) el.scenarioCharRole.value = STATE.scenarioCharRole;
 
   document.querySelectorAll('.persona-card').forEach(c =>
     c.classList.toggle('selected', c.dataset.relation === STATE.personaRelation)
@@ -4703,17 +5113,17 @@ function openPersonaModal() {
 
 function savePersona() {
   const selectedCard = document.querySelector('.persona-card.selected');
-  STATE.personaRelation  = selectedCard?.dataset.relation        || 'friend';
-  STATE.personaEnabled   = el.personaToggle?.checked             ?? true;
-  STATE.personaName      = el.personaNameInput?.value.trim()     || 'Alex';
-  STATE.personaUserName  = el.personaUserNameInput?.value.trim() || '';
-  STATE.personaGender    = el.personaGender?.value               || 'neutral';
-  STATE.personaLanguage  = el.personaLanguage?.value             || 'casual';
-  STATE.personaTraits    = Array.from(document.querySelectorAll('.trait-pill.selected')).map(p => p.dataset.trait);
-  STATE.scenarioDesc     = el.scenarioDesc?.value.trim()         || '';
-  STATE.scenarioOpener   = el.scenarioOpener?.value.trim()       || '';
-  STATE.scenarioUserRole = el.scenarioUserRole?.value.trim()     || '';
-  STATE.scenarioCharRole = el.scenarioCharRole?.value.trim()     || '';
+  STATE.personaRelation = selectedCard?.dataset.relation || 'friend';
+  STATE.personaEnabled = el.personaToggle?.checked ?? true;
+  STATE.personaName = el.personaNameInput?.value.trim() || 'Alex';
+  STATE.personaUserName = el.personaUserNameInput?.value.trim() || '';
+  STATE.personaGender = el.personaGender?.value || 'neutral';
+  STATE.personaLanguage = el.personaLanguage?.value || 'casual';
+  STATE.personaTraits = Array.from(document.querySelectorAll('.trait-pill.selected')).map(p => p.dataset.trait);
+  STATE.scenarioDesc = el.scenarioDesc?.value.trim() || '';
+  STATE.scenarioOpener = el.scenarioOpener?.value.trim() || '';
+  STATE.scenarioUserRole = el.scenarioUserRole?.value.trim() || '';
+  STATE.scenarioCharRole = el.scenarioCharRole?.value.trim() || '';
 
   // Persist everything
   const s = JSON.parse(localStorage.getItem('hazy_settings') || '{}');
@@ -4768,13 +5178,13 @@ function openTTSModal() {
   const piperOpts = $('ttsPiperOptions');
   if (piperOpts) piperOpts.style.display = STATE.ttsEngine === 'piper' ? 'block' : 'none';
   if (el.ttsVoiceSelect) el.ttsVoiceSelect.value = STATE.ttsVoice;
-  if (el.ttsSpeedRange)  el.ttsSpeedRange.value  = STATE.ttsSpeed;
-  if (el.ttsSpeedLabel)  el.ttsSpeedLabel.textContent = STATE.ttsSpeed.toFixed(1) + '×';
+  if (el.ttsSpeedRange) el.ttsSpeedRange.value = STATE.ttsSpeed;
+  if (el.ttsSpeedLabel) el.ttsSpeedLabel.textContent = STATE.ttsSpeed.toFixed(1) + '×';
 
   // Show current Piper status
-  if (STATE.tpsPiperReady)        updatePiperStatus('ready',   '✅ Piper model loaded and ready');
+  if (STATE.tpsPiperReady) updatePiperStatus('ready', '✅ Piper model loaded and ready');
   else if (STATE.ttsPiperLoading) updatePiperStatus('loading', 'Loading Piper model…');
-  else                            updatePiperStatus('idle',    'Select a voice above then click Enable Voice');
+  else updatePiperStatus('idle', 'Select a voice above then click Enable Voice');
 
   openModal('ttsModal');
 }
@@ -4811,7 +5221,7 @@ function switchTrainingTab(tabId) {
 
 function trainAddPair() {
   const instruction = document.getElementById('trainInstruction').value.trim();
-  const response    = document.getElementById('trainResponse').value.trim();
+  const response = document.getElementById('trainResponse').value.trim();
   if (!instruction || !response) { showToast('Fill in both fields', 'error'); return; }
   TRAINING.pairs.push({ type: 'qa', instruction, response });
   document.getElementById('trainInstruction').value = '';
@@ -4860,11 +5270,11 @@ Text:
 ${text.slice(0, 3000)}`;
 
   try {
-    const savedModel    = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
+    const savedModel = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud       = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+    const isCloud = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
     const trainEndpoint = window.location.protocol === 'file:' ? `${STATE.ollamaUrl}/api/chat` : hazyServerEndpoint('/hazy/chat');
-    const trainBody     = window.location.protocol === 'file:'
+    const trainBody = window.location.protocol === 'file:'
       ? { model: STATE.model, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.3, num_predict: 2048 } }
       : { model: savedModel, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.3, num_predict: 2048, max_tokens: 2048 } };
 
@@ -4877,7 +5287,7 @@ ${text.slice(0, 3000)}`;
     const data = await res.json();
     let raw = (data.message?.content || '').trim();
     // Strip markdown fences if model wrapped it
-    raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/,'').trim();
+    raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/, '').trim();
     const pairs = JSON.parse(raw);
     if (!Array.isArray(pairs)) throw new Error('Not an array');
     pairs.forEach(p => {
@@ -4889,7 +5299,7 @@ ${text.slice(0, 3000)}`;
     if (status) status.textContent = `Extracted ${pairs.length} pairs!`;
     updateTrainCount();
     showToast(`Extracted ${pairs.length} training pairs!`, 'success');
-  } catch(e) {
+  } catch (e) {
     if (status) status.textContent = 'Failed — try "Add as Raw Text" instead';
     showToast('Hazy extraction failed: ' + e.message, 'error');
   }
@@ -4899,7 +5309,7 @@ function renderTrainChatList() {
   const container = document.getElementById('trainChatList');
   if (!container) return;
   const convs = Object.entries(STATE.conversations)
-    .sort(([,a],[,b]) => (b.createdAt||0) - (a.createdAt||0));
+    .sort(([, a], [, b]) => (b.createdAt || 0) - (a.createdAt || 0));
   if (!convs.length) {
     container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">No conversations yet. Chat with Hazy first, then come back here.</p>';
     return;
@@ -4924,11 +5334,11 @@ function trainAddSelectedChats() {
     const msgs = (conv.messages || []).filter(m => m.role !== 'system');
     // Pair user -> Hazy messages
     for (let i = 0; i < msgs.length - 1; i++) {
-      if (msgs[i].role === 'user' && msgs[i+1].role === 'assistant') {
+      if (msgs[i].role === 'user' && msgs[i + 1].role === 'assistant') {
         TRAINING.pairs.push({
           type: 'qa',
           instruction: msgs[i].content,
-          response: msgs[i+1].content,
+          response: msgs[i + 1].content,
         });
         added++;
       }
@@ -4951,13 +5361,13 @@ function renderTrainPreview() {
     <div class="train-pair-item">
       <button class="train-pair-delete" onclick="trainDeletePair(${i})">✕</button>
       ${p.type === 'raw'
-        ? `<span class="train-pair-label">raw text</span>
+      ? `<span class="train-pair-label">raw text</span>
            <span class="train-pair-q">${escapeHtml(p.raw.slice(0, 200))}${p.raw.length > 200 ? '…' : ''}</span>`
-        : `<span class="train-pair-label">instruction</span>
+      : `<span class="train-pair-label">instruction</span>
            <span class="train-pair-q">${escapeHtml(p.instruction.slice(0, 150))}${p.instruction.length > 150 ? '…' : ''}</span>
            <span class="train-pair-label" style="margin-top:4px;">response</span>
            <span class="train-pair-a">${escapeHtml(p.response.slice(0, 150))}${p.response.length > 150 ? '…' : ''}</span>`
-      }
+    }
     </div>`).join('');
 }
 
@@ -5045,72 +5455,84 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Provider data ──────────────────────────────────────────────
 const PROVIDER_CATEGORIES = {
   text: [
-    { key:'anthropic',  name:'Anthropic (Claude)',       url:'https://console.anthropic.com',          note:'Claude Haiku, Sonnet, Opus — best for novel writing' },
-    { key:'openai',     name:'OpenAI (GPT-4o / DALL-E)', url:'https://platform.openai.com/api-keys',   note:'GPT-4o, o1, DALL-E 3, TTS — requires paid plan' },
-    { key:'groq',       name:'Groq (Fast Free Tier)',    url:'https://console.groq.com',               note:'Llama 3.1 70B at incredible speed — free tier available' },
-    { key:'gemini',     name:'Google Gemini',            url:'https://aistudio.google.com/app/apikey', note:'Gemini 1.5 Pro — 1M token context window' },
-    { key:'nvidia',     name:'NVIDIA NIM',               url:'https://build.nvidia.com',               note:'Nemotron and other NVIDIA-hosted OpenAI-compatible models' },
+    { key: 'anthropic', name: 'Anthropic (Claude)', url: 'https://console.anthropic.com', note: 'Claude Haiku, Sonnet, Opus — best for novel writing' },
+    { key: 'openai', name: 'OpenAI (GPT-4o / DALL-E)', url: 'https://platform.openai.com/api-keys', note: 'GPT-4o, o1, DALL-E 3, TTS — requires paid plan' },
+    { key: 'groq', name: 'Groq (Fast Free Tier)', url: 'https://console.groq.com', note: 'Llama 3.1 70B at incredible speed — free tier available' },
+    { key: 'openrouter', name: 'OpenRouter (Free & Paid Models)', url: 'https://openrouter.ai/keys', note: 'Access to dozens of free models and premium APIs' },
+    { key: 'gemini', name: 'Google Gemini', url: 'https://aistudio.google.com/app/apikey', note: 'Gemini 1.5 Pro — 1M token context window' },
+    { key: 'nvidia', name: 'NVIDIA NIM', url: 'https://build.nvidia.com', note: 'Nemotron and other NVIDIA-hosted OpenAI-compatible models' },
   ],
   image: [
-    { key:'stability',  name:'Stability AI',            url:'https://platform.stability.ai',          note:'Stable Diffusion XL, ultra quality images' },
-    { key:'ideogram',   name:'Ideogram',                url:'https://ideogram.ai',                    note:'Best AI model for text inside images' },
-    { key:'fal',        name:'fal.ai (Flux + Kling)',   url:'https://fal.ai',                         note:'Flux image generation + Kling video — fast API' },
+    { key: 'stability', name: 'Stability AI', url: 'https://platform.stability.ai', note: 'Stable Diffusion XL, ultra quality images' },
+    { key: 'ideogram', name: 'Ideogram', url: 'https://ideogram.ai', note: 'Best AI model for text inside images' },
+    { key: 'fal', name: 'fal.ai (Flux + Kling)', url: 'https://fal.ai', note: 'Flux image generation + Kling video — fast API' },
   ],
   media: [
-    { key:'elevenlabs', name:'ElevenLabs (TTS)',        url:'https://elevenlabs.io',                  note:'Most natural AI voices — 30+ voices, multilingual' },
-    { key:'suno',       name:'Suno (AI Music)',         url:'https://suno.com',                       note:'Generate full songs from text — cloud only' },
-    { key:'runway',     name:'Runway (AI Video)',       url:'https://runwayml.com',                   note:'Gen-3 video generation — cloud only' },
+    { key: 'elevenlabs', name: 'ElevenLabs (TTS)', url: 'https://elevenlabs.io', note: 'Most natural AI voices — 30+ voices, multilingual' },
+    { key: 'suno', name: 'Suno (AI Music)', url: 'https://suno.com', note: 'Generate full songs from text — cloud only' },
+    { key: 'runway', name: 'Runway (AI Video)', url: 'https://runwayml.com', note: 'Gen-3 video generation — cloud only' },
   ],
 };
 
 const OLLAMA_MODEL_LIST = [
-  {id:'ollama/llama3.2:1b',  label:'llama3.2:1b (1B — fastest)'},
-  {id:'ollama/llama3.2',     label:'llama3.2 (3B — recommended)'},
-  {id:'ollama/llama3',       label:'llama3 (8B)'},
-  {id:'ollama/mistral',      label:'mistral (7B — best writing)'},
-  {id:'ollama/mixtral',      label:'mixtral (47B — best quality)'},
-  {id:'ollama/gemma2',       label:'gemma2 (9B)'},
-  {id:'ollama/phi3',         label:'phi3 (3.8B)'},
-  {id:'ollama/qwen2.5',      label:'qwen2.5 (7B)'},
-  {id:'ollama/deepseek-r1',  label:'deepseek-r1 (7B)'},
-  {id:'ollama/llava',        label:'llava (7B vision)'},
+  { id: 'ollama/llama3.2:1b', label: 'llama3.2:1b (1B — fastest)' },
+  { id: 'ollama/llama3.2', label: 'llama3.2 (3B — recommended)' },
+  { id: 'ollama/llama3', label: 'llama3 (8B)' },
+  { id: 'ollama/mistral', label: 'mistral (7B — best writing)' },
+  { id: 'ollama/mixtral', label: 'mixtral (47B — best quality)' },
+  { id: 'ollama/gemma2', label: 'gemma2 (9B)' },
+  { id: 'ollama/phi3', label: 'phi3 (3.8B)' },
+  { id: 'ollama/qwen2.5', label: 'qwen2.5 (7B)' },
+  { id: 'ollama/deepseek-r1', label: 'deepseek-r1 (7B)' },
+  { id: 'ollama/llava', label: 'llava (7B vision)' },
 ];
 
 const CLOUD_MODEL_MAP = {
   anthropic: [
-    {id:'anthropic/claude-haiku-4-5-20251001',  label:'Claude Haiku 4.5 — fastest'},
-    {id:'anthropic/claude-sonnet-4-5-20250929', label:'Claude Sonnet 4.5 — recommended'},
-    {id:'anthropic/claude-opus-4-5-20251101',   label:'Claude Opus 4.5 — most capable'},
-    {id:'anthropic/claude-sonnet-4-20250514',   label:'Claude Sonnet 4'},
-    {id:'anthropic/claude-opus-4-20250514',     label:'Claude Opus 4'},
+    { id: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 — fastest' },
+    { id: 'anthropic/claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5 — recommended' },
+    { id: 'anthropic/claude-opus-4-5-20251101', label: 'Claude Opus 4.5 — most capable' },
+    { id: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    { id: 'anthropic/claude-opus-4-20250514', label: 'Claude Opus 4' },
   ],
   openai: [
-    {id:'openai/gpt-4o-mini',     label:'GPT-4o Mini — fastest'},
-    {id:'openai/gpt-4o',          label:'GPT-4o — recommended'},
-    {id:'openai/gpt-4.1',         label:'GPT-4.1'},
-    {id:'openai/gpt-4.1-mini',    label:'GPT-4.1 Mini'},
-    {id:'openai/o4-mini',         label:'o4 Mini — reasoning'},
-    {id:'openai/o3',              label:'o3 — best reasoning'},
+    { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini — fastest' },
+    { id: 'openai/gpt-4o', label: 'GPT-4o — recommended' },
+    { id: 'openai/gpt-4.1', label: 'GPT-4.1' },
+    { id: 'openai/gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+    { id: 'openai/o4-mini', label: 'o4 Mini — reasoning' },
+    { id: 'openai/o3', label: 'o3 — best reasoning' },
   ],
   groq: [
-    {id:'groq/llama-3.1-8b-instant',                          label:'Llama 3.1 8B — fastest'},
-    {id:'groq/llama-3.3-70b-versatile',                       label:'Llama 3.3 70B — recommended'},
-    {id:'groq/meta-llama/llama-4-scout-17b-16e-instruct',     label:'Llama 4 Scout 17B — newest'},
-    {id:'groq/moonshotai/kimi-k2-instruct',                   label:'Kimi K2 — 60 RPM'},
-    {id:'groq/qwen/qwen3-32b',                                label:'Qwen3 32B — 60 RPM'},
-    {id:'groq/openai/gpt-oss-120b',                           label:'GPT OSS 120B'},
-    {id:'groq/openai/gpt-oss-20b',                            label:'GPT OSS 20B'},
-    {id:'groq/compound',                                      label:'Compound (preview)'},
-    {id:'groq/compound-mini',                                 label:'Compound Mini (preview)'},
-    {id:'groq/allam-2-7b',                                    label:'Allam 2 7B'},
+    { id: 'groq/llama-3.1-8b-instant', label: 'Llama 3.1 8B — fastest' },
+    { id: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B — recommended' },
+    { id: 'groq/meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout 17B — newest' },
+    { id: 'groq/moonshotai/kimi-k2-instruct', label: 'Kimi K2 — 60 RPM' },
+    { id: 'groq/qwen/qwen3-32b', label: 'Qwen3 32B — 60 RPM' },
+    { id: 'groq/openai/gpt-oss-120b', label: 'GPT OSS 120B' },
+    { id: 'groq/openai/gpt-oss-20b', label: 'GPT OSS 20B' },
+    { id: 'groq/compound', label: 'Compound (preview)' },
+    { id: 'groq/compound-mini', label: 'Compound Mini (preview)' },
+    { id: 'groq/allam-2-7b', label: 'Allam 2 7B' },
   ],
+  openrouter: [
+    { id: 'openrouter/google/gemini-2.5-flash-pro:free', label: 'Gemini 2.5 Flash Pro (Free)' },
+    { id: 'openrouter/deepseek/deepseek-r1:free', label: 'DeepSeek R1 (Free)' },
+    { id: 'openrouter/meta-llama/llama-3.1-8b-instruct:free', label: 'Llama 3.1 8B (Free)' },
+    { id: 'openrouter/qwen/qwen-2.5-7b-instruct:free', label: 'Qwen 2.5 7B (Free)' },
+    { id: 'openrouter/mistralai/mistral-7b-instruct:free', label: 'Mistral 7B (Free)' },
+    { id: 'openrouter/meta-llama/llama-3.2-11b-vision-instruct:free', label: 'Llama 3.2 11B Vision (Free)' },
+    { id: 'openrouter/mistralai/mixtral-8x22b-instruct', label: 'Mixtral 8x22B' }, // newest, paid
+    { id: 'openrouter/openai/gpt-oss-120b:free', label: 'GPT OSS 120B (Free)' }, // good free model
+  ],
+
   gemini: [
-    {id:'gemini/gemini-2.0-flash',   label:'Gemini 2.0 Flash (recommended)'},
-    {id:'gemini/gemini-2.5-flash',   label:'Gemini 2.5 Flash (latest)'},
-    {id:'gemini/gemini-1.5-pro',     label:'Gemini 1.5 Pro (1M ctx)'},
+    { id: 'gemini/gemini-2.0-flash', label: 'Gemini 2.0 Flash (recommended)' },
+    { id: 'gemini/gemini-2.5-flash', label: 'Gemini 2.5 Flash (latest)' },
+    { id: 'gemini/gemini-1.5-pro', label: 'Gemini 1.5 Pro (1M ctx)' },
   ],
   nvidia: [
-    {id:'nvidia/nemotron-3-super-120b-a12b', label:'Nemotron 3 Super 120B A12B'},
+    { id: 'nvidia/nemotron-3-super-120b-a12b', label: 'Nemotron 3 Super 120B A12B' },
   ],
 };
 
@@ -5182,17 +5604,17 @@ function renderCategorizedProviders() {
     const el = document.getElementById(containerId);
     if (!el) return;
     el.innerHTML = providers.map(p => {
-      const st     = _providerStatuses[p.key] || {};
+      const st = _providerStatuses[p.key] || {};
       const hasKey = Boolean(st.hasKey);
       return `<div class="provider-key-row">
         <div class="provider-key-row-head">
           <span class="provider-key-name">${p.name}</span>
           ${(() => {
-            const verified = localStorage.getItem('hazyVerified_' + p.key) === 'true';
-            if (hasKey && verified)  return '<span class="provider-badge-active">&#10003; verified</span>';
-            if (hasKey && !verified) return '<span class="provider-badge-saved">● saved — test it</span>';
-            return '<span class="provider-badge-inactive">inactive</span>';
-          })()}
+          const verified = localStorage.getItem('hazyVerified_' + p.key) === 'true';
+          if (hasKey && verified) return '<span class="provider-badge-active">&#10003; verified</span>';
+          if (hasKey && !verified) return '<span class="provider-badge-saved">● saved — test it</span>';
+          return '<span class="provider-badge-inactive">inactive</span>';
+        })()}
           <a href="${p.url}" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:4px">Get key &#8599;</a>
         </div>
         <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${p.note}</div>
@@ -5210,7 +5632,7 @@ function renderCategorizedProviders() {
       </div>`;
     }).join('');
   };
-  renderGroup('providerKeyRows',   PROVIDER_CATEGORIES.text);
+  renderGroup('providerKeyRows', PROVIDER_CATEGORIES.text);
   renderGroup('providerImageRows', PROVIDER_CATEGORIES.image);
   renderGroup('providerMediaRows', PROVIDER_CATEGORIES.media);
 }
@@ -5264,7 +5686,7 @@ async function clearProviderKey(key) {
       body: JSON.stringify({ provider: key, apiKey: '' }),
       signal: AbortSignal.timeout(3000),
     });
-  } catch {}
+  } catch { }
   localStorage.removeItem('hazyVerified_' + key);
   showToast(key + ' key removed.', '');
   await initProvidersPanel();
@@ -5272,7 +5694,7 @@ async function clearProviderKey(key) {
 
 // ── Test provider key — sends a real minimal API call to verify ──────────
 async function testProviderKey(providerKey) {
-  const btn    = document.getElementById('testBtn_' + providerKey);
+  const btn = document.getElementById('testBtn_' + providerKey);
   const result = document.getElementById('testResult_' + providerKey);
   if (!btn || !result) return;
 
@@ -5285,7 +5707,7 @@ async function testProviderKey(providerKey) {
   try {
     // Send a tiny real request through /hazy/chat
     // The encrypted key is resolved only by the server.
-    const models   = CLOUD_MODEL_MAP[providerKey] || [];
+    const models = CLOUD_MODEL_MAP[providerKey] || [];
     const testModel = (models[0] || {}).id || (providerKey + '/test');
 
     const r = await fetch('/hazy/chat', {
@@ -5293,8 +5715,8 @@ async function testProviderKey(providerKey) {
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
-        model:    testModel,
-        stream:   true,
+        model: testModel,
+        stream: true,
         messages: [
           { role: 'user', content: 'Say "OK" and nothing else.' }
         ],
@@ -5308,19 +5730,19 @@ async function testProviderKey(providerKey) {
       try {
         const e = await r.json();
         errMsg = e.error || errMsg;
-      } catch {}
+      } catch { }
       result.style.color = 'var(--danger)';
       result.textContent = '❌ ' + r.status + ' — ' + errMsg;
       return;
     }
 
     // ── Read the stream and look for REAL content vs error tokens ──────────
-    const reader  = r.body.getReader();
+    const reader = r.body.getReader();
     const decoder = new TextDecoder();
-    let rawBuffer  = '';
-    let realToken  = '';   // actual AI text token
-    let streamErr  = '';   // error found inside stream
-    let tries      = 0;
+    let rawBuffer = '';
+    let realToken = '';   // actual AI text token
+    let streamErr = '';   // error found inside stream
+    let tries = 0;
 
     while (tries++ < 30 && !realToken && !streamErr) {
       const { done, value } = await reader.read();
@@ -5347,7 +5769,7 @@ async function testProviderKey(providerKey) {
             realToken = token;
             break;
           }
-        } catch {}
+        } catch { }
       }
     }
     reader.cancel();
@@ -5363,11 +5785,11 @@ async function testProviderKey(providerKey) {
       // ✅ Got a real AI token — key is genuinely working
       localStorage.setItem('hazyVerified_' + providerKey, 'true');
 
-      const models    = CLOUD_MODEL_MAP[providerKey] || [];
+      const models = CLOUD_MODEL_MAP[providerKey] || [];
       const bestModel = models[1] || models[0];
       if (bestModel) {
         localStorage.setItem('hazyActiveModel', bestModel.id);
-        localStorage.setItem('hazyProvider',    providerKey);
+        localStorage.setItem('hazyProvider', providerKey);
         STATE.model = bestModel.id;
         if (el && el.currentModelName) {
           el.currentModelName.textContent = bestModel.id.split('/')[1] || bestModel.id;
@@ -5431,7 +5853,7 @@ async function loadInstalledModels() {
         </span>`;
       }).join('');
       const activeProv = document.getElementById('activeProviderSelect');
-      const modelSel   = document.getElementById('activeModelSelect');
+      const modelSel = document.getElementById('activeModelSelect');
       if (activeProv?.value === 'ollama' && modelSel) {
         modelSel.innerHTML = models.map(m => `<option value="ollama/${m.name}">ollama/${m.name}</option>`).join('');
         const saved = localStorage.getItem('hazyActiveModel');
@@ -5446,14 +5868,14 @@ async function loadInstalledModels() {
 async function deleteOllamaModel(name) {
   if (!confirm('Delete "' + name + '" from Ollama?')) return;
   try {
-    await fetch('/hazy/delete-model', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: name }) });
+    await fetch('/hazy/delete-model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: name }) });
     showToast(name + ' deleted.', 'success');
     await loadInstalledModels();
   } catch (e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 async function testOllamaConn() {
-  const urlEl    = document.getElementById('ollamaUrlProvider');
+  const urlEl = document.getElementById('ollamaUrlProvider');
   const statusEl = document.getElementById('ollamaConnStatus');
   if (!statusEl) return;
 
@@ -5483,17 +5905,17 @@ async function testOllamaConn() {
 
 // ── Model download ──────────────────────────────────────────────
 async function pullModel() {
-  const sel  = document.getElementById('pullModelSelect');
-  const btn  = document.getElementById('pullModelBtn');
+  const sel = document.getElementById('pullModelSelect');
+  const btn = document.getElementById('pullModelBtn');
   const wrap = document.getElementById('pullProgressWrap');
-  const bar  = document.getElementById('pullProgressBar');
-  const txt  = document.getElementById('pullProgressText');
+  const bar = document.getElementById('pullProgressBar');
+  const txt = document.getElementById('pullProgressText');
   if (!sel || !btn) return;
   const modelName = sel.value;
   btn.disabled = true; btn.textContent = 'Downloading...';
   if (wrap) wrap.style.display = 'block';
   try {
-    const r = await fetch('/hazy/pull', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: modelName }) });
+    const r = await fetch('/hazy/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelName }) });
     const reader = r.body.getReader();
     const dec = new TextDecoder();
     while (true) {
@@ -5507,7 +5929,7 @@ async function pullModel() {
             bar.style.width = Math.round(j.completed / j.total * 100) + '%';
             if (txt) txt.textContent = (j.status || '') + ' ' + Math.round(j.completed / j.total * 100) + '%';
           }
-        } catch {}
+        } catch { }
       }
     }
     showToast(modelName + ' downloaded!', 'success');
@@ -5517,14 +5939,14 @@ async function pullModel() {
   } finally {
     btn.disabled = false; btn.textContent = '↓ Download';
     if (wrap) wrap.style.display = 'none';
-    if (bar)  bar.style.width = '0%';
+    if (bar) bar.style.width = '0%';
   }
 }
 
 // ── Active model selector (Novel Writer tab) ────────────────────
 function updateModelDropdown() {
   const prov = document.getElementById('activeProviderSelect')?.value || 'ollama';
-  const sel  = document.getElementById('activeModelSelect');
+  const sel = document.getElementById('activeModelSelect');
   if (!sel) return;
   if (prov === 'ollama') {
     sel.innerHTML = OLLAMA_MODEL_LIST.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
@@ -5533,7 +5955,7 @@ function updateModelDropdown() {
       if (d.models?.length) sel.innerHTML = d.models.map(m => `<option value="ollama/${m.name}">ollama/${m.name}</option>`).join('');
       const saved = localStorage.getItem('hazyActiveModel');
       if (saved) sel.value = saved;
-    }).catch(() => {});
+    }).catch(() => { });
   } else {
     const list = CLOUD_MODEL_MAP[prov] || [];
     sel.innerHTML = list.length
@@ -5547,7 +5969,7 @@ function updateModelDropdown() {
 function restoreActiveModel() {
   const saved = localStorage.getItem('hazyActiveModel');
   if (!saved) return;
-  const prov    = saved.split('/')[0];
+  const prov = saved.split('/')[0];
   const modelId = saved.includes('/') ? saved.slice(saved.indexOf('/') + 1) : saved;
 
   // Restore dropdown selections
@@ -5566,16 +5988,16 @@ function restoreActiveModel() {
 }
 
 function saveActiveModelChoice() {
-  const provSel  = document.getElementById('activeProviderSelect');
+  const provSel = document.getElementById('activeProviderSelect');
   const modelSel = document.getElementById('activeModelSelect');
   if (!provSel || !modelSel || !modelSel.value) return;
   const fullModel = modelSel.value; // e.g. 'anthropic/claude-sonnet-4-5' or 'ollama/mistral'
   localStorage.setItem('hazyActiveModel', fullModel);
-  localStorage.setItem('hazyProvider',    provSel.value);
+  localStorage.setItem('hazyProvider', provSel.value);
 
   // Update STATE.model — for Ollama strip prefix, for cloud keep full id
-  const provider  = fullModel.split('/')[0];
-  const modelId   = fullModel.includes('/') ? fullModel.slice(fullModel.indexOf('/') + 1) : fullModel;
+  const provider = fullModel.split('/')[0];
+  const modelId = fullModel.includes('/') ? fullModel.slice(fullModel.indexOf('/') + 1) : fullModel;
   if (provider === 'ollama') {
     STATE.model = modelId;
   } else {
@@ -5782,3 +6204,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Novel Writer tab — active provider change
   document.getElementById('activeProviderSelect')?.addEventListener('change', updateModelDropdown);
 });
+
+
+
+
+
+
+

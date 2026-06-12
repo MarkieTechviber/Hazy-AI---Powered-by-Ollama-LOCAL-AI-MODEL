@@ -15,6 +15,7 @@ const { buildReasoningProfile } = require("./ai/reasoning/reasoningController");
 const { MemoryManager } = require("./memory/memoryManager");
 const { HazyDatabase } = require("./storage/hazyDatabase");
 const { VectorSearch } = require("./rag/vectorSearch");
+const { OllamaEmbeddingService } = require("./rag/embeddingService");
 const { classifyAgentMode } = require("./agent/agentTypes");
 const { buildRuntimeContextBlock } = require("./agent/promptPolicy");
 const { defaultAgentRuntime, createToolContext } = require("./agent/agentRuntime");
@@ -22,7 +23,7 @@ const { defaultAgentRuntime, createToolContext } = require("./agent/agentRuntime
 const dataDir = path.join(__dirname, "..", "cache", "hazy-engine");
 const database = new HazyDatabase(path.join(dataDir, "hazy.db"));
 const memoryManager = new MemoryManager(path.join(dataDir, "memory"), { database });
-const vectorSearch = new VectorSearch(path.join(dataDir, "rag"));
+const vectorSearch = new VectorSearch(path.join(dataDir, "rag"), { embeddingService: new OllamaEmbeddingService() });
 
 function getLatestUserMessage(messages = []) {
   const reversed = [...messages].reverse();
@@ -65,6 +66,9 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
   const toolResults = Array.isArray(body.hazy?.toolResults) ? body.hazy.toolResults : [];
   const toolContext = createToolContext(body);
   const pendingConfirmation = defaultAgentRuntime.confirmations.findPending(toolContext);
+  const currentPlan = defaultAgentRuntime.planStore
+    ? defaultAgentRuntime.planStore.getPlan(toolContext.chatId)
+    : null;
   const agentMode = classifyAgentMode({
     message: latestMessage,
     hasRetrievedContext: ragContext.length > 0,
@@ -75,20 +79,24 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
   const runtimeContext = buildRuntimeContextBlock(toolContext, {
     mode: agentMode,
     availableToolNames: defaultAgentRuntime.registry.list(toolContext).map((tool) => tool.name),
-    pendingConfirmation
+    pendingConfirmation,
+    currentPlan
   });
   const userLangHint = body.hazy?.codeLangHint && body.hazy.codeLangHint !== "auto"
     ? body.hazy.codeLangHint
     : null;
+  const currentProject = body.hazy?.currentProject || null;
   const projectContext = scanProjectContext({
     attachments: body.hazy?.attachments || [],
-    messages: body.messages || []
+    messages: body.messages || [],
+    currentProject
   });
   const codeAnalysis = analyzeCodeRequest(
     latestMessage,
     body.messages || [],
     userLangHint,
-    projectContext
+    projectContext,
+    currentProject
   );
   const reasoning = buildReasoningProfile({
     message: latestMessage,
@@ -103,8 +111,8 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     strategy,
     userNeed: emotionData.userNeed,
     toneProfile,
-    memory: [],
-    ragContext: []
+    memory: memory,
+    ragContext: ragContext
   });
 
   const prompt = buildSystemPrompt({
@@ -115,13 +123,14 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     userNeed: emotionData.userNeed,
     responseMode: strategy.mode,
     responsePlan,
-    memory: [],
-    ragContext: [],
+    memory: memory,
+    ragContext: ragContext,
     questionLimit: strategy.questionLimit,
     safety,
     reasoning,
     codeAnalysis,
     projectContext,
+    currentProject,   // passed through so promptBuilder can emit the exact "CURRENT PROJECT FILES" block for edits
     toolResults,
     agentMode,
     runtimeContext
@@ -143,6 +152,7 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     runtimeContext,
     pendingConfirmation,
     projectContext,
+    currentProject,
     codeAnalysis,
     reasoning,
     responsePlan,

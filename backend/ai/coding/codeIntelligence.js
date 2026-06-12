@@ -1237,7 +1237,7 @@ Structure: Target analysis → Request strategy → Parsing → Data extraction 
  * Generate a smart, context-aware system prompt for a coding request.
  * This replaces the static CODE_SYSTEM_PROMPT in the frontend.
  */
-function generateSmartCodePrompt({ langResult, codeType, complexity, userHint, projectContext }) {
+function generateSmartCodePrompt({ langResult, codeType, complexity, userHint, projectContext, isEditIteration = false, currentProject = null }) {
   const style = langResult.styleGuide;
   const langLabel = style ? style.label : (langResult.lang || null);
   const hasConfidentLang = langResult.lang && langResult.confidence >= 45;
@@ -1308,6 +1308,22 @@ function generateSmartCodePrompt({ langResult, codeType, complexity, userHint, p
   prompt += `## TASK TYPE: ${codeType.replace(/_/g, ' ').toUpperCase()}\n`;
   prompt += taskGuidanceText.trim() + '\n\n';
 
+  // === ITERATION / EDIT RULES (the heart of "don't create a new project when user says fix") ===
+  if (isEditIteration && currentProject && Array.isArray(currentProject.files) && currentProject.files.length > 0) {
+    prompt += `## EDIT ITERATION — DO NOT START A NEW PROJECT\n`;
+    prompt += `The user is referring to the project that is currently loaded in their Builder Output panel (or the one they just clicked from chat history).\n`;
+    prompt += `Project name: ${currentProject.project || 'Project'}\n`;
+    prompt += `Number of files in the current version: ${currentProject.files.length}\n`;
+    prompt += `\n`;
+    prompt += `MANDATORY BEHAVIOR:\n`;
+    prompt += `- Treat the files listed in the CURRENT PROJECT (provided in the request context or the immediately preceding assistant message) as the single source of truth.\n`;
+    prompt += `- Make the smallest correct change that satisfies the user's request. Do not rewrite unrelated files or "improve" architecture the user did not ask for.\n`;
+    prompt += `- Output using the EXACT same delimiter format the original generation used (===PROJECT===, ===FILE: name.ext===, ===SETUP===, ===NOTES===).\n`;
+    prompt += `- For any file you do not touch, do not re-emit it — the previous version on disk / in the panel stays as-is. Only emit files that actually changed (or the full small set if that is clearer).\n`;
+    prompt += `- Keep the same project name and high-level structure unless the user explicitly says "start over" or "new version".\n`;
+    prompt += `- If the user says "fix the foo in bar.js", locate bar.js in the current project and emit an updated version of it (plus any directly affected files).\n\n`;
+  }
+
   // ── Complexity guidance ──────────────────────────────────────────────────
   prompt += `## SCALE: ${complexity.toUpperCase()}\n`;
   if (complexity === 'simple') {
@@ -1348,9 +1364,22 @@ function generateSmartCodePrompt({ langResult, codeType, complexity, userHint, p
  * @param {string} [userHint] - Optional: language hint from frontend override (e.g., 'python')
  * @returns {Object} Analysis result
  */
-function analyzeCodeRequest(message, conversationHistory = [], userHint = null, projectContext = null) {
+function analyzeCodeRequest(message, conversationHistory = [], userHint = null, projectContext = null, currentProject = null) {
   const codingIntent = classifyCodingIntent(message);
-  const isCode = codingIntent.isCodingRequest;
+  let isCode = codingIntent.isCodingRequest;
+
+  // FIX Issue 2A (early-return bypass): if the message alone isn't recognized as
+  // a coding request but a prior assistant message in history contains the
+  // ===PROJECT=== / ===FILE: delimiter, treat this as a coding context.
+  // This handles follow-ups like "the game is not starting, fix it" after a build turn.
+  const priorProjectEarlyCheck = !isCode && Array.isArray(conversationHistory) && conversationHistory.some(
+    (msg) => msg && msg.role === 'assistant' && /===PROJECT===|===FILE:\s*\S/.test(String(msg.content || ''))
+  );
+  if (priorProjectEarlyCheck) {
+    isCode = true;
+    codingIntent.isCodingRequest = true;
+    codingIntent.evidence = [...(codingIntent.evidence || []), 'prior_project_in_history'];
+  }
 
   if (!isCode) {
     return {
@@ -1382,12 +1411,36 @@ function analyzeCodeRequest(message, conversationHistory = [], userHint = null, 
   const codeType = detectCodeType(message);
   const complexity = estimateComplexity(message);
 
+  // === Core of the "edit the existing Builder code instead of new project" fix ===
+  // If we have a live currentProject from the Builder panel (or clicked history card),
+  // and the request looks like a modification (debug_fix, refactor, or user used edit-y language),
+  // mark this as an explicit edit iteration. generateSmartCodePrompt and the promptBuilder
+  // will then emit strong "use the CURRENT files below as source of truth, output patches in the same format" guidance.
+  const hasCurrent = !!(currentProject && Array.isArray(currentProject.files) && currentProject.files.length > 0);
+
+  // FIX Issue 2A: When currentProject is null (frontend state reset, session changed, etc.)
+  // we can still detect that a prior project exists by scanning recent assistant messages
+  // for the ===PROJECT=== / ===FILE: ... === delimiter pattern used by all generated builds.
+  // This prevents fresh-generation when the user says "fix the error" after a build turn.
+  const priorProjectInHistory = !hasCurrent && Array.isArray(conversationHistory) && conversationHistory.some(
+    (msg) => msg && msg.role === 'assistant' && /===PROJECT===|===FILE:\s*\S/.test(String(msg.content || ''))
+  );
+
+  const isEditIteration = (hasCurrent || priorProjectInHistory) && (
+    codeType === 'debug_fix' ||
+    codeType === 'refactor' ||
+    complexity !== 'simple' ||
+    /\b(fix|debug|error|issue|improve|update|refactor|modify|change|add|extend)\b/i.test(String(message || ''))
+  );
+
   const systemPrompt = generateSmartCodePrompt({
     langResult,
     codeType,
     complexity,
     userHint: normalizedHint,
     projectContext,
+    isEditIteration,
+    currentProject
   });
 
   return {
@@ -1405,6 +1458,8 @@ function analyzeCodeRequest(message, conversationHistory = [], userHint = null, 
     complexity,
     needsProjectContext: complexity === 'complex' || ['debug_fix', 'refactor', 'api_backend', 'database'].includes(codeType),
     needsVerification: true,
+    isEditIteration,
+    hasCurrentProject: hasCurrent,
     systemPrompt,
   };
 }

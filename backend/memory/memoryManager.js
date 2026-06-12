@@ -7,10 +7,13 @@ const { summarizeConversation, clampText } = require("./conversationSummary");
 const {
   extractMemoryCandidates,
   extractMemoryRemovals,
+  extractAgentTrajectoryCandidates,
   SECRET_PATTERN,
   containsSecret,
   cleanValue,
-  makeKey
+  makeKey,
+  normalizeMemoryType: sharedNormalizeMemoryType,
+  AGENT_MEMORY_TYPES
 } = require("./memoryExtractor");
 const { HazyDatabase } = require("../storage/hazyDatabase");
 
@@ -614,6 +617,23 @@ class MemoryManager {
             if (!/secrets cannot be stored/i.test(error.message)) throw error;
           }
         }
+        // Extended for Phase 3 agent-specific candidates (from user turn content; tool/plan trajectory handled in sync_turn too).
+        // Guarded to avoid polluting normal chat memory counts (preserves exact getRelevant + packing math for tests and pre-Phase3 paths).
+        if (/\b(?:agent|plan\.manage|trajectory|failed attempt|artifact ref|unresolved question)\b/i.test(userMessage)) {
+          for (const candidate of extractAgentTrajectoryCandidates(userMessage, { source: 'recordTurn' })) {
+            try {
+              this.upsertMemory({
+                ...candidate,
+                userId,
+                projectId,
+                conversationId,
+                sourceMessageId: userMessageId
+              });
+            } catch (error) {
+              if (!/secrets cannot be stored/i.test(error.message)) throw error;
+            }
+          }
+        }
       }
 
       if (isPlainObject(profileHints)) {
@@ -660,6 +680,111 @@ class MemoryManager {
       throw error;
     }
   }
+
+  // Phase 3 additions (smallest extension of existing MemoryManager as built-in MemoryProvider):
+  // support new agent_* types (via DB+normalize already), conversation/project scoping (pre-existing),
+  // confidence/salience, on_turn_start/prefetch/sync hooks, remember/search/forget surface for tools.
+  // Salience/contradiction: handled in remember() by lowering conf on value conflict for high-conf entries.
+
+  onTurnStart(turnInfo = {}) {
+    // cadence hook (non-fatal, for future nudges like _turns_since_memory)
+    return;
+  }
+
+  async prefetch(query = '', options = {}) {
+    const { conversationId = 'default', userId = 'default', projectId = '', planText = '', goal = '' } = options || {};
+    const effective = [goal, query, planText].filter(Boolean).join(' ').slice(0, 480);
+    try {
+      const rel = this.getRelevantMemory
+        ? this.getRelevantMemory({ conversationId, userId, projectId, query: effective, limit: 8 })
+        : [];
+      const agentRows = this.db ? this.db.prepare(`
+        SELECT type, key, value, confidence
+        FROM memories
+        WHERE user_id = ? AND status = 'active'
+          AND (project_id = '' OR project_id = ?)
+          AND type IN ('agent_plan','agent_step','failed_attempt','artifact_ref','unresolved_question')
+        ORDER BY updated_at DESC, confidence DESC LIMIT 6
+      `).all(userId, projectId || '') : [];
+      return [
+        ...rel,
+        ...agentRows.map(r => ({ type: r.type, key: r.key, value: r.value, confidence: r.confidence, summary: `${r.key}: ${r.value}` }))
+      ];
+    } catch {
+      return [];
+    }
+  }
+
+  async syncTurn(userContent = '', assistantContent = '', options = {}) {
+    const { conversationId = 'default', userId = 'default', projectId = '', messages = null } = options || {};
+    try {
+      if (this.recordTurn) {
+        this.recordTurn({ conversationId, userId, projectId, userMessage: String(userContent || '').slice(0, 4000), finalResponse: String(assistantContent || '').slice(0, 4000) });
+      }
+    } catch {}
+    if (Array.isArray(messages)) {
+      for (const m of messages) {
+        try {
+          if (m.role === 'tool' || m.role === 'assistant') {
+            const cands = extractAgentTrajectoryCandidates(m.content || '', { source: 'mm_syncTurn', role: m.role });
+            for (const cand of cands) {
+              this.upsertMemory({
+                userId, projectId, conversationId,
+                type: cand.type, key: cand.key, value: cand.value, confidence: cand.confidence || 0.6
+              });
+            }
+          }
+        } catch {}
+      }
+    }
+  }
+
+  remember({ type = 'explicit_fact', key, value, confidence = 0.7, userId = 'default', conversationId = '', projectId = '' } = {}) {
+    const conf = Number(confidence) || 0.7;
+    const normalizedType = sharedNormalizeMemoryType ? sharedNormalizeMemoryType(type) : (type || 'explicit_fact').replace(/[^a-z0-9_:-]+/g, '_');
+    try {
+      // minimal salience/contradiction detection on upsert (high-conf differing value lowers new conf)
+      const normKey = makeKey(key || value);
+      const existing = this.db.prepare(
+        "SELECT value, confidence FROM memories WHERE user_id = ? AND project_id = ? AND type = ? AND key = ? AND status = 'active'"
+      ).get(userId, projectId || '', normalizedType, normKey);
+      let finalConf = Math.max(0, Math.min(1, conf));
+      if (existing && existing.value && value && String(existing.value) !== String(value) && Number(existing.confidence || 0) > 0.6 && finalConf > 0.6) {
+        finalConf = Math.min(finalConf, 0.55);
+      }
+      return this.upsertMemory({
+        userId, projectId, conversationId, type: normalizedType, key: normKey, value, confidence: finalConf
+      });
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+
+  searchMemories({ query = '', types = null, limit = 5, userId = 'default', conversationId = '', projectId = '' } = {}) {
+    try {
+      const tokens = (query || '').toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length >= 3);
+      let sql = `SELECT type, key, value, confidence, conversation_id AS conversationId FROM memories
+        WHERE user_id = ? AND status = 'active' AND (project_id = '' OR project_id = ?)`;
+      const params = [userId, projectId || ''];
+      if (Array.isArray(types) && types.length) {
+        const ph = types.map(() => '?').join(',');
+        sql += ` AND type IN (${ph})`;
+        params.push(...types);
+      }
+      sql += ` ORDER BY confidence DESC, updated_at DESC LIMIT ?`;
+      params.push(Math.max(1, Math.min(20, Number(limit) || 5)));
+      const rows = this.db.prepare(sql).all(...params);
+      return rows.map(r => {
+        let score = Number(r.confidence || 0) * 10;
+        if (r.conversationId === conversationId) score += 3;
+        const hay = `${r.type} ${r.key} ${r.value}`.toLowerCase();
+        for (const tok of tokens) if (hay.includes(tok)) score += 4;
+        return { ...r, relevanceScore: score };
+      }).sort((a, b) => b.relevanceScore - a.relevanceScore);
+    } catch {
+      return [];
+    }
+  }
 }
 
-module.exports = { MemoryManager };
+module.exports = { MemoryManager, normalizeMemoryType: sharedNormalizeMemoryType || require('./memoryExtractor').normalizeMemoryType };

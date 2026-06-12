@@ -46,7 +46,7 @@ test('browser log redaction removes secret values', () => {
 });
 
 test('browser tools are registered for the agent gatekeeper', () => {
-  const runtime = createAgentRuntime({ auditPath: false, confirmationPath: false });
+  const runtime = createAgentRuntime({ auditPath: false, confirmationPath: false, planPath: false });
   const ctx = createToolContext({ enabledToolsets: ['browser'] });
   const tools = runtime.registry.list(ctx);
   const names = tools.map((tool) => tool.name);

@@ -27,6 +27,8 @@ const LOCAL_SEARCH_PATTERN = /\b(search|find|look through)\b[\s\S]{0,80}\b(my|th
 const STABLE_TASK_PATTERN = /\b(explain|rewrite|translate|brainstorm|write|draft|summarize this|creative|story|poem|algorithm|binary search)\b/i;
 const CODE_CREATION_PATTERN = /\b(create|build|write|implement|generate|refactor|fix)\b[\s\S]{0,80}\b(code|function|app|website|script|component|api client|search algorithm)\b/i;
 const ALGORITHM_SEARCH_PATTERN = /\b(binary|linear|depth[- ]first|breadth[- ]first|dijkstra'?s?|a\*|sorting|searching)\s+(search|algorithm)\b/i;
+const FACTUAL_QUESTION_PATTERN = /^\s*(who|what|when|where|why|how|which|is\s+there|are\s+there|did|does|do|can\s+you\s+(?:find|tell|show)|what(?:'s|\s+is|\s+are)|who(?:'s|\s+is|\s+are)|where(?:'s|\s+is|\s+are)|how\s+(?:much|many|often|long|far|old|do|does|did|to)|list|name|find|tell\s+me\s+about|what\s+happened)\b/i;
+const TOPICAL_INTEREST_PATTERN = /\b(top|best|trending|popular|famous|greatest|worst|ranked|ranking|rated|winner|winners|won|champion|award|awards|nominated|released|album|song|songs|movie|movies|film|show|series|actor|actress|singer|artist|band|team|player|game|match|tournament|fight|election|president|minister|ceo|founder|company|brand|product|country|capital|population|born|died|founded|invented|discovered|symptoms|treatment|cause|causes|definition|meaning|salary|worth|net worth|height|age|birthday|married|wife|husband|children)\b/i;
 
 function normalizeDomain(value = '') {
   const domain = String(value || '')
@@ -140,6 +142,18 @@ function detectSearchDecision(userMessage = '', options = {}) {
   if (STABLE_TASK_PATTERN.test(text)) {
     return createDecision('none', 'The request is a stable knowledge, writing, or creative task.');
   }
+  if (FACTUAL_QUESTION_PATTERN.test(text)) {
+    return createDecision('quick_web', 'The request is a factual question that benefits from web evidence.', {
+      freshnessRequired: false,
+      category: 'factual'
+    });
+  }
+  if (TOPICAL_INTEREST_PATTERN.test(text)) {
+    return createDecision('quick_web', 'The request is about a specific topic, entity, or trend that benefits from web evidence.', {
+      freshnessRequired: false,
+      category: 'topical'
+    });
+  }
   return createDecision('none', 'The request can likely be answered without public web evidence.');
 }
 
@@ -150,5 +164,7 @@ module.exports = {
   createDecision,
   MODE_DEFAULTS,
   RECENCY_PATTERN,
-  TECHNICAL_PATTERN
+  TECHNICAL_PATTERN,
+  FACTUAL_QUESTION_PATTERN,
+  TOPICAL_INTEREST_PATTERN
 };

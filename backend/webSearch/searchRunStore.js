@@ -67,6 +67,21 @@ class SearchRunStore {
     return record;
   }
 
+  updateCitations(runId, userId, citations) {
+    const safeId = this.sanitizeRunId(runId);
+    const filePath = path.join(this.sourcesDir, `${safeId}.json`);
+    if (!safeId || !fs.existsSync(filePath)) return false;
+    try {
+      const record = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (userId && record.userId !== userId) return false;
+      record.citations = citations;
+      fs.writeFileSync(filePath, JSON.stringify(record, null, 2), 'utf8');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   listRuns(userId, limit = 20) {
     if (!fs.existsSync(this.runsPath)) return [];
     const lines = fs.readFileSync(this.runsPath, 'utf8').split('\n').filter(Boolean);

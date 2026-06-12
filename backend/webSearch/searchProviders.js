@@ -150,12 +150,98 @@ class TavilySearchProvider {
 class DuckDuckGoProvider {
   constructor({ fetchImpl } = {}) {
     this.fetchImpl = fetchImpl;
-    this.name = 'DuckDuckGo Instant Answer';
+    this.name = 'DuckDuckGo';
   }
 
   isAvailable() { return true; }
 
   async search(query, options = {}) {
+    const maxResults = options.maxResults || 10;
+
+    // --- Strategy 1: Scrape the DDG HTML search page for real results ---
+    try {
+      const htmlResults = await this._scrapeHtmlResults(query, maxResults, options);
+      if (htmlResults.length > 0) return htmlResults;
+    } catch {
+      // Fall through to Instant Answer fallback
+    }
+
+    // --- Strategy 2: Instant Answer API fallback (Wikipedia-style) ---
+    try {
+      return await this._instantAnswerFallback(query, maxResults, options);
+    } catch {
+      return [];
+    }
+  }
+
+  async _scrapeHtmlResults(query, maxResults, options) {
+    const fetchImpl = this.fetchImpl || fetch;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 9000);
+    try {
+      const params = new URLSearchParams({ q: query });
+      const response = await fetchImpl('https://lite.duckduckgo.com/lite/', {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString(),
+        signal: controller.signal,
+        redirect: 'follow'
+      });
+      if (!response.ok) return [];
+      const html = await response.text();
+      return this._parseHtmlResults(html, maxResults, options);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  _parseHtmlResults(html, maxResults, options) {
+    const items = [];
+    // DuckDuckGo Lite uses a table structure where each result is spread across 3-4 <tr> elements.
+    // The easiest way to parse is to split by `<td valign="top">` which marks the start of each result numbering.
+    const resultBlocks = html.split('<td valign="top">').slice(1);
+    
+    for (const block of resultBlocks) {
+      if (items.length >= maxResults) break;
+      
+      // Extract URL and Title from the first link in the block: <a rel="nofollow" href="...uddg=URL...">Title</a>
+      const urlMatch = block.match(/href="([^"]+)"/i);
+      const titleMatch = block.match(/<a[^>]*>([\s\S]*?)<\/a>/i);
+      // Extract snippet from <td class='result-snippet'>...</td>
+      const snippetMatch = block.match(/class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/i);
+
+      let rawUrl = urlMatch ? urlMatch[1].trim() : '';
+      if (rawUrl.includes('uddg=')) {
+        try {
+          const parsed = new URL(rawUrl, 'https://duckduckgo.com');
+          rawUrl = decodeURIComponent(parsed.searchParams.get('uddg') || rawUrl);
+        } catch { /* keep rawUrl as-is */ }
+      }
+
+      const title = titleMatch
+        ? titleMatch[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#39;/g, "'").trim()
+        : '';
+      const snippet = snippetMatch
+        ? snippetMatch[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim()
+        : '';
+
+      if (rawUrl && (title || snippet) && /^https?:\/\//i.test(rawUrl)) {
+        items.push(normalizeResult({
+          title: title || rawUrl,
+          url: rawUrl,
+          snippet,
+          sourceName: this.name
+        }, items.length, this.name));
+      }
+    }
+    return items.filter((item) => hostnameAllowed(item.url, options));
+  }
+
+  async _instantAnswerFallback(query, maxResults, options) {
     const data = await requestJson(
       `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
       { fetchImpl: this.fetchImpl }
@@ -184,11 +270,12 @@ class DuckDuckGoProvider {
     };
     collect(data?.RelatedTopics || []);
     return items
-      .slice(0, options.maxResults || 10)
+      .slice(0, maxResults)
       .map((item, index) => normalizeResult(item, index, this.name))
       .filter((item) => hostnameAllowed(item.url, options));
   }
 }
+
 
 class WikipediaProvider {
   constructor({ fetchImpl } = {}) {

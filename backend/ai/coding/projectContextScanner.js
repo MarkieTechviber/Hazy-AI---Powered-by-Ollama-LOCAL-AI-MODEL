@@ -159,14 +159,31 @@ function determineProjectType(frameworks, files) {
   return 'general-software-project';
 }
 
-function scanProjectContext({ attachments = [], messages = [] } = {}) {
+function scanProjectContext({ attachments = [], messages = [], currentProject = null } = {}) {
   const files = normalizeAttachments(attachments);
+
+  // === KEY for edit reliability ===
+  // Also fold the *live current builder files* (from hazy.currentProject) into the scan.
+  // This makes language detection, framework signals, and "needsProjectContext" reflect
+  // the exact files the user is looking at in Builder Output, not only user uploads or old history text.
+  let activeFilesForScan = [];
+  if (currentProject && Array.isArray(currentProject.files)) {
+    activeFilesForScan = currentProject.files.map(f => ({
+      name: f.filename || 'unknown',
+      category: 'code',
+      ext: String((f.filename || '').split('.').pop() || '').toLowerCase(),
+      sizeBytes: (f.content || '').length,
+      contentPreview: String(f.content || '').slice(0, 20000)  // enough for import/package signals
+    }));
+  }
+  const allScanFiles = [...files, ...activeFilesForScan];
+
   const scoreboard = {};
   const frameworks = new Set();
   const evidence = [];
   const ignoredCount = Math.max(0, (attachments || []).filter(Boolean).length - files.length);
 
-  for (const file of files) {
+  for (const file of allScanFiles) {
     const loweredName = file.name.toLowerCase();
     const baseName = path.basename(loweredName);
 
@@ -225,11 +242,15 @@ function scanProjectContext({ attachments = [], messages = [] } = {}) {
   const runnerUpScore = sorted[1]?.[1]?.score || 0;
   const confidence = Math.min(topScore, 99);
   const conflictingSignals = sorted.length > 1 && runnerUpScore >= Math.max(18, topScore * 0.5);
-  const projectType = determineProjectType(frameworks, files);
+  // determineProjectType receives the combined list so active builder files participate in "full-stack" etc. decisions.
+  const projectType = determineProjectType(frameworks, allScanFiles);
 
   const detectedStack = frameworks.size
     ? Array.from(frameworks).map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-')).join('+')
     : 'unknown';
+
+  const hasActiveProject = !!(currentProject && Array.isArray(currentProject.files) && currentProject.files.length > 0);
+  const activeProjectFileCount = hasActiveProject ? currentProject.files.length : 0;
 
   return {
     detectedStack,
@@ -240,12 +261,17 @@ function scanProjectContext({ attachments = [], messages = [] } = {}) {
     evidence: Array.from(new Set(evidence)).slice(0, 15),
     ignoredGeneratedFiles: ignoredCount,
     projectType,
-    fileCount: files.length,
+    fileCount: allScanFiles.length,
     languageSignals: sorted.map(([language, data]) => ({
       language,
       score: data.score,
       reasons: data.reasons.slice(0, 6)
-    }))
+    })),
+    // New fields for edit-iteration awareness (used by codeIntelligence + promptBuilder)
+    hasActiveProject,
+    activeProjectFileCount,
+    // Light reference only (full file contents for prompt injection come from body.hazy.currentProject)
+    activeProjectName: hasActiveProject ? (currentProject.project || 'Project') : undefined
   };
 }
 

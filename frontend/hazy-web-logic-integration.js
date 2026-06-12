@@ -4,7 +4,7 @@
  * PR: pr-1-add-structured-toolcall-renderer-chat-transcript
  *
  * Clean vanilla implementation of the ToolCall entry + rendering logic
- * inspired by Hermes web study (ToolCall lifecycle, collapsible cards,
+ * inspired by web dashboard study (structured cards lifecycle, collapsible cards,
  * status pulse/check/alert, preview with caret while running, timing,
  * error auto-expand). Adapted strictly for Hazy's vanilla chat-only
  * transcript (citations and tools appear inside assistant bubbles as
@@ -52,6 +52,26 @@
         icon: '📚',
         label: 'Citation / Source',
         cssClass: 'hazy-citation-card'
+      },
+      // Phase 2: additional types for more "bases" (reasoning traces, memory hits, RAG context)
+      // Populated from backend ai/reasoning/* , memory/* , RAG. Rendered same as tool/cite.
+      reasoning: {
+        kind: 'reasoning',
+        icon: '🧠',
+        label: 'Reasoning trace',
+        cssClass: 'hazy-reasoning-card'
+      },
+      memory: {
+        kind: 'memory',
+        icon: '🧠',
+        label: 'Memory used',
+        cssClass: 'hazy-memory-card'
+      },
+      rag: {
+        kind: 'rag',
+        icon: '📖',
+        label: 'Retrieved context (RAG)',
+        cssClass: 'hazy-rag-card'
       }
     },
 
@@ -313,13 +333,96 @@
     return list;
   };
 
+  // === LIVE UPDATE SUPPORT (Phase 1) ===
+  // Allows updating/inserting cards in an existing .message-content (or transcript container)
+  // after initial render. Used for progressive research (e.g. search started -> citations arrive,
+  // tool preview updates, etc.). Finds by data-id, replaces or appends. Starts live elapsed for running.
+  function updateCardInContainer(container, entry) {
+    if (!container || !entry) return false;
+    const cfg = window.HAZY_WEB_LOGIC_CONFIG || HAZY_WEB_LOGIC_CONFIG;
+    const id = entry.id || entry.tool_id || entry.cite_id || '';
+    if (!id) return false;
+    const sel = `.hazy-structured-card[data-id="${id}"]`;
+    let existing = container.querySelector(sel);
+    const cardHtml = renderStructuredCardHTML(entry);
+    if (existing) {
+      const temp = document.createElement('div');
+      temp.innerHTML = cardHtml;
+      const newCard = temp.firstElementChild;
+      if (newCard) {
+        existing.replaceWith(newCard);
+        existing = newCard;
+      }
+    } else {
+      container.insertAdjacentHTML('beforeend', cardHtml);
+      existing = container.querySelector(sel) || container.lastElementChild;
+    }
+    // Start live elapsed timer if this card is running
+    if (existing && cfg && existing.dataset.status === (cfg.statuses && cfg.statuses.running)) {
+      startLiveElapsedForCard(existing);
+    }
+    return true;
+  }
+
+  function applyHazyStructuredUpdate(contentEl, entry) {
+    if (!contentEl || !entry) return false;
+    const cfg = window.HAZY_WEB_LOGIC_CONFIG || HAZY_WEB_LOGIC_CONFIG;
+    if (!cfg || !cfg.enableStructuredCards) return false;
+    let cont = contentEl.querySelector('.hazy-structured-cards');
+    if (!cont) {
+      cont = document.createElement('div');
+      cont.className = 'hazy-structured-cards';
+      contentEl.appendChild(cont);
+    }
+    return updateCardInContainer(cont, entry);
+  }
+
+  // Live elapsed timer for running cards (updates the elapsed span every interval from CONFIG)
+  const _liveElapsedTimers = new WeakMap();
+  function startLiveElapsedForCard(cardEl) {
+    if (!cardEl || _liveElapsedTimers.has(cardEl)) return;
+    const elapsedEl = cardEl.querySelector('.hazy-card-elapsed');
+    if (!elapsedEl) return;
+    const started = parseInt(elapsedEl.getAttribute('data-started-at') || Date.now(), 10);
+    const cfg = window.HAZY_WEB_LOGIC_CONFIG || {};
+    const running = cfg.statuses && cfg.statuses.running;
+    if (cardEl.dataset.status !== running) return;
+    const interval = (cfg.timing && cfg.timing.updateIntervalMs) || 1000;
+    const timer = setInterval(() => {
+      if (!cardEl.isConnected || cardEl.dataset.status !== running) {
+        clearInterval(timer);
+        _liveElapsedTimers.delete(cardEl);
+        return;
+      }
+      const ms = Date.now() - started;
+      elapsedEl.textContent = (ms / 1000).toFixed(1) + 's';
+    }, interval);
+    _liveElapsedTimers.set(cardEl, timer);
+  }
+
+  window.applyHazyStructuredUpdate = applyHazyStructuredUpdate;
+  window.startLiveElapsedForCard = startLiveElapsedForCard; // for manual or post-insert
+
   window.HazyWebLogic = {
     CONFIG: HAZY_WEB_LOGIC_CONFIG,
     renderCardsHTML: renderStructuredCardsHTML,
     renderCardHTML: renderStructuredCardHTML,
     simulate: simulateMessageWithCitationAndTool,
-    applyEvent: window.applyHazyWebLogicEvent
+    applyEvent: window.applyHazyWebLogicEvent,
+    applyUpdate: applyHazyStructuredUpdate
   };
+
+  // Phase 4: simple extensibility - register custom card renderers (e.g. for plugins/skills)
+  // Usage: HazyWebLogic.registerCardRenderer('mytype', (entry) => `<div>custom ${entry.name}</div>`);
+  const customRenderers = {};
+  window.HazyWebLogic.registerCardRenderer = function(kind, rendererFn) {
+    if (typeof rendererFn === 'function') customRenderers[kind] = rendererFn;
+  };
+  // In render, check custom first (before default)
+  const origRender = renderStructuredCardHTML;
+  // Note: for simplicity, the custom is checked in a wrapper, but since string, users can extend.
+  // For demo, expose the map.
+  window.HazyWebLogic.customRenderers = customRenderers;
 
   // Auto-run the verification on load (non-fatal, logs result). Also available for manual.
   // This satisfies "TEST IT BEFORE FINISHING" + "Run the verification".
