@@ -28,7 +28,6 @@ const url    = require('url');
 const { prepareChatRequest, analyzeMessage, finalizeResponse, database, memoryManager } = require('./orchestrator');
 const { createStreamResponseCollector } = require('./ai/streamResponseCollector');
 const { runDeterministicTools } = require('./tools/toolRouter');
-const { buildPublicReasoningTrace, encodeReasoningTrace } = require('./ai/reasoning/reasoningSummaryBuilder');
 const { UsageStatsStore, createResponseTelemetry } = require('./stats/usageStats');
 const { defaultAgentRuntime, createToolContext } = require('./agent/agentRuntime');
 const { buildConfirmationMessage } = require('./agent/confirmationStore');
@@ -395,12 +394,31 @@ function toGroqBody(body) {
   const model = (body.model || '').startsWith('groq/')
     ? body.model.slice('groq/'.length)
     : (body.model || 'llama-3.3-70b-versatile');
+
+  const messages = (body.messages || []).map(m => ({ role: m.role, content: m.content }));
+  let max_tokens = body.options?.max_tokens || 2048;
+
+  // Groq Rate Limit Safeguard:
+  // Free tier models on Groq have a strict 6,000 TPM limit.
+  // We dynamically clamp max_tokens so the total request size (prompt + max_tokens)
+  // does not exceed 5,800 tokens, preventing immediate rate-limiting errors.
+  if (model.includes('llama-3.1-8b') || model.includes('llama-3.3-70b') || model.includes('qwen3-32b')) {
+    let charCount = 0;
+    for (const msg of messages) {
+      charCount += typeof msg.content === 'string' ? msg.content.length : JSON.stringify(msg.content || '').length;
+    }
+    const estimatedPromptTokens = Math.ceil(charCount / 4);
+    if (estimatedPromptTokens + max_tokens > 5800) {
+      max_tokens = Math.max(512, 5800 - estimatedPromptTokens);
+    }
+  }
+
   return {
     model,
     stream: body.stream !== false,
-    max_tokens: body.options?.max_tokens || 4096,
+    max_tokens,
     temperature: body.options?.temperature ?? 0.85,
-    messages: (body.messages || []).map(m => ({ role: m.role, content: m.content })),
+    messages,
   };
 }
 
@@ -464,8 +482,18 @@ function streamAnthropicToOllamaFormat(proxyRes, clientRes) {
       try {
         const j = JSON.parse(data);
         const text = j.delta?.text || j.delta?.content?.[0]?.text || '';
+        let thinking = '';
+        if (j.content_block?.type === 'thinking') {
+          thinking = j.content_block.thinking || '';
+        } else if (j.delta?.type === 'thinking_delta') {
+          thinking = j.delta.thinking || '';
+        }
+
         if (text) {
           clientRes.write(JSON.stringify({ message: { content: text }, done: false }) + '\n');
+        }
+        if (thinking) {
+          clientRes.write(JSON.stringify({ message: { content: '', thinking: thinking }, done: false }) + '\n');
         }
         if (j.type === 'message_stop') {
           clientRes.write(JSON.stringify({ done: true }) + '\n');
@@ -509,7 +537,13 @@ function streamOpenAIToOllamaFormat(proxyRes, clientRes) {
       try {
         const j = JSON.parse(data);
         const text = j.choices?.[0]?.delta?.content || '';
-        if (text) clientRes.write(JSON.stringify({ message: { content: text }, done: false }) + '\n');
+        const reasoning = j.choices?.[0]?.delta?.reasoning_content || '';
+        if (text) {
+          clientRes.write(JSON.stringify({ message: { content: text }, done: false }) + '\n');
+        }
+        if (reasoning) {
+          clientRes.write(JSON.stringify({ message: { content: '', thinking: reasoning }, done: false }) + '\n');
+        }
       } catch {}
     }
   });
@@ -623,9 +657,7 @@ async function handleHazyChat(req, res, routeOptions = {}) {
     return originalEnd(chunk, ...args);
   };
 
-  const publicTrace = analysis.reasoning?.publicSummaryEnabled
-    ? buildPublicReasoningTrace({ analysis, toolRun })
-    : null;
+
   setCORS(res, req);
   res.setHeader('X-Hazy-Emotion', analysis.emotionData.emotion);
   res.setHeader('X-Hazy-Intent', analysis.intentData.primaryIntent);
@@ -649,10 +681,7 @@ async function handleHazyChat(req, res, routeOptions = {}) {
   if (analysis.reasoning?.reasoningLevel) {
     res.setHeader('X-Hazy-Reasoning', analysis.reasoning.reasoningLevel);
   }
-  if (publicTrace) {
-    res.setHeader('X-Hazy-Trace', encodeReasoningTrace(publicTrace));
-    res.setHeader('X-Hazy-Reasoning-Summary', analysis.reasoning.publicSummary || publicTrace.summary);
-  }
+
   if (analysis.codeAnalysis?.language) {
     res.setHeader('X-Hazy-Code-Language', analysis.codeAnalysis.language);
   }
@@ -775,12 +804,27 @@ async function handleHazyChat(req, res, routeOptions = {}) {
       model: modelId.replace('ollama/', ''),
       think: reasoningMode === 'off' ? false : true,
     };
+    const apiKey = getProviderApiKey('ollama', cfg);
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) {
+      headers['Authorization'] = 'Bearer ' + apiKey;
+      headers['X-Subscription-Token'] = apiKey;
+    }
+    if (ollamaUrl.username || ollamaUrl.password) {
+      const auth = Buffer.from(`${ollamaUrl.username}:${ollamaUrl.password}`).toString('base64');
+      headers['Authorization'] = `Basic ${auth}`;
+    }
+    if (req.headers['authorization']) headers['Authorization'] = req.headers['authorization'];
+    if (req.headers['x-subscription-token']) headers['X-Subscription-Token'] = req.headers['x-subscription-token'];
+    if (req.headers['x-api-key']) headers['X-Api-Key'] = req.headers['x-api-key'];
+    if (req.headers['api-key']) headers['Api-Key'] = req.headers['api-key'];
+
     streamProxy({
       hostname: ollamaUrl.hostname,
-      port: ollamaUrl.port || 80,
+      port: ollamaUrl.port ? Number(ollamaUrl.port) : (ollamaUrl.protocol === 'https:' ? 443 : 80),
       path: '/api/chat',
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       protocol: ollamaUrl.protocol,
     }, ollamaBody, res);
     return;
@@ -932,12 +976,27 @@ async function handleHazyChat(req, res, routeOptions = {}) {
     model: (modelId || 'ollama/llama3.2').replace(/^[a-zA-Z0-9_-]+\//, ''), // strip any prefix
     think: reasoningMode === 'off' ? false : true,
   };
+  const apiKey = getProviderApiKey('ollama', cfg);
+  const headers = { 'Content-Type': 'application/json' };
+  if (apiKey) {
+    headers['Authorization'] = 'Bearer ' + apiKey;
+    headers['X-Subscription-Token'] = apiKey;
+  }
+  if (ollamaUrl.username || ollamaUrl.password) {
+    const auth = Buffer.from(`${ollamaUrl.username}:${ollamaUrl.password}`).toString('base64');
+    headers['Authorization'] = `Basic ${auth}`;
+  }
+  if (req.headers['authorization']) headers['Authorization'] = req.headers['authorization'];
+  if (req.headers['x-subscription-token']) headers['X-Subscription-Token'] = req.headers['x-subscription-token'];
+  if (req.headers['x-api-key']) headers['X-Api-Key'] = req.headers['x-api-key'];
+  if (req.headers['api-key']) headers['Api-Key'] = req.headers['api-key'];
+
   streamProxy({
     hostname: ollamaUrl.hostname,
-    port: ollamaUrl.port || 80,
+    port: ollamaUrl.port ? Number(ollamaUrl.port) : (ollamaUrl.protocol === 'https:' ? 443 : 80),
     path: '/api/chat',
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     protocol: ollamaUrl.protocol,
   }, ollamaBody, res);
   return;
@@ -952,7 +1011,7 @@ async function handleProviders(req, res) {
   const registry = loadRegistry();
   const enabled  = {};
   Object.entries(cfg.providers || {}).forEach(([key, val]) => {
-    const hasKey = key === 'ollama' || Boolean(getProviderApiKey(key, cfg));
+    const hasKey = Boolean(getProviderApiKey(key, cfg));
     enabled[key] = {
       enabled: key === 'ollama' ? val.enabled !== false : Boolean(val.enabled && hasKey),
       hasKey,
@@ -1302,12 +1361,28 @@ async function handlePull(req, res) {
 
   res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Transfer-Encoding': 'chunked', 'Access-Control-Allow-Origin': CORS_ORIGIN });
 
-  const pullReq = http.request({
+  const apiKey = getProviderApiKey('ollama', cfg);
+  const headers = { 'Content-Type': 'application/json' };
+  if (apiKey) {
+    headers['Authorization'] = 'Bearer ' + apiKey;
+    headers['X-Subscription-Token'] = apiKey;
+  }
+  if (ollamaUrl.username || ollamaUrl.password) {
+    const auth = Buffer.from(`${ollamaUrl.username}:${ollamaUrl.password}`).toString('base64');
+    headers['Authorization'] = `Basic ${auth}`;
+  }
+  if (req.headers['authorization']) headers['Authorization'] = req.headers['authorization'];
+  if (req.headers['x-subscription-token']) headers['X-Subscription-Token'] = req.headers['x-subscription-token'];
+  if (req.headers['x-api-key']) headers['X-Api-Key'] = req.headers['x-api-key'];
+  if (req.headers['api-key']) headers['Api-Key'] = req.headers['api-key'];
+
+  const requestModule = ollamaUrl.protocol === 'https:' ? https : http;
+  const pullReq = requestModule.request({
     hostname: ollamaUrl.hostname,
-    port: ollamaUrl.port || 80,
+    port: ollamaUrl.port ? Number(ollamaUrl.port) : (ollamaUrl.protocol === 'https:' ? 443 : 80),
     path: '/api/pull',
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
+    headers
   }, pullRes => {
     pullRes.pipe(res);
   });
@@ -1324,10 +1399,29 @@ async function handleDeleteModel(req, res) {
   const body = await readBody(req);
   const cfg  = loadConfig();
   const ollamaUrl = new URL(cfg.providers?.ollama?.baseUrl || 'http://localhost:11434');
-  const delReq = http.request({
-    hostname: ollamaUrl.hostname, port: ollamaUrl.port || 80,
-    path: '/api/delete', method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' }
+
+  const apiKey = getProviderApiKey('ollama', cfg);
+  const headers = { 'Content-Type': 'application/json' };
+  if (apiKey) {
+    headers['Authorization'] = 'Bearer ' + apiKey;
+    headers['X-Subscription-Token'] = apiKey;
+  }
+  if (ollamaUrl.username || ollamaUrl.password) {
+    const auth = Buffer.from(`${ollamaUrl.username}:${ollamaUrl.password}`).toString('base64');
+    headers['Authorization'] = `Basic ${auth}`;
+  }
+  if (req.headers['authorization']) headers['Authorization'] = req.headers['authorization'];
+  if (req.headers['x-subscription-token']) headers['X-Subscription-Token'] = req.headers['x-subscription-token'];
+  if (req.headers['x-api-key']) headers['X-Api-Key'] = req.headers['x-api-key'];
+  if (req.headers['api-key']) headers['Api-Key'] = req.headers['api-key'];
+
+  const requestModule = ollamaUrl.protocol === 'https:' ? https : http;
+  const delReq = requestModule.request({
+    hostname: ollamaUrl.hostname,
+    port: ollamaUrl.port ? Number(ollamaUrl.port) : (ollamaUrl.protocol === 'https:' ? 443 : 80),
+    path: '/api/delete',
+    method: 'DELETE',
+    headers
   }, delRes => {
     res.writeHead(delRes.statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
     delRes.pipe(res);

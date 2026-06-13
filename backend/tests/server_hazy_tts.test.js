@@ -61,7 +61,7 @@ test('getKokoroHealthUrl falls back on invalid URL', () => {
   process.env.KOKORO_URL = 'not-a-url';
   const mod = freshServerRequire();
   const health = mod.getKokoroHealthUrl();
-  assert.equal(health, 'http://localhost:8880/health');
+  assert.equal(health, 'http://127.0.0.1:8880/health');
   if (orig === undefined) delete process.env.KOKORO_URL; else process.env.KOKORO_URL = orig;
 });
 

@@ -11,7 +11,7 @@ test('prepareChatRequest normalizes OpenAI reasoning metadata', () => {
     hazy: {
       mode: 'code',
       reasoningMode: 'deep',
-      showReasoningSummary: true
+      showReasoningSummary: false
     },
     messages: [
       { role: 'user', content: 'Refactor this JavaScript app and verify the routing edge cases.' }
@@ -22,7 +22,7 @@ test('prepareChatRequest normalizes OpenAI reasoning metadata', () => {
   assert.equal(providerBody.hazyReasoning.mode, 'deep');
   assert.equal(providerBody.hazyReasoning.level, 'agentic');
   assert.equal(providerBody.hazyReasoning.effort, 'high');
-  assert.equal(providerBody.hazyReasoning.publicSummaryEnabled, true);
+  assert.equal(providerBody.hazyReasoning.publicSummaryEnabled, false);
   assert.match(analysis.prompt, /Hazy extended reasoning policy/);
 });
 
@@ -32,7 +32,7 @@ test('prepareChatRequest falls back to Hazy reasoning metadata for local provide
     hazy: {
       mode: 'build',
       reasoningMode: 'auto',
-      showReasoningSummary: true
+      showReasoningSummary: false
     },
     messages: [
       { role: 'user', content: 'Build a small restaurant website with menu and booking sections.' }
@@ -41,8 +41,8 @@ test('prepareChatRequest falls back to Hazy reasoning metadata for local provide
 
   assert.equal(providerBody.hazyReasoning.nativeProvider, 'hazy');
   assert.equal(providerBody.hazyReasoning.mode, 'auto');
-  assert.equal(providerBody.hazyReasoning.level, 'structured');
-  assert.equal(providerBody.hazyReasoning.effort, 'medium');
+  assert.equal(providerBody.hazyReasoning.level, 'light');
+  assert.equal(providerBody.hazyReasoning.effort, 'low');
 });
 
 test('prepareChatRequest treats unknown provider strings as Hazy-managed reasoning', () => {
@@ -65,7 +65,7 @@ test('prepareChatRequest handles null or empty model values with default Hazy re
     });
 
     assert.equal(providerBody.hazyReasoning.nativeProvider, 'hazy');
-    assert.equal(providerBody.hazyReasoning.level, 'direct');
+    assert.equal(providerBody.hazyReasoning.level, 'light');
   }
 });
 

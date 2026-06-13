@@ -535,12 +535,13 @@ class MemoryManager {
         AND status = 'active'
         AND (project_id = '' OR project_id = ?)
         AND (expires_at IS NULL OR expires_at > ?)
+        AND (type NOT IN ('project_fact', 'agent_plan', 'agent_step', 'failed_attempt', 'artifact_ref', 'unresolved_question') OR conversation_id = ?)
       ORDER BY
         CASE WHEN conversation_id = ? THEN 0 ELSE 1 END,
         confidence DESC,
         updated_at DESC
       LIMIT 40
-    `).all(userId, projectId || "", timestamp, conversationId);
+    `).all(userId, projectId || "", timestamp, conversationId, conversationId);
 
     const durable = candidates
       .map((memory) => ({
@@ -703,9 +704,10 @@ class MemoryManager {
         FROM memories
         WHERE user_id = ? AND status = 'active'
           AND (project_id = '' OR project_id = ?)
+          AND conversation_id = ?
           AND type IN ('agent_plan','agent_step','failed_attempt','artifact_ref','unresolved_question')
         ORDER BY updated_at DESC, confidence DESC LIMIT 6
-      `).all(userId, projectId || '') : [];
+      `).all(userId, projectId || '', conversationId) : [];
       return [
         ...rel,
         ...agentRows.map(r => ({ type: r.type, key: r.key, value: r.value, confidence: r.confidence, summary: `${r.key}: ${r.value}` }))
@@ -766,6 +768,12 @@ class MemoryManager {
       let sql = `SELECT type, key, value, confidence, conversation_id AS conversationId FROM memories
         WHERE user_id = ? AND status = 'active' AND (project_id = '' OR project_id = ?)`;
       const params = [userId, projectId || ''];
+      
+      if (conversationId) {
+        sql += ` AND (type NOT IN ('project_fact', 'agent_plan', 'agent_step', 'failed_attempt', 'artifact_ref', 'unresolved_question') OR conversation_id = ?)`;
+        params.push(conversationId);
+      }
+
       if (Array.isArray(types) && types.length) {
         const ph = types.map(() => '?').join(',');
         sql += ` AND type IN (${ph})`;

@@ -1523,10 +1523,57 @@ function appendHazyDecisionTrace(trace) {
   return div;
 }
 
+function parseContentWithThinkTags(accumulatedContent, externalThinking = '') {
+  let thinking = externalThinking;
+  let content = accumulatedContent;
+
+  const thinkStart = accumulatedContent.indexOf('<think>');
+  if (thinkStart !== -1) {
+    const thinkEnd = accumulatedContent.indexOf('</think>', thinkStart + 7);
+    if (thinkEnd !== -1) {
+      // Both start and end found
+      const thinkText = accumulatedContent.slice(thinkStart + 7, thinkEnd);
+      thinking = (thinking ? thinking + '\n' : '') + thinkText;
+      content = accumulatedContent.slice(0, thinkStart) + accumulatedContent.slice(thinkEnd + 8);
+    } else {
+      // Only start found
+      const thinkText = accumulatedContent.slice(thinkStart + 7);
+      thinking = (thinking ? thinking + '\n' : '') + thinkText;
+      content = accumulatedContent.slice(0, thinkStart);
+    }
+  } else {
+    // Suppress partial <think> tag at the end of content
+    const partialStartMatch = content.match(/<t?h?i?n?k?>?$/i);
+    if (partialStartMatch) {
+      content = content.slice(0, -partialStartMatch[0].length);
+    }
+  }
+
+  // Suppress partial </think> tag at the end of thinking
+  if (thinking) {
+    const partialEndMatch = thinking.match(/<\/?t?h?i?n?k?>?$/i);
+    if (partialEndMatch) {
+      thinking = thinking.slice(0, -partialEndMatch[0].length);
+    }
+  }
+
+  return { content, thinking };
+}
+
+
 function renderRawThinking(thinking, streaming = false) {
-  return thinking && streaming
-    ? '<div class="reasoning-progress"><span class="reasoning-progress-dot"></span><span>Checking the answer...</span></div>'
-    : '';
+  if (!thinking) return '';
+  return `
+    <details class="raw-thinking-card" ${streaming ? 'open' : ''}>
+      <summary>
+        <span class="reasoning-progress-dot"></span>
+        <span>${streaming ? 'Checking the answer...' : 'Thought Process'}</span>
+      </summary>
+      <div class="raw-thinking-content">
+        ${renderMarkdown(thinking)}
+      </div>
+    </details>
+  `;
 }
 
 function renderAssistantContent(content, trace = null, thinking = '', webSearchMetadata = null) {
@@ -1595,12 +1642,18 @@ async function injectPersonaOpener() {
           const thinkingToken = getThinkingToken(json);
           if (thinkingToken) {
             fullThinking += thinkingToken;
-            contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${renderMarkdown(fullContent)}`;
-            scrollToBottom();
           }
           if (json.message?.content) {
             fullContent += json.message.content;
-            contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`;
+          }
+
+          const parsed = parseContentWithThinkTags(fullContent, fullThinking);
+          if (thinkingToken || json.message?.content) {
+            if (thinkingToken) {
+              contentDiv.innerHTML = `${renderRawThinking(parsed.thinking, true)}${renderMarkdown(parsed.content)}`;
+            } else {
+              contentDiv.innerHTML = `${renderRawThinking(parsed.thinking)}${renderMarkdown(parsed.content)}<span class="stream-cursor"></span>`;
+            }
             scrollToBottom();
           }
           if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
@@ -1608,9 +1661,10 @@ async function injectPersonaOpener() {
       }
     }
 
-    conv.messages.push({ role: 'assistant', content: fullContent, thinking: fullThinking, ts: aiTs });
+    const parsedFinal = parseContentWithThinkTags(fullContent, fullThinking);
+    conv.messages.push({ role: 'assistant', content: parsedFinal.content, thinking: parsedFinal.thinking, ts: aiTs });
     saveConversations();
-    contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking);
+    contentDiv.innerHTML = renderAssistantContent(parsedFinal.content, null, parsedFinal.thinking);
     highlightCodeBlocks(contentDiv);
 
   } catch (e) {
@@ -1839,8 +1893,21 @@ function createConversation(firstMessage, page = STATE.activePage) {
 // Uses a tiny max_tokens budget so it's fast and doesn't compete with RAM.
 async function generateChatTitle(convId, userMsg, aiReply) {
   if (!convId || !STATE.conversations[convId]) return;
+
+  const userName = (STATE.personaUserName || '').trim();
+  const hasName = userName && userName.toLowerCase() !== 'you';
+  const displayUserName = hasName ? userName : 'Not specified';
+
   try {
     const prompt = `In 4 words or less, give this conversation a short descriptive title. No quotes, no punctuation, just the title words.
+
+User Name: ${displayUserName}
+AI Name: Hazy
+
+Rules for greetings:
+- If the user's message is just a simple greeting (like "hi", "hello", "hey", "hola", "sup", "yo"), title the conversation exactly as:
+  * If User Name is specified: "${userName}'s Greetings"
+  * If User Name is Not specified: "Hazy's Hi Responses"
 
 User said: "${userMsg.slice(0, 200)}"
 AI replied: "${aiReply.slice(0, 200)}"
@@ -1876,14 +1943,26 @@ Title:`;
       STATE.conversations[convId].title = title;
       saveConversations();
       renderChatHistory();
+      if (convId === STATE.activeConvId) {
+        updateWorkspaceChrome();
+      }
     }
   } catch {
-    // Fallback: make a clean title from first few words of user message
-    if (STATE.conversations[convId] && STATE.conversations[convId].title === '…') {
-      const words = userMsg.trim().split(/\s+/).slice(0, 5).join(' ');
-      STATE.conversations[convId].title = words + (userMsg.split(/\s+/).length > 5 ? '…' : '');
+    // Fallback: make a clean title from user message or greeting rules
+    if (STATE.conversations[convId] && (STATE.conversations[convId].title === '…' || STATE.conversations[convId].title === '.')) {
+      const cleaned = userMsg.trim().toLowerCase().replace(/[.!?]/g, '');
+      const greetings = ['hi', 'hello', 'hey', 'hola', 'greetings', 'good morning', 'good afternoon', 'good evening', 'howdy', 'sup', 'yo', 'hi there', 'hello there'];
+      if (greetings.includes(cleaned)) {
+        STATE.conversations[convId].title = hasName ? `${userName}'s Greetings` : "Hazy's Hi Responses";
+      } else {
+        const words = userMsg.trim().split(/\s+/).slice(0, 5).join(' ');
+        STATE.conversations[convId].title = words + (userMsg.split(/\s+/).length > 5 ? '…' : '');
+      }
       saveConversations();
       renderChatHistory();
+      if (convId === STATE.activeConvId) {
+        updateWorkspaceChrome();
+      }
     }
   }
 }
@@ -3760,11 +3839,22 @@ async function sendMessage(userText) {
               const thinkingToken = getThinkingToken(json);
               if (thinkingToken) {
                 fullThinking += thinkingToken;
-                contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${renderMarkdown(fullContent)}`;
-                scrollToBottom();
               }
               const token = json.message?.content || '';
-              if (token) { fullContent += token; partialGeneratedContent = fullContent; contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`; scrollToBottom(); }
+              if (token) {
+                fullContent += token;
+                partialGeneratedContent = fullContent;
+              }
+
+              const parsed = parseContentWithThinkTags(fullContent, fullThinking);
+              if (thinkingToken || token) {
+                if (thinkingToken) {
+                  contentDiv.innerHTML = `${renderRawThinking(parsed.thinking, true)}${renderMarkdown(parsed.content)}`;
+                } else {
+                  contentDiv.innerHTML = `${renderRawThinking(parsed.thinking)}${renderMarkdown(parsed.content)}<span class="stream-cursor"></span>`;
+                }
+                scrollToBottom();
+              }
               if (token && !isBuild && !isCode) window.HAZY_STREAMING_TTS?.push(token);
               if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
             } catch { }
@@ -3772,10 +3862,11 @@ async function sendMessage(userText) {
         }
         contentDiv.querySelector('.stream-cursor')?.remove();
         fullContent = normalizeCompanionResponse(fullContent);
-        conv.messages.push({ role: 'assistant', content: fullContent, ts: aiTs });
+        const parsedFinal = parseContentWithThinkTags(fullContent, fullThinking);
+        conv.messages.push({ role: 'assistant', content: parsedFinal.content, thinking: parsedFinal.thinking, ts: aiTs });
         saveConversations();
-        if (conv.messages.filter(m => m.role === 'user').length === 1) generateChatTitle(STATE.activeConvId, userText, fullContent);
-        contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking);
+        if (conv.messages.filter(m => m.role === 'user').length === 1) generateChatTitle(STATE.activeConvId, userText, parsedFinal.content);
+        contentDiv.innerHTML = renderAssistantContent(parsedFinal.content, null, parsedFinal.thinking);
         highlightCodeBlocks(contentDiv);
         return; // done — skip the main stream block below
       } else {
@@ -3821,37 +3912,44 @@ async function sendMessage(userText) {
           const thinkingToken = getThinkingToken(json);
           if (thinkingToken) {
             fullThinking += thinkingToken;
-            contentDiv.innerHTML = `${renderHazyDecisionTrace(hazyTrace)}${renderRawThinking(fullThinking, true)}${renderMarkdown(fullContent)}`;
-            scrollToBottom();
           }
           const token = json.message?.content || '';
-
           if (token) {
             fullContent += token;
             partialGeneratedContent = fullContent;
+          }
 
+          const parsed = parseContentWithThinkTags(fullContent, fullThinking);
+          const isThinkTagStreaming = fullContent.indexOf('<think>') !== -1 && fullContent.indexOf('</think>') === -1;
+          const isThinkingStreaming = isThinkTagStreaming || !!thinkingToken;
+
+          if (thinkingToken || token) {
             if (isBuild || isCode) {
-              const liveProject = parseFinalResponseFiles(fullContent);
+              const liveProject = parseFinalResponseFiles(parsed.content);
               const filesFound = liveProject?.files.length || 0;
-              const linesGenerated = fullContent.split('\n').length;
+              const linesGenerated = parsed.content.split('\n').length;
               const modeVerb = isCode ? 'Building your code…' : 'Building your website…';
               if (STATE.showLiveCode) {
-                contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderLiveBuildProgress(fullContent, filesFound, linesGenerated)}`;
+                contentDiv.innerHTML = `${renderRawThinking(parsed.thinking, isThinkingStreaming)}${renderLiveBuildProgress(parsed.content, filesFound, linesGenerated)}`;
               } else {
                 const filesInfo = filesFound > 0 ? (filesFound + ' file' + (filesFound > 1 ? 's' : '') + ' detected') : 'Generating…';
-                contentDiv.innerHTML = `${renderRawThinking(fullThinking)}
+                contentDiv.innerHTML = `${renderRawThinking(parsed.thinking, isThinkingStreaming)}
                   <div class="build-progress">
                     <span class="build-spinner"></span>
                     <div class="build-progress-info">
                       <span>${modeVerb}</span>
-                      <span class="build-stats">${filesInfo} · ${linesGenerated} lines · ${(fullContent.length / 1024).toFixed(1)} KB</span>
+                      <span class="build-stats">${filesInfo} · ${linesGenerated} lines · ${(parsed.content.length / 1024).toFixed(1)} KB</span>
                     </div>
                   </div>`;
               }
             } else {
-              contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking) + '<span class="stream-cursor"></span>';
+              if (thinkingToken) {
+                contentDiv.innerHTML = `${renderHazyDecisionTrace(hazyTrace)}${renderRawThinking(parsed.thinking, isThinkingStreaming)}${renderMarkdown(parsed.content)}`;
+              } else {
+                contentDiv.innerHTML = renderAssistantContent(parsed.content, hazyTrace, parsed.thinking, webSearchMetadata) + '<span class="stream-cursor"></span>';
+              }
             }
-            if (!isBuild && !isCode) window.HAZY_STREAMING_TTS?.push(token);
+            if (token && !isBuild && !isCode) window.HAZY_STREAMING_TTS?.push(token);
             scrollToBottom();
           }
 
@@ -3863,12 +3961,13 @@ async function sendMessage(userText) {
     contentDiv.querySelector('.stream-cursor')?.remove();
     window.HAZY_STREAMING_TTS?.finish()?.catch(() => { });
 
-    if (!fullContent.trim()) {
-      fullContent = 'The model finished without returning an answer. Its response budget may have been used entirely for reasoning. Increase Max Tokens or set Reasoning to Off and try again.';
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
+    const parsedFinal = parseContentWithThinkTags(fullContent, fullThinking);
+    let finalCleanContent = parsedFinal.content;
+    if (!finalCleanContent.trim()) {
+      finalCleanContent = 'The model finished without returning an answer. Its response budget may have been used entirely for reasoning. Increase Max Tokens or set Reasoning to Off and try again.';
     }
     if (!isBuild && !isCode) {
-      fullContent = normalizeCompanionResponse(fullContent);
+      finalCleanContent = normalizeCompanionResponse(finalCleanContent);
     }
 
     // Final flush to IndexedDB before parsing.
@@ -3878,7 +3977,7 @@ async function sendMessage(userText) {
     // This is a major part of making "click previous code" + follow-up fix target the right version.
     let persistedProjectData = undefined;
     if (isBuild || isCode) {
-      let parsedForStore = parseFinalResponseFiles(fullContent);
+      let parsedForStore = parseFinalResponseFiles(finalCleanContent);
       if (parsedForStore && Array.isArray(parsedForStore.files) && parsedForStore.files.length > 0) {
         if (activeProject) {
           parsedForStore = mergeProjectFiles(activeProject, parsedForStore);
@@ -3893,23 +3992,24 @@ async function sendMessage(userText) {
 
     conv.messages.push({
       role: 'assistant',
-      content: fullContent,
+      content: finalCleanContent,
       ts: aiTs,
       buildMode: (isBuild || isCode || agentArtifactProject) ? (isCode ? 'code' : 'website') : undefined,
       projectData: persistedProjectData,
       trace: hazyTrace || undefined,
-      agent: agentRunInfo || undefined
+      agent: agentRunInfo || undefined,
+      thinking: parsedFinal.thinking
     });
     saveConversations();
 
     // Generate a smart title after the very first exchange
     if (conv.messages.filter(m => m.role === 'user').length === 1) {
-      generateChatTitle(STATE.activeConvId, userText, fullContent);
+      generateChatTitle(STATE.activeConvId, userText, finalCleanContent);
     }
 
     if (isBuild || isCode) {
       // — Parse attempt 1: delimiter format (most reliable) —
-      let projectData = parseFinalResponseFiles(fullContent);
+      let projectData = parseFinalResponseFiles(finalCleanContent);
       if (projectData && activeProject) {
         projectData = mergeProjectFiles(activeProject, projectData);
       }
@@ -3919,12 +4019,12 @@ async function sendMessage(userText) {
 
 
       if (projectData && projectData.files.length > 0) {
-        const isPartial = !fullContent.includes('===NOTES===') && !fullContent.includes('===SETUP===');
+        const isPartial = !finalCleanContent.includes('===NOTES===') && !finalCleanContent.includes('===SETUP===');
         const modeLabel = isCode ? 'Code' : 'Website';
         const modeIcon = isCode ? '💻' : '🌐';
 
 
-        contentDiv.innerHTML = `${renderRawThinking(fullThinking)}
+        contentDiv.innerHTML = `${renderRawThinking(parsedFinal.thinking)}
           <div class="build-success">
             <div class="build-success-header">
               <span class="build-success-icon">${isPartial ? '⚠️' : '✅'}</span>
@@ -3967,7 +4067,7 @@ async function sendMessage(userText) {
         );
 
       } else {
-        contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}`;
+        contentDiv.innerHTML = `${renderRawThinking(parsedFinal.thinking)}${renderMarkdown(finalCleanContent)}`;
         highlightCodeBlocks(contentDiv);
         const warnDiv = document.createElement('div');
         warnDiv.className = 'build-parse-error';
@@ -3990,7 +4090,7 @@ async function sendMessage(userText) {
       // Agent mode wrote files via artifact.write tool — open them in the builder panel.
       // isBuild/isCode are false in agent mode (they reflect the chat-mode UI toggle, not agent intent),
       // so this branch handles the case the agent produced real artifacts that the builder block above never sees.
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
+      contentDiv.innerHTML = renderAssistantContent(finalCleanContent, hazyTrace, parsedFinal.thinking, webSearchMetadata);
       highlightCodeBlocks(contentDiv);
 
       const agentFileCount = agentArtifactProject.files.length;
@@ -4023,7 +4123,7 @@ async function sendMessage(userText) {
 
     } else {
       // ── SOURCES_PENDING: render content + inject skeleton placeholder synchronously ──
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
+      contentDiv.innerHTML = renderAssistantContent(finalCleanContent, hazyTrace, parsedFinal.thinking, webSearchMetadata);
       highlightCodeBlocks(contentDiv);
     }
 

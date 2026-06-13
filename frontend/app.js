@@ -1839,8 +1839,21 @@ function createConversation(firstMessage, page = STATE.activePage) {
 // Uses a tiny max_tokens budget so it's fast and doesn't compete with RAM.
 async function generateChatTitle(convId, userMsg, aiReply) {
   if (!convId || !STATE.conversations[convId]) return;
+
+  const userName = (STATE.personaUserName || '').trim();
+  const hasName = userName && userName.toLowerCase() !== 'you';
+  const displayUserName = hasName ? userName : 'Not specified';
+
   try {
     const prompt = `In 4 words or less, give this conversation a short descriptive title. No quotes, no punctuation, just the title words.
+
+User Name: ${displayUserName}
+AI Name: Hazy
+
+Rules for greetings:
+- If the user's message is just a simple greeting (like "hi", "hello", "hey", "hola", "sup", "yo"), title the conversation exactly as:
+  * If User Name is specified: "${userName}'s Greetings"
+  * If User Name is Not specified: "Hazy's Hi Responses"
 
 User said: "${userMsg.slice(0, 200)}"
 AI replied: "${aiReply.slice(0, 200)}"
@@ -1876,14 +1889,26 @@ Title:`;
       STATE.conversations[convId].title = title;
       saveConversations();
       renderChatHistory();
+      if (convId === STATE.activeConvId) {
+        updateWorkspaceChrome();
+      }
     }
   } catch {
-    // Fallback: make a clean title from first few words of user message
-    if (STATE.conversations[convId] && STATE.conversations[convId].title === '…') {
-      const words = userMsg.trim().split(/\s+/).slice(0, 5).join(' ');
-      STATE.conversations[convId].title = words + (userMsg.split(/\s+/).length > 5 ? '…' : '');
+    // Fallback: make a clean title from user message or greeting rules
+    if (STATE.conversations[convId] && (STATE.conversations[convId].title === '…' || STATE.conversations[convId].title === '.')) {
+      const cleaned = userMsg.trim().toLowerCase().replace(/[.!?]/g, '');
+      const greetings = ['hi', 'hello', 'hey', 'hola', 'greetings', 'good morning', 'good afternoon', 'good evening', 'howdy', 'sup', 'yo', 'hi there', 'hello there'];
+      if (greetings.includes(cleaned)) {
+        STATE.conversations[convId].title = hasName ? `${userName}'s Greetings` : "Hazy's Hi Responses";
+      } else {
+        const words = userMsg.trim().split(/\s+/).slice(0, 5).join(' ');
+        STATE.conversations[convId].title = words + (userMsg.split(/\s+/).length > 5 ? '…' : '');
+      }
       saveConversations();
       renderChatHistory();
+      if (convId === STATE.activeConvId) {
+        updateWorkspaceChrome();
+      }
     }
   }
 }

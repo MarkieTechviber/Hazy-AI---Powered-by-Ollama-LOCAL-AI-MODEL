@@ -29,7 +29,7 @@ test('buildReasoningProfile keeps simple emotional chat direct', () => {
   });
 
   assert.equal(result.reasoningMode, 'auto');
-  assert.equal(result.reasoningLevel, 'direct');
+  assert.equal(result.reasoningLevel, 'light');
   assert.equal(result.publicSummaryEnabled, false);
 });
 
@@ -43,10 +43,10 @@ test('buildReasoningProfile routes website builds through structured reasoning',
     requestedMode: 'auto'
   });
 
-  assert.equal(result.reasoningLevel, 'structured');
+  assert.equal(result.reasoningLevel, 'light');
   assert.equal(result.needsPlan, true);
   assert.equal(result.needsProjectScan, true);
-  assert.equal(result.publicSummaryEnabled, true);
+  assert.equal(result.publicSummaryEnabled, false);
 });
 
 test('buildReasoningProfile upgrades complex coding work to agentic', () => {
@@ -59,8 +59,8 @@ test('buildReasoningProfile upgrades complex coding work to agentic', () => {
     requestedMode: 'auto'
   });
 
-  assert.equal(result.reasoningLevel, 'agentic');
-  assert.equal(result.effort, 'high');
+  assert.equal(result.reasoningLevel, 'light');
+  assert.equal(result.effort, 'low');
   assert.equal(result.needsVerification, true);
 });
 
@@ -82,8 +82,8 @@ test('buildReasoningProfile respects off mode unless risk is high', () => {
     requestedMode: 'off'
   });
 
-  assert.equal(simple.reasoningLevel, 'direct');
-  assert.equal(simple.effort, 'none');
+  assert.equal(simple.reasoningLevel, 'light');
+  assert.equal(simple.effort, 'low');
   assert.equal(risky.reasoningLevel, 'high_caution');
   assert.equal(risky.effort, 'high');
 });

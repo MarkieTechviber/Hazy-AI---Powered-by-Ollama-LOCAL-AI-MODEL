@@ -422,6 +422,19 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
     }
     const apiKey = getApiKey(compatible.keyName, cfg);
     if (!apiKey) throw new Error(`${provider} API key is not configured.`);
+    let max_tokens = providerBody.options?.max_tokens || 4096;
+    if (provider === 'groq' && (compatible.model.includes('llama-3.1-8b') || compatible.model.includes('llama-3.3-70b') || compatible.model.includes('qwen3-32b'))) {
+      const msgs = toOpenAIMessages(input);
+      let charCount = 0;
+      for (const m of msgs) {
+        charCount += typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content || '').length;
+      }
+      const estimatedPromptTokens = Math.ceil(charCount / 4);
+      if (estimatedPromptTokens + max_tokens > 5800) {
+        max_tokens = Math.max(512, 5800 - estimatedPromptTokens);
+      }
+    }
+
     const data = await requestJson(compatible.url, {
       headers: { Authorization: `Bearer ${apiKey}` },
       body: {
@@ -430,7 +443,7 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
         tools: toOpenAITools(tools),
         tool_choice: 'auto',
         stream: false,
-        max_tokens: providerBody.options?.max_tokens || 4096,
+        max_tokens,
         temperature
       }
     });

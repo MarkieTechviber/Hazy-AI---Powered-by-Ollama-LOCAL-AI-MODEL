@@ -2,11 +2,11 @@
 
 const { shouldAskClarifyingQuestion } = require('./clarificationPolicy');
 const { classifyReasoningTask } = require('./taskClassifier');
-const { 
-  getRecommendedReasoningLevel, 
-  getBudgetForLevel, 
+const {
+  getRecommendedReasoningLevel,
+  getBudgetForLevel,
   getEffortForLevel,
-  REASONING_POLICY 
+  REASONING_POLICY
 } = require('./reasoningPolicy');
 
 // Phase 2 wiring
@@ -109,11 +109,8 @@ function buildReasoningProfile({
     needsPlan: needsPlan || (!reasoningOff && reasoningTask.shouldUseReasoning),
     needsVerification: needsVerification || (!reasoningOff && reasoningTask.shouldUseCalculator),
     selfConsistencyRecommended: reasoningTask.selfConsistencyRecommended || false,
-    publicSummaryEnabled: showSummary !== false && reasoningLevel !== 'direct',
-    publicSummary: showSummary !== false && reasoningLevel !== 'direct'
-      ? buildPublicSummary({ reasoningLevel, needsProjectScan, needsPlan, needsVerification, riskLevel })
-      : '',
-    privateReasoningPolicy: 'Do not expose raw chain-of-thought, scratchpad text, or <thinking> blocks.',
+    publicSummaryEnabled: false,
+    publicSummary: '',
     allowedToExecute: false,
     riskConflict,
     riskConflictNote: riskConflict

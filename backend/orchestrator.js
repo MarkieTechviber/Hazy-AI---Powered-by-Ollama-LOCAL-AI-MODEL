@@ -133,6 +133,10 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     currentProject,   // passed through so promptBuilder can emit the exact "CURRENT PROJECT FILES" block for edits
     toolResults,
     agentMode,
+    agentEnabled: body.hazy?.agentEnabled === true
+      || body.hazy?.agenticMode === true
+      || String(body.hazy?.surface || body.hazy?.page || '').toLowerCase() === 'agent'
+      || String(body.hazy?.surface || body.hazy?.page || '').toLowerCase() === 'agentic',
     runtimeContext
   });
 
