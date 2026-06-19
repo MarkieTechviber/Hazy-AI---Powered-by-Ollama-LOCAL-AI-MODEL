@@ -9,7 +9,11 @@ function evaluateReasoningResponse(response, task = {}) {
   const invalidEquations = equations.filter((item) => !item.valid);
 
   if (!text) issues.push('empty_response');
-  if (/<\s*thinking\b/i.test(text)) issues.push('private_reasoning_exposed');
+  const isDeepThink = task.reasoningMode === 'deep';
+  const isAgentic = task.agentEnabled === true;
+  if (!isDeepThink && !isAgentic && /<\s*thinking\b/i.test(text)) {
+    issues.push('private_reasoning_exposed');
+  }
   if (invalidEquations.length) issues.push('calculator_mismatch');
   if (task.shouldUseReasoning && text.length < 40) issues.push('insufficient_explanation');
 

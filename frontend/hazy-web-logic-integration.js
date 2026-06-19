@@ -1,5 +1,5 @@
 /**
- * HAZY WEB LOGIC INTEGRATION — Structured ToolCall-style Renderer
+ * HAZY WEB LOGIC INTEGRATION - Structured ToolCall-style Renderer
  * ================================================================
  * PR: pr-1-add-structured-toolcall-renderer-chat-transcript
  *
@@ -16,12 +16,12 @@
  * - Uses existing webSearch results (via loadWebSourceCards path) + tool/agent
  *   events data to populate .structured on messages.
  * - Integrates into appendMessage (history) + live send path (after web cards).
- * - Self-test: simulateMessageWithCitationAndTool() — creates samples,
+ * - Self-test: simulateMessageWithCitationAndTool() - creates samples,
  *   renders, verifies attach to a transcript-like container without throwing,
  *   confirms existing chat content path untouched.
  * - Placed on Hazy AI root (frontend/ as loadable integration following
  *   established pattern: hazy-*-integration.js, ui-integration.js etc).
- * - Loaded from index.html; functions exposed on window for app.js hooks.
+ * - Loaded from index.html; functions exposed on window for app.js hooks.  
  *
  * No new features beyond the described renderer + integration + test.
  * Follows existing app.js patterns (escapeHtml, template strings for html
@@ -32,7 +32,7 @@
 (function hazyWebLogicIntegration() {
   'use strict';
 
-  // ── CONFIG: single source of truth, top of this integration code ──────────
+  // -- CONFIG: single source of truth, top of this integration code ----------
   // No magic elsewhere. Use these values via the config object.
   const HAZY_WEB_LOGIC_CONFIG = {
     enableStructuredCards: true,
@@ -108,7 +108,7 @@
   // Expose for app.js and console / tests
   window.HAZY_WEB_LOGIC_CONFIG = HAZY_WEB_LOGIC_CONFIG;
 
-  // ── Internal helpers (all driven by CONFIG, no literals) ───────────────────
+  // -- Internal helpers (all driven by CONFIG, no literals) -------------------
   function getCardTypeMeta(kind) {
     const types = HAZY_WEB_LOGIC_CONFIG.cardTypes || {};
     for (const typeKey in types) {
@@ -137,7 +137,7 @@
     });
   }
 
-  // ── Core renderer: returns HTML snippet (for insertAdjacentHTML and easy test) ─
+  // -- Core renderer: returns HTML snippet (for insertAdjacentHTML and easy test) -
   // Follows Hazy patterns: details/summary for collapsible (see hazy-trace + web-source),
   // header with icon+name+context+elapsed+status, body for details/preview/result/error.
   // Auto-open (open attr) on error status. Live elapsed shown (static snapshot here;
@@ -221,7 +221,7 @@
     return el || wrap;
   }
 
-  // ── Self-test as required. Verifies renderer + attach + no breakage to chat path ─
+  // -- Self-test as required. Verifies renderer + attach + no breakage to chat path -
   // Can be called from browser console after load: simulateMessageWithCitationAndTool()
   // Also safe to invoke from node if DOM polyfilled (string path exercised).
   function simulateMessageWithCitationAndTool() {
@@ -299,7 +299,7 @@
         throw new Error('no insertion happened');
       }
 
-      console.log('%c[HazyWebLogic] Self-test PASSED — citation + tool (error) cards produced via CONFIG, attached cleanly inside transcript-like node, existing message content preserved, no exceptions. Call again to re-verify.', 'color:#2a7');
+      console.log('%c[HazyWebLogic] Self-test PASSED - citation + tool (error) cards produced via CONFIG, attached cleanly inside transcript-like node, existing message content preserved, no exceptions. Call again to re-verify.', 'color:#2a7');
       return true;
     } catch (err) {
       console.error('[HazyWebLogic] Self-test FAILED:', err);
@@ -415,7 +415,7 @@
   // Phase 4: simple extensibility - register custom card renderers (e.g. for plugins/skills)
   // Usage: HazyWebLogic.registerCardRenderer('mytype', (entry) => `<div>custom ${entry.name}</div>`);
   const customRenderers = {};
-  window.HazyWebLogic.registerCardRenderer = function(kind, rendererFn) {
+  window.HazyWebLogic.registerCardRenderer = function (kind, rendererFn) {
     if (typeof rendererFn === 'function') customRenderers[kind] = rendererFn;
   };
   // In render, check custom first (before default)
@@ -436,5 +436,5 @@
     console.warn('[HazyWebLogic] Auto self-test encountered issue (non-blocking):', e);
   }
 
-  console.log('[HazyWebLogic] Initialized. CONFIG keys:', Object.keys(HAZY_WEB_LOGIC_CONFIG).join(', '), '— everything configurable, no hardcodes in renderer.');
+  console.log('[HazyWebLogic] Initialized. CONFIG keys:', Object.keys(HAZY_WEB_LOGIC_CONFIG).join(', '), '- everything configurable, no hardcodes in renderer.');
 })();

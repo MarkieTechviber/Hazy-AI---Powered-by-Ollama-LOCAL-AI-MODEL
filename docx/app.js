@@ -1981,6 +1981,10 @@ function switchConversation(id, options = {}) {
   document.getElementById('historyDrawer')?.classList.remove('open');
   document.getElementById('moreMenu')?.classList.remove('open');
   document.getElementById('appScrim')?.classList.remove('active');
+
+  // Reset active builder project context when switching conversations
+  closeBuilderPanel();
+
   el.welcomeScreen.style.display = 'none';
   el.messagesArea.classList.add('visible');
   el.messagesArea.innerHTML = '';
@@ -2024,6 +2028,8 @@ function renameConversation(id, title) {
 }
 
 function showWelcomeScreen() {
+  // Reset active builder project context on starting a new chat or when welcome screen is shown
+  closeBuilderPanel();
   el.welcomeScreen.style.display = '';
   el.messagesArea.classList.remove('visible');
   el.messagesArea.innerHTML = '';
@@ -3218,6 +3224,23 @@ function openBuilderPanel(projectData) {
   // exactly these files via getActiveProjectForContext + hazy.currentProject.
 
   setBuilderView(STATE.builderView);
+}
+
+function closeBuilderPanel() {
+  STATE.builderFiles = [];
+  STATE.builderActive = false;
+  STATE.builderActiveFile = 0;
+  if (el.builderPanel) {
+    el.builderPanel.classList.remove('open');
+    el.builderPanel.classList.remove('preview-view', 'files-view');
+  }
+  document.body.classList.remove('builder-open');
+  if (el.builderProjectName) {
+    el.builderProjectName.textContent = 'Project Preview';
+  }
+  if (el.builderStatus) {
+    el.builderStatus.textContent = 'No active build output';
+  }
 }
 
 function renderBuilderTabs() {

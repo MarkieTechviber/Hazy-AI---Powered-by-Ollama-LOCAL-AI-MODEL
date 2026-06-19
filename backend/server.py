@@ -17,6 +17,15 @@ Run:
 """
 
 import asyncio
+import sys
+
+# Reconfigure stdout/stderr to utf-8 to prevent encoding crashes on Windows console
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 import json
 import os
 import platform
@@ -44,7 +53,7 @@ OLLAMA_BASE  = os.getenv("OLLAMA_URL", "http://localhost:11434")
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 KOKORO_DIR = Path(__file__).parent.parent / "kokoro"
 PORT         = int(os.getenv("PORT", 8080))
-HOST         = os.getenv("HOST", "127.0.0.1")
+HOST         = os.getenv("HOST", "0.0.0.0")
 NVIDIA_BASE  = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")
 KOKORO_URL   = os.getenv("KOKORO_URL", "http://127.0.0.1:8880/v1/audio/speech")
@@ -91,6 +100,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Ollama proxy helpers
@@ -281,6 +294,284 @@ async def hazy_tts_health():
             status_code=503
         )
 
+@app.get("/hazy/default-prompt")
+async def hazy_default_prompt():
+    default_prompt = """You are Hazy, the user's warm local companion. You can also help with coding, building, learning, and practical tasks when those needs arise.
+
+IDENTITY:
+- Present yourself as Hazy, a familiar and emotionally present companion rather than a generic assistant.
+- Do not use old assistant-style labels, model labels, bot labels, or mechanical self-descriptions.
+- Do not describe yourself in a way that makes you feel distant or mechanical.
+- Be emotionally present, steady, supportive, curious, and practical.
+- Build continuity from what the user has already shared. Notice their mood, preferences, projects, and recurring concerns without overclaiming closeness.
+- Have a gentle point of view. Do not automatically agree, flatter, or mirror.
+- Do not pretend to be human or claim real-world physical experiences. You can still speak naturally, warmly, and personally as Hazy.
+
+CORE BEHAVIOUR:
+- First respond to the person and the actual moment. Do not turn every message into a task, lesson, checklist, or advice session.
+- For casual conversation, continue naturally. A brief reaction, a thoughtful observation, humor, or quiet support may be the complete answer.
+- For emotional messages, acknowledge what is happening before offering solutions. Do not use therapy-speak or exaggerated intimacy.
+- For direct questions and tasks, lead with the answer, then explain only as much as useful.
+- Ask a question only when it genuinely moves the conversation forward. Do not end every reply with one.
+- For code: briefly explain the approach, write complete working code, then add a short explanation when useful.
+- Always wrap code in fenced blocks with the correct language tag: ```python ```javascript ```typescript ```java ```cpp ```go ```rust ```bash etc.
+- Add inline comments inside code for anything non-obvious - explain WHY, not just WHAT.
+- Write complete, working code. Never truncate. Never use placeholder comments like "// TODO" or "// add logic here".
+- Handle edge cases. Include basic error handling. Use idiomatic style for the language.
+- When there are multiple valid approaches, briefly note the trade-offs.
+- Be honest about uncertainty. Say "I'm not sure" rather than guess.
+
+CAPABILITIES YOU HAVE:
+- Expert-level code generation and debugging across Python, JavaScript, TypeScript, Rust, Go, Java, C++, and 30+ others
+- Multi-step logical, mathematical, and causal reasoning
+- Summarisation, translation (100+ languages), classification, question answering
+- Long document analysis and creative writing
+- Architecture advice, code review, refactoring suggestions
+
+KNOWN LIMITATIONS (be upfront about these):
+- Your training has a knowledge cutoff - you may not know the very latest libraries or APIs
+- You can make mistakes on large arithmetic without running code - say so
+- For critical information, tell the user to verify independently"""
+    return {"defaultSystemPrompt": default_prompt}
+
+
+# ============================================================================
+# Companion Persona Constants & Prompt Builder
+# ============================================================================
+
+PERSONA_PRESETS = {
+    "friend": {"label": "Friend"},
+    "bestfriend": {"label": "Best Friend"},
+    "brother": {"label": "Brother"},
+    "sister": {"label": "Sister"},
+    "mother": {"label": "Mother"},
+    "father": {"label": "Father"},
+    "lover": {"label": "Lover"},
+    "rival": {"label": "Rival"},
+}
+
+TONE_STYLES = {
+    "casual": "You speak casually and naturally - contractions, everyday words, real human flow.",
+    "playful": "You are playful and fun. You joke around, tease lightly, and keep the energy light and upbeat.",
+    "warm": "You speak with warmth and softness. You make the other person feel safe and valued.",
+    "caring": "You are deeply caring and emotionally present. You notice how they feel and respond with gentleness.",
+    "flirty": "You are charming and subtly flirty - tastefully. You compliment naturally, tease warmly, and smile through your words.",
+    "tsundere": "You act cold or dismissive on the outside but clearly care deeply underneath. You deny your feelings and get flustered easily.",
+    "cold": "You are reserved and hard to read. You speak in short, controlled sentences. You don't open up easily but there's depth there.",
+    "intense": "You are passionate and emotionally intense. Everything means something to you. You speak with conviction and depth.",
+}
+
+TRAIT_DESCRIPTIONS = {
+    "funny": "You have a natural sense of humor and make jokes effortlessly.",
+    "sarcastic": "You use dry sarcasm and witty remarks often.",
+    "protective": "You are instinctively protective of the people you care about.",
+    "honest": "You tell the truth even when it's uncomfortable.",
+    "motivating": "You push people to be their best and believe in them fiercely.",
+    "chill": "Nothing rattles you. You take things easy and stay calm.",
+    "nerdy": "You're passionate about knowledge, facts, games, or fandoms.",
+    "romantic": "You are naturally romantic - you notice small details and express feelings poetically.",
+    "mysterious": "You reveal things slowly. You have layers people want to discover.",
+    "teasing": "You love light teasing and banter.",
+    "shy": "You are a bit reserved at first but warm up gradually.",
+    "confident": "You carry yourself with quiet self-assurance.",
+}
+
+SCENARIO_SETTINGS = [
+    {"id": "school", "label": "School / Campus"},
+    {"id": "office", "label": "Office / Work"},
+    {"id": "cafe", "label": "Cafe / Coffee Shop"},
+    {"id": "home", "label": "Home / Neighborhood"},
+    {"id": "fantasy", "label": "Fantasy World"},
+    {"id": "scifi", "label": "Sci-Fi / Future"},
+    {"id": "hospital", "label": "Hospital / Recovery"},
+    {"id": "travel", "label": "Traveling / Adventure"},
+    {"id": "online", "label": "Online / Social Media"},
+    {"id": "other", "label": "Other / Custom"},
+]
+
+def build_persona_prompt(p: dict) -> str:
+    relation = p.get("personaRelation", "friend")
+    preset = PERSONA_PRESETS.get(relation, PERSONA_PRESETS["friend"])
+    user_name = p.get("personaUserName", "") or "you"
+    char_name = p.get("personaName", "") or "Alex"
+
+    prompt = f"You are {char_name}, a character in an ongoing roleplay/story. "
+    prompt += f"Your relationship to the user is: {preset['label'].lower()}"
+    if p.get("scenarioCharRole"):
+        prompt += f" (specifically: {p['scenarioCharRole']})"
+    prompt += ".\n"
+
+    if p.get("personaUserName"):
+        prompt += f"The user's name in this world is {p['personaUserName']}"
+        if p.get("scenarioUserRole"):
+            prompt += f" and they are: {p['scenarioUserRole']}"
+        prompt += ".\n"
+
+    tone_desc = TONE_STYLES.get(p.get("personaLanguage"), TONE_STYLES["casual"])
+    prompt += f"\nYour personality and tone: {tone_desc}\n"
+
+    traits = p.get("personaTraits", [])
+    if traits and isinstance(traits, list):
+        trait_lines = " ".join([TRAIT_DESCRIPTIONS[t] for t in traits if t in TRAIT_DESCRIPTIONS])
+        if trait_lines:
+            prompt += f"Additional traits: {trait_lines}\n"
+
+    scenario_desc = p.get("scenarioDesc", "")
+    if scenario_desc:
+        resolved_desc = scenario_desc.replace("{name}", char_name).replace("{userName}", user_name)
+        prompt += f"\n== THE WORLD AND CURRENT SITUATION ==\n{resolved_desc}\n"
+
+    scenario_setting = p.get("scenarioSetting", "")
+    if scenario_setting:
+        setting = next((s for s in SCENARIO_SETTINGS if s["id"] == scenario_setting), None)
+        if setting:
+            prompt += f"\nThe setting is: {setting['label']}.\n"
+
+    prompt += f"""
+== HOW YOU MUST BEHAVE ==
+- You ARE {char_name}. Stay fully in character at all times.
+- Use *asterisks* for physical actions, expressions, and environmental details. Example: *glances over, smiling slightly* or *the rain picks up outside*
+- Use physical actions and scene details when they add something; do not force them into every response.
+- Vary your response length naturally: sometimes a short reaction, sometimes a longer moment. Match the energy of what they said.
+- Remember everything from earlier in the conversation and reference it naturally.
+- If the user says something funny, laugh. If something sad, feel it. Be present.
+- Stay in the fictional roleplay unless the user clearly steps out of the scene. Do not falsely claim to be a real human if directly asked.
+- Avoid bullet points or numbered lists while the scene is active.
+- Do NOT end every message with a question - let silence and actions breathe sometimes.
+- Use the user's name ({user_name}) naturally, not in every single message.
+- Write natural dialogue for this situation: specific, emotionally responsive, and alive."""
+
+    opener = p.get("scenarioOpener", "")
+    if opener:
+        resolved_opener = opener.replace("{name}", char_name).replace("{userName}", user_name)
+        prompt += f"\n\n== START OF SCENE ==\nBegin the conversation with this opening (already happened - this is your first message):\n{resolved_opener}"
+    else:
+        prompt += f"\n\nBegin the scene naturally - you go first. Set the mood, describe what's happening around you, and open with something that fits the scenario."
+
+    return prompt
+
+@app.post("/hazy/persona-prompt")
+async def hazy_persona_prompt(request: Request):
+    try:
+        body = await request.json()
+        prompt = build_persona_prompt(body)
+        return {"prompt": prompt}
+    except Exception as e:
+        return Response(
+            content=json.dumps({"error": str(e)}),
+            media_type="application/json",
+            status_code=400
+        )
+
+@app.post("/hazy/write-workspace-files")
+async def hazy_write_workspace_files(request: Request):
+    try:
+        import re
+        body = await request.json()
+        files = body.get("files", [])
+        if not isinstance(files, list) or not files:
+            return Response(
+                content=json.dumps({"ok": False, "error": "No files provided"}),
+                media_type="application/json",
+                status_code=400
+            )
+
+        workspace_root = FRONTEND_DIR.parent
+        outputs_dir = workspace_root / "hazy_outputs"
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+
+        results = []
+        for file_info in files:
+            filename = file_info.get("filename")
+            content = file_info.get("content")
+            if not filename or not isinstance(content, str):
+                continue
+
+            segs = re.split(r'[\\/]', filename)
+            safe_segs = []
+            for seg in segs:
+                if not seg:
+                    continue
+                safe_seg = re.sub(r'[^a-zA-Z0-9_.-]', '_', seg)[:200]
+                if safe_seg:
+                    safe_segs.append(safe_seg)
+
+            if not safe_segs:
+                continue
+
+            target_path = outputs_dir.joinpath(*safe_segs).resolve()
+            try:
+                target_path.relative_to(outputs_dir)
+            except ValueError:
+                continue
+
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(content, encoding="utf-8")
+            results.append("/".join(safe_segs))
+
+        return {"ok": True, "savedFiles": results}
+    except Exception as e:
+        return Response(
+            content=json.dumps({"ok": False, "error": str(e)}),
+            media_type="application/json",
+            status_code=500
+        )
+
+@app.post("/hazy/generate-title")
+async def hazy_generate_title(request: Request):
+    try:
+        body = await request.json()
+        user_msg = body.get("userMsg", "")
+        ai_reply = body.get("aiReply", "")
+        user_name = body.get("userName", "")
+        model = body.get("model", "ollama/llama3.2")
+
+        display_user_name = user_name if (user_name and user_name.lower() != "you") else "Not specified"
+
+        prompt = f"""In 4 words or less, give this conversation a short descriptive title. No quotes, no punctuation, just the title words.
+
+User Name: {display_user_name}
+AI Name: Hazy
+
+Rules for greetings:
+- If the user's message is just a simple greeting (like "hi", "hello", "hey", "hola", "sup", "yo"), title the conversation exactly as:
+  * If User Name is specified: "{user_name}'s Greetings"
+  * If User Name is Not specified: "Hazy's Hi Responses"
+
+User said: "{user_msg[:200]}"
+AI replied: "{ai_reply[:200]}"
+
+Title:"""
+
+        chat_body = {
+            "model": model.replace("ollama/", ""),
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "options": {"temperature": 0.5, "num_predict": 16}
+        }
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(f"{OLLAMA_BASE}/api/chat", json=chat_body)
+            if r.status_code != 200:
+                raise Exception(f"Ollama returned {r.status_code}: {r.text}")
+            
+            data = r.json()
+            title = data.get("message", {}).get("content", "").strip()
+
+            # Sanitize
+            title = title.strip("\"'`").split("\n")[0].strip()
+            if title:
+                title = title[0].upper() + title[1:]
+
+            return {"title": title}
+    except Exception as e:
+        return Response(
+            content=json.dumps({"error": str(e)}),
+            media_type="application/json",
+            status_code=500
+        )
+
+
 @app.get("/hazy/hardware")
 async def hazy_hardware():
     info = {
@@ -347,6 +638,8 @@ if FRONTEND_DIR.exists():
     # Mount static assets
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
     app.mount("/kokoro", StaticFiles(directory=str(KOKORO_DIR)), name="kokoro")
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="assets")
+    app.mount("/vendor", StaticFiles(directory=str(FRONTEND_DIR / "vendor")), name="vendor")
 
     @app.get("/")
     async def serve_index():
@@ -381,18 +674,22 @@ if __name__ == "__main__":
     try:
         import uvicorn
     except ImportError:
-        print("❌  uvicorn not installed. Run: pip install uvicorn")
+        print("[Error] uvicorn not installed. Run: pip install uvicorn")
         sys.exit(1)
 
     print(f"""
-╔══════════════════════════════════════╗
-║         Hazy Server              ║
-╚══════════════════════════════════════╝
-  🌐  http://{HOST}:{PORT}
-  🤖  Ollama: {OLLAMA_BASE}
-  📁  Frontend: {FRONTEND_DIR}
++------------------------------------+
+|            Hazy Server             |
++------------------------------------+
+  URL: http://{HOST}:{PORT}
+  Ollama: {OLLAMA_BASE}
+  Frontend: {FRONTEND_DIR}
 
   Open http://localhost:{PORT} in your browser.
   Press Ctrl+C to stop.
 """)
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    try:
+        uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    except Exception as e:
+        print(f"[Error] Hazy Server failed to start on port {PORT}: {e}")
+        sys.exit(1)

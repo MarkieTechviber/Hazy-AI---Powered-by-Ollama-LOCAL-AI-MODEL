@@ -40,6 +40,24 @@ function register(registry) {
           if (!rawName) return ['artifact.txt'];
           return String(rawName).split(/[\\/]/).filter(Boolean).map(seg => String(seg).replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 200));
         }
+        const toPosix = (p) => String(p).replace(/\\/g, '/');
+
+        let target = null;
+        let targetDir = base;
+        if (filename) {
+          const segs = toSafePathSegments(filename);
+          target = path.resolve(base, ...segs);
+          targetDir = path.dirname(target);
+
+          const safeBase = base.endsWith(path.sep) ? base : base + path.sep;
+          const relCheck = path.relative(base, target);
+          const normBase = toPosix(safeBase).toLowerCase();
+          const normRes = toPosix(target).toLowerCase();
+          if ((relCheck.startsWith('..') || normRes.startsWith('..')) || (!normRes.startsWith(normBase) && normRes !== toPosix(base).toLowerCase())) {
+            return { ok: false, error: { code: 'PATH_TRAVERSAL', message: 'Path escapes chat artifacts directory (traversal blocked).' } };
+          }
+        }
+
         if (action === 'list' || (!filename && !content)) {
           const files = [];
           async function walk(dir, prefix = '') {
@@ -59,9 +77,6 @@ function register(registry) {
           return { ok: true, data: { chat: safeChat, files, count: files.length, note: 'List from chat-scoped artifacts dir (recursive for subdirs).' } };
         }
         if (action === 'read' || (filename && !content)) {
-          const segs = toSafePathSegments(filename);
-          const targetDir = segs.length > 1 ? path.join(base, ...segs.slice(0, -1)) : base;
-          const target = path.join(targetDir, segs[segs.length - 1]);
           try {
             const data = await fsp.readFile(target, 'utf8');
             return { ok: true, data: { filename: filename, content: data, note: 'Read from artifacts (subdir-aware).' } };
@@ -73,10 +88,8 @@ function register(registry) {
         // content must be a JSON array of {search: string, replace: string} patch objects.
         // Falls back to full write if the file doesn't exist yet or JSON parse fails.
         if (action === 'patch' && filename) {
-          const segs = toSafePathSegments(filename);
-          const targetDir = segs.length > 1 ? path.join(base, ...segs.slice(0, -1)) : base;
           await fsp.mkdir(targetDir, { recursive: true });
-          const patchTarget = path.join(targetDir, segs[segs.length - 1]);
+          const patchTarget = target;
           let existing = '';
           try { existing = await fsp.readFile(patchTarget, 'utf8'); } catch { /* file may not exist yet */ }
           let patched = existing;
@@ -114,22 +127,22 @@ function register(registry) {
           };
         }
         // default write (subdir-aware)
-        const segs = toSafePathSegments(filename || 'artifact.txt');
-        const targetDir = segs.length > 1 ? path.join(base, ...segs.slice(0, -1)) : base;
-        await fsp.mkdir(targetDir, { recursive: true });
-        const written = path.join(targetDir, segs[segs.length - 1]);
-        await fsp.writeFile(written, String(content || ''), 'utf8');
+        const activeFilename = filename || 'artifact.txt';
+        const activeTarget = target || path.resolve(base, 'artifact.txt');
+        const activeTargetDir = targetDir;
+        await fsp.mkdir(activeTargetDir, { recursive: true });
+        await fsp.writeFile(activeTarget, String(content || ''), 'utf8');
         let verified = false;
         let size = 0;
-        let realWritten = written;
+        let realWritten = activeTarget;
         try {
-          realWritten = await fsp.realpath(written);
+          realWritten = await fsp.realpath(activeTarget);
           const st = await fsp.stat(realWritten);
           verified = realWritten.startsWith(artifactsRoot);
           size = st.size;
         } catch (v) { /* verifier non-fatal */ }
         // rel uses original logical name (from caller) for consistency with manifest/buildData; FS uses sanitized segments
-        const relName = String(filename || 'artifact.txt');
+        const relName = String(activeFilename);
         const relPath = `cache/hazy-engine/artifacts/${safeChat}/${relName}`;
         return {
           ok: true,

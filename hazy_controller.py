@@ -31,11 +31,11 @@ BACKEND_DIR = ROOT_DIR / "backend"
 STATE_DIR = ROOT_DIR / "cache" / "hazy-control"
 STATE_FILE = STATE_DIR / "processes.json"
 LOG_FILE = STATE_DIR / "controller-services.log"
-HAZY_HEALTH_URL = "http://localhost:8080"
+HAZY_HEALTH_URL = "http://localhost:8080/health"
 HAZY_WEBSITE_URL = "http://localhost:8080"
 OLLAMA_HEALTH_URL = "http://127.0.0.1:11434/api/tags"
 KOKORO_HEALTH_URL = "http://127.0.0.1:8880/health"
-STARTUP_TIMEOUT_SECONDS = 60.0
+STARTUP_TIMEOUT_SECONDS = 90.0
 
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -294,7 +294,7 @@ class HazyProcessManager:
                     return True
             except (urllib.error.URLError, TimeoutError, OSError):
                 pass
-            self.sleep(0.4)
+            self.sleep(2.5)
         return False
 
     def start_ollama(self) -> ServiceStatus:
@@ -309,23 +309,22 @@ class HazyProcessManager:
         pid = self._spawn_hidden([executable, "serve"], self.root_dir)
         self._set_managed_pid("ollama", pid)
         if not self._wait_for_url(OLLAMA_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
-            raise ControllerError("Ollama did not become ready within 60 seconds.")
+            raise ControllerError(f"Ollama did not become ready within {int(STARTUP_TIMEOUT_SECONDS)} seconds.")
         return self.status().ollama
 
     def _hazy_command(self) -> list[str]:
-        node = self.which("node")
-        if node:
-            return [node, "server.js"]
+        # Always run Python backend (server.py) instead of Node.js backend (server.js)
+        # Check if project backend virtual environment exists first
+        backend_venv_py = self.root_dir / ".venv-backend" / "Scripts" / "python.exe"
+        if backend_venv_py.exists():
+            return [str(backend_venv_py), "server.py"]
 
-        # Prefer the interpreter that is running the controller. start-controller.bat
-        # launches the controller from a project-local virtual environment, so this
-        # avoids accidentally reusing an unrelated PATH Python such as another app's
-        # venv without pip or backend dependencies.
+        # Prefer the interpreter that is running the controller, falling back to system Pythons
         candidates = [sys.executable, self.which("python"), self.which("python3")]
         for python in candidates:
             if python:
                 return [python, "server.py"]
-        raise ControllerError("Neither Node.js nor Python is available for Hazy.")
+        raise ControllerError("Python is not available for Hazy.")
 
     def start_hazy(self) -> ServiceStatus:
         current = self.status().hazy
@@ -333,11 +332,14 @@ class HazyProcessManager:
             if not current.verified:
                 raise ControllerError(current.detail)
             return current
+        # Ensure Ollama is ready before starting Hazy
+        if not self._wait_for_url(OLLAMA_HEALTH_URL, timeout=5.0):
+            self.start_ollama()
         command = self._hazy_command()
         pid = self._spawn_hidden(command, self.backend_dir)
         self._set_managed_pid("hazy", pid)
         if not self._wait_for_url(HAZY_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
-            raise ControllerError("Hazy did not become ready on port 8080 within 60 seconds.")
+            raise ControllerError(f"Hazy did not become ready on port 8080 within {int(STARTUP_TIMEOUT_SECONDS)} seconds.")
         return self.status().hazy
 
     def start_kokoro(self) -> ServiceStatus:
@@ -367,7 +369,7 @@ class HazyProcessManager:
         pid = self._spawn_hidden([python, "kokoro_server.py"], self.root_dir)
         self._set_managed_pid("kokoro", pid)
         if not self._wait_for_url(KOKORO_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
-            raise ControllerError("Kokoro TTS did not become ready on port 8880 within 60 seconds.")
+            raise ControllerError(f"Kokoro TTS did not become ready on port 8880 within {int(STARTUP_TIMEOUT_SECONDS)} seconds.")
         return self.status().kokoro
 
     def ensure_all_ready(self) -> StackStatus:

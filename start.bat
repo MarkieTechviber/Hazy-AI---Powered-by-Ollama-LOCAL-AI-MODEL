@@ -73,17 +73,8 @@ if defined KOKORO_PY (
 )
 
 
-REM ─── Try Node.js first, then Python for Hazy Backend ───
+REM ─── Run Python for Hazy Backend ───
 echo [2/3] Starting server...
-
-where node > nul 2>&1
-if %errorlevel% == 0 (
-    echo  ✓  Using Node.js backend
-    cd backend
-    start "Hazy Server" /min node server.js
-    cd ..
-    goto :kokoro
-)
 
 if defined BASE_PY (
     echo  ✓  Using Python backend

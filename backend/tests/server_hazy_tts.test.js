@@ -41,7 +41,9 @@ const { execSync } = require('node:child_process');
 // Clear any cached server to allow env injection for KOKORO_URL tests
 function freshServerRequire() {
   const serverPath = path.resolve(__dirname, '../server.js');
+  const srcServerPath = path.resolve(__dirname, '../src/infrastructure/web/server.js');
   delete require.cache[serverPath];
+  delete require.cache[srcServerPath];
   return require(serverPath);
 }
 

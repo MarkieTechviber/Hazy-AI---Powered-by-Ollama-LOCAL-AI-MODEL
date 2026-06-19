@@ -11,6 +11,8 @@
     rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
     id="hljs-theme">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+    crossorigin="anonymous">
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="quick-prompts.css" />
   <link rel="stylesheet" href="hazy-rag.css" />
@@ -471,28 +473,7 @@
       </aside>
 
       <section class="input-area">
-        <div class="input-mode-bar" id="inputModeBar">
-          <button class="mode-btn active" id="modeChatBtn" data-mode="chat" type="button"><svg class="icon-svg"
-              viewBox="0 0 24 24">
-              <use href="#icon-chat"></use>
-            </svg>Chat</button>
-          <button class="mode-btn" id="modeBuildBtn" data-mode="build" type="button"><svg class="icon-svg"
-              viewBox="0 0 24 24">
-              <use href="#icon-globe"></use>
-            </svg>Build Website</button>
-          <button class="mode-btn" id="modeCodeBtn" data-mode="code" type="button"><svg class="icon-svg"
-              viewBox="0 0 24 24">
-              <use href="#icon-code"></use>
-            </svg>Build Code</button>
-          <div class="code-lang-wrap" id="codeLangWrap">
-            <select id="codeLangSelect" aria-label="Code language">
-              <option value="auto" selected>Auto - Hazy decides</option>
-            </select>
-          </div>
-          <div class="mode-status" id="modeIndicator"><svg class="icon-svg" viewBox="0 0 24 24">
-              <use href="#icon-chat"></use>
-            </svg>Chat mode</div>
-        </div>
+
         <div class="file-preview-strip" id="filePreviewStrip"></div>
         <div class="composer-card">
           <button class="composer-icon-btn" id="ttsToggleBtn" type="button" title="Voice"><svg class="icon-svg"
@@ -1175,10 +1156,15 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"
+    crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    crossorigin="anonymous"></script>
   <script src="voiceSettingsStore.js"></script>
   <script src="audioQueueManager.js"></script>
   <script src="ttsManager.js"></script>
   <script src="streamingTTSController.js"></script>
+  <script src="hazy-mascot-emotion.js"></script>
   <script src="app.js"></script>
   <script src="hazy-enhancements-complete.js"></script>
   <script src="hazy-rag.js"></script>

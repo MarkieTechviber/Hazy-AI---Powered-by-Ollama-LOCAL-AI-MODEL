@@ -165,41 +165,28 @@ REM  Step 4: Backend dependencies (Node.js or Python)
 REM ═══════════════════════════════════════════
 echo [4/5] Checking backend dependencies...
 
-where node >nul 2>&1
-if %errorlevel% == 0 (
-    echo  ✓  Node.js found — using Node.js backend
-    if not exist "%~dp0backend\node_modules" (
-        echo  Installing Node.js backend dependencies...
-        pushd "%~dp0backend"
-        npm install --production --silent 2>nul
-        popd
-    )
-) else (
-    echo  ⚠  Node.js not found — will use Python backend fallback
-    set "BACKEND_VENV=%~dp0.venv-backend"
-    if not exist "!BACKEND_VENV!\Scripts\python.exe" (
-        echo  Creating backend virtual environment...
-        "%BASE_PY%" -m venv "!BACKEND_VENV!"
-        if errorlevel 1 (
-            echo  ❌  Could not create backend virtual environment.
-            pause
-            exit /b 1
-        )
-    )
-    set "BACKEND_PY=!BACKEND_VENV!\Scripts\python.exe"
-    "!BACKEND_PY!" -c "import fastapi, uvicorn, httpx, openai" >nul 2>&1
+set "BACKEND_VENV=%~dp0.venv-backend"
+if not exist "%BACKEND_VENV%\Scripts\python.exe" (
+    echo  Creating backend virtual environment...
+    "%BASE_PY%" -m venv "%BACKEND_VENV%"
     if errorlevel 1 (
-        echo  Installing Python backend dependencies...
-        "!BACKEND_PY!" -m pip install --disable-pip-version-check -r backend\requirements.txt -q
-        if errorlevel 1 (
-            echo  ❌  Could not install Python backend dependencies.
-            echo  Try installing Node.js from https://nodejs.org instead.
-            pause
-            exit /b 1
-        )
+        echo  ❌  Could not create backend virtual environment.
+        pause
+        exit /b 1
     )
-    echo  ✓  Python backend ready
 )
+set "BACKEND_PY=%BACKEND_VENV%\Scripts\python.exe"
+"%BACKEND_PY%" -c "import fastapi, uvicorn, httpx, openai" >nul 2>&1
+if errorlevel 1 (
+    echo  Installing Python backend dependencies...
+    "%BACKEND_PY%" -m pip install --disable-pip-version-check -r backend\requirements.txt -q
+    if errorlevel 1 (
+        echo  ❌  Could not install Python backend dependencies.
+        pause
+        exit /b 1
+    )
+)
+echo  ✓  Python backend ready
 
 REM ═══════════════════════════════════════════
 REM  Step 5: Kokoro TTS venv + dependencies

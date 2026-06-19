@@ -115,7 +115,7 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     ragContext: ragContext
   });
 
-  const prompt = buildSystemPrompt({
+  const contextForPrompt = {
     messageType: messageType.messageType,
     emotion: emotionData.emotion,
     intensity: emotionData.intensity,
@@ -134,7 +134,11 @@ function analyzeMessage({ body, conversationId = "default", userId = "default" }
     toolResults,
     agentMode,
     runtimeContext
-  });
+  };
+
+  console.log('[Hazy] currentProject present for prompt:', Boolean(contextForPrompt.currentProject), contextForPrompt.currentProject?.files?.length || 0);
+
+  const prompt = buildSystemPrompt(contextForPrompt);
 
   return {
     projectId,

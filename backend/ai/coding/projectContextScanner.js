@@ -76,8 +76,6 @@ function normalizeAttachments(attachments = []) {
         contentPreview: String(file.contentPreview || file.content || '').slice(0, 20000)
       };
     })
-    // FIX: ignore generated/vendor folders. The old scanner could let
-    // node_modules/.venv/.git overwhelm real source evidence.
     .filter((file) => !GENERATED_OR_VENDOR_PATTERN.test(file.name));
 }
 
@@ -108,8 +106,6 @@ function collectPackageJsonSignals(file, scoreboard, frameworks, evidence) {
   for (const dep of Object.keys(allDeps)) {
     const exact = DEPENDENCY_FRAMEWORKS[dep];
     if (exact) {
-      // IMPROVEMENT: dependency parsing is stronger than raw substring checks;
-      // it detects actual stack packages and avoids accidental prose matches.
       addScore(scoreboard, exact.language, exact.points, `Dependency ${dep}`);
       addFramework(frameworks, exact.framework);
       evidence.push(`${file.name}:${dep}`);
@@ -147,8 +143,6 @@ function determineProjectType(frameworks, files) {
   const hasFrontend = frameworks.has('React') || frameworks.has('Vite') || frameworks.has('Next.js') || files.some((file) => ['html', 'css', 'tsx', 'jsx'].includes(file.ext));
   const hasBackend = frameworks.has('Express.js') || frameworks.has('FastAPI') || files.some((file) => /server|controller|route|api/i.test(file.name));
 
-  // IMPROVEMENT: distinguish full-stack from simple web-app so prompt routing
-  // can ask for backend/frontend boundaries when both are present.
   if (frameworks.has('Monorepo')) return 'monorepo';
   if (hasFrontend && hasBackend) return 'full-stack-web-app';
   if (hasFrontend) return 'frontend-web-app';
@@ -159,13 +153,70 @@ function determineProjectType(frameworks, files) {
   return 'general-software-project';
 }
 
+// ============================================================================
+// NEW: Caller Analysis – find which files import which
+// ============================================================================
+
+function findCallers(files) {
+  const callers = {};
+  // Build a map of file basename to full filename
+  const basenameMap = {};
+  for (const file of files) {
+    const basename = path.basename(file.name);
+    basenameMap[basename] = file.name;
+  }
+
+  for (const file of files) {
+    const content = file.contentPreview;
+    // Find import/require statements
+    const imports = content.match(/from\s+['"]([^'"]+)['"]|require\(['"]([^'"]+)['"]\)/gi) || [];
+    for (const imp of imports) {
+      // Extract the module path
+      const match = imp.match(/['"]([^'"]+)['"]/);
+      if (!match) continue;
+      const modulePath = match[1];
+      // Try to resolve relative paths
+      let targetFile = null;
+      if (modulePath.startsWith('.')) {
+        // Relative import – assume extension omitted, try .js,.ts,.py etc.
+        const dir = path.dirname(file.name);
+        const base = path.basename(modulePath, path.extname(modulePath));
+        for (const ext of ['.js', '.ts', '.tsx', '.jsx', '.py', '.go', '.rs', '.java', '.kt']) {
+          const candidate = path.join(dir, base + ext);
+          if (files.some(f => f.name === candidate)) {
+            targetFile = candidate;
+            break;
+          }
+        }
+      } else {
+        // Try to match a file with that basename
+        const baseName = path.basename(modulePath);
+        if (basenameMap[baseName]) {
+          targetFile = basenameMap[baseName];
+        } else if (basenameMap[modulePath + '.js']) {
+          targetFile = basenameMap[modulePath + '.js'];
+        } else if (basenameMap[modulePath + '.ts']) {
+          targetFile = basenameMap[modulePath + '.ts'];
+        }
+      }
+      if (targetFile && targetFile !== file.name) {
+        if (!callers[targetFile]) callers[targetFile] = [];
+        if (!callers[targetFile].includes(file.name)) {
+          callers[targetFile].push(file.name);
+        }
+      }
+    }
+  }
+  return callers;
+}
+
+// ============================================================================
+// Main scanProjectContext (improved)
+// ============================================================================
+
 function scanProjectContext({ attachments = [], messages = [], currentProject = null } = {}) {
   const files = normalizeAttachments(attachments);
 
-  // === KEY for edit reliability ===
-  // Also fold the *live current builder files* (from hazy.currentProject) into the scan.
-  // This makes language detection, framework signals, and "needsProjectContext" reflect
-  // the exact files the user is looking at in Builder Output, not only user uploads or old history text.
   let activeFilesForScan = [];
   if (currentProject && Array.isArray(currentProject.files)) {
     activeFilesForScan = currentProject.files.map(f => ({
@@ -173,7 +224,7 @@ function scanProjectContext({ attachments = [], messages = [], currentProject = 
       category: 'code',
       ext: String((f.filename || '').split('.').pop() || '').toLowerCase(),
       sizeBytes: (f.content || '').length,
-      contentPreview: String(f.content || '').slice(0, 20000)  // enough for import/package signals
+      contentPreview: String(f.content || '').slice(0, 20000)
     }));
   }
   const allScanFiles = [...files, ...activeFilesForScan];
@@ -196,8 +247,6 @@ function scanProjectContext({ attachments = [], messages = [], currentProject = 
     }
 
     if (file.ext && EXT_TO_LANG[file.ext]) {
-      // FIX: TypeScript source files should carry more weight than plain JS in
-      // TS projects. The previous scanner underweighted extension evidence.
       const extPoints = ['ts', 'tsx'].includes(file.ext) ? 14 : 8;
       addScore(scoreboard, EXT_TO_LANG[file.ext], extPoints, `Found .${file.ext} file`);
       evidence.push(file.name);
@@ -223,15 +272,11 @@ function scanProjectContext({ attachments = [], messages = [], currentProject = 
     .find((message) => message?.role === 'user' && typeof message.content === 'string')
     ?.content?.toLowerCase() || '';
 
-  // IMPROVEMENT: latest user text is supporting context only, not enough to set
-  // primary language by itself. It still enriches frameworks for prompt guidance.
   if (latestUserText.includes('react')) frameworks.add('React');
   if (latestUserText.includes('node')) frameworks.add('Node.js');
   if (latestUserText.includes('express')) frameworks.add('Express.js');
   if (latestUserText.includes('typescript')) frameworks.add('TypeScript');
 
-  // FIX: In Node projects with tsconfig + TS files, TypeScript should beat the
-  // generic package.json JavaScript signal.
   if (frameworks.has('TypeScript')) {
     addScore(scoreboard, 'typescript', 20, 'TypeScript project marker');
   }
@@ -242,7 +287,6 @@ function scanProjectContext({ attachments = [], messages = [], currentProject = 
   const runnerUpScore = sorted[1]?.[1]?.score || 0;
   const confidence = Math.min(topScore, 99);
   const conflictingSignals = sorted.length > 1 && runnerUpScore >= Math.max(18, topScore * 0.5);
-  // determineProjectType receives the combined list so active builder files participate in "full-stack" etc. decisions.
   const projectType = determineProjectType(frameworks, allScanFiles);
 
   const detectedStack = frameworks.size
@@ -251,6 +295,9 @@ function scanProjectContext({ attachments = [], messages = [], currentProject = 
 
   const hasActiveProject = !!(currentProject && Array.isArray(currentProject.files) && currentProject.files.length > 0);
   const activeProjectFileCount = hasActiveProject ? currentProject.files.length : 0;
+
+  // NEW: Caller analysis
+  const callers = findCallers(allScanFiles);
 
   return {
     detectedStack,
@@ -267,12 +314,12 @@ function scanProjectContext({ attachments = [], messages = [], currentProject = 
       score: data.score,
       reasons: data.reasons.slice(0, 6)
     })),
-    // New fields for edit-iteration awareness (used by codeIntelligence + promptBuilder)
     hasActiveProject,
     activeProjectFileCount,
-    // Light reference only (full file contents for prompt injection come from body.hazy.currentProject)
-    activeProjectName: hasActiveProject ? (currentProject.project || 'Project') : undefined
+    activeProjectName: hasActiveProject ? (currentProject.project || 'Project') : undefined,
+    // NEW: caller map for impact analysis
+    callers
   };
 }
 
-module.exports = { scanProjectContext, normalizeAttachments };
+module.exports = { scanProjectContext, normalizeAttachments, findCallers };

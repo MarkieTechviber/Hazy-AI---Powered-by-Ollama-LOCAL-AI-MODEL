@@ -69,14 +69,19 @@ function reviewResponse(response, context) {
     issues.push('empty_response');
   }
 
-  const strippedReasoning = stripPrivateReasoningBlocks(revised);
-  if (strippedReasoning.removed) {
-    issues.push('private_reasoning_exposed');
-    revised = strippedReasoning.text;
-  }
-  // FIX #1 — surface truncated thinking blocks as a distinct issue
-  if (strippedReasoning.truncated) {
-    issues.push('unclosed_thinking_block');
+  const isDeepThink = context.reasoningMode === 'deep';
+  const isAgentic = context.agentEnabled === true;
+
+  if (!isDeepThink && !isAgentic) {
+    const strippedReasoning = stripPrivateReasoningBlocks(revised);
+    if (strippedReasoning.removed) {
+      issues.push('private_reasoning_exposed');
+      revised = strippedReasoning.text;
+    }
+    // FIX #1 — surface truncated thinking blocks as a distinct issue
+    if (strippedReasoning.truncated) {
+      issues.push('unclosed_thinking_block');
+    }
   }
 
   // FIX — hard truncation at 900 chars was cutting code responses
@@ -127,10 +132,14 @@ function reviewResponse(response, context) {
     issues.push(...codeReview.issues);
   }
 
-  const reasoningQuality = evaluateReasoningResponse(revised, context.reasoningTask || {
-    taskType: context.taskType || 'general',
-    shouldUseReasoning: false,
-    shouldUseCalculator: context.taskType === 'math'
+  const reasoningQuality = evaluateReasoningResponse(revised, {
+    ...(context.reasoningTask || {
+      taskType: context.taskType || 'general',
+      shouldUseReasoning: false,
+      shouldUseCalculator: context.taskType === 'math'
+    }),
+    reasoningMode: context.reasoningMode,
+    agentEnabled: context.agentEnabled
   });
 
   for (const issue of reasoningQuality.issues) {

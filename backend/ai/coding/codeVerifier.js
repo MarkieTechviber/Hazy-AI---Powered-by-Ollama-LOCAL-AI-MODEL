@@ -1,6 +1,7 @@
 'use strict';
 
 const vm = require('node:vm');
+const { spawnSync } = require('child_process');
 
 const FENCE_PATTERN = /```([a-z0-9_+#.-]*)\s*\n([\s\S]*?)```/gi;
 const FILE_BLOCK_PATTERN = /===FILE:\s*([^\n=]+?)\s*===\s*([\s\S]*?)(?=\n===FILE:|\n===SETUP===|\n===|$)/gi;
@@ -44,8 +45,6 @@ function extractCodeBlocks(response = '') {
     });
   }
 
-  // IMPROVEMENT: preserve backwards compatibility with plain single-file code,
-  // but prefer explicit file/fence blocks whenever they exist.
   if (!blocks.length && text.trim()) {
     blocks.push({ kind: 'plain', filename: null, language: '', code: text.trim() });
   }
@@ -54,9 +53,6 @@ function extractCodeBlocks(response = '') {
 }
 
 function stripCommentsAndStrings(code = '') {
-  // FIX: delimiter checks used to count braces inside strings/comments, causing
-  // false syntax warnings. This tiny lexer removes obvious JS/Python-like string
-  // and comment regions before balance checking. It does NOT execute code.
   let output = '';
   let quote = null;
   let escaped = false;
@@ -116,8 +112,6 @@ function hasBalancedDelimiters(code) {
 function canVmParseAsScript(language, code) {
   const lang = normalizeLanguage(language);
   if (!['javascript', 'typescript'].includes(lang)) return false;
-  // IMPROVEMENT: node:vm parses classic scripts, not TS syntax or ESM imports.
-  // Skip those instead of reporting false negatives.
   if (/^\s*(import|export)\b/m.test(code)) return false;
   if (lang === 'typescript' && /:\s*[A-Za-z_$][\w$<>{}\[\]|&?,\s]*(?=[,)=;{])/m.test(code)) return false;
   return true;
@@ -126,12 +120,47 @@ function canVmParseAsScript(language, code) {
 function verifyJavaScriptSyntax(block) {
   if (!canVmParseAsScript(block.language, block.code)) return null;
   try {
-    // IMPROVEMENT: compile only. vm.Script checks syntax without executing user
-    // code; never call runInContext/runInThisContext here.
     new vm.Script(block.code, { filename: block.filename || 'hazy-response.js' });
     return null;
   } catch (error) {
     return { issue: 'likely_syntax_error', detail: error.message };
+  }
+}
+
+// ============================================================================
+// NEW: Language‑specific syntax checks using system tools
+// ============================================================================
+
+function verifyPythonSyntax(code) {
+  // Use py_compile to check syntax
+  try {
+    const result = spawnSync('python', ['-m', 'py_compile', '-'], {
+      input: code,
+      encoding: 'utf8',
+      timeout: 2000
+    });
+    if (result.stderr && result.stderr.includes('SyntaxError')) {
+      return { issue: 'python_syntax_error', detail: result.stderr.trim() };
+    }
+    return null;
+  } catch (_) {
+    return null; // if python not available, skip
+  }
+}
+
+function verifyGoSyntax(code) {
+  try {
+    const result = spawnSync('gofmt', ['-e'], {
+      input: code,
+      encoding: 'utf8',
+      timeout: 2000
+    });
+    if (result.stderr && result.stderr.trim()) {
+      return { issue: 'go_syntax_error', detail: result.stderr.trim() };
+    }
+    return null;
+  } catch (_) {
+    return null;
   }
 }
 
@@ -149,7 +178,6 @@ function detectLanguageMismatch(expectedLanguage, blocks) {
 
   for (const block of blocks) {
     const blockLang = normalizeLanguage(block.language);
-    // FIX: fenced/file language tags are stronger than fragile token guesses.
     if (blockLang && blockLang !== expected) {
       if (expected === 'typescript' && blockLang === 'javascript') continue;
       if (expected === 'javascript' && blockLang === 'typescript') continue;
@@ -157,8 +185,6 @@ function detectLanguageMismatch(expectedLanguage, blocks) {
     }
 
     if (expected === 'python' && hasJavaScriptSignals(block.code)) return true;
-    // FIX: JS/TS imports like `import React from "react"` are valid JS and
-    // should not be mistaken for Python imports.
     if (['javascript', 'typescript'].includes(expected) && hasPythonSignals(block.code)) return true;
   }
   return false;
@@ -178,8 +204,6 @@ function verifyCodeResponse(responseText, context = {}) {
     issues.push('empty_code_response');
   }
 
-  // FIX: placeholder detection is slightly stricter and catches common LLM
-  // cop-outs without punishing ordinary comments that explain future ideas.
   if (/\b(todo:\s*implement|rest of (?:the )?code here|implement later|placeholder(?: code)?|omitted for brevity|same as above)\b/i.test(response)) {
     issues.push('contains_placeholders');
   }
@@ -196,17 +220,40 @@ function verifyCodeResponse(responseText, context = {}) {
     issues.push('missing_setup_guidance');
   }
 
+  // Run syntax checks on each block
   for (const block of blocks) {
     if (!hasBalancedDelimiters(block.code)) {
       issues.push('likely_syntax_error');
       details.push({ issue: 'likely_syntax_error', reason: 'unbalanced delimiters', block: block.filename || block.language || block.kind });
       break;
     }
+
+    // JS/TS
     const syntaxIssue = verifyJavaScriptSyntax(block);
     if (syntaxIssue) {
       issues.push(syntaxIssue.issue);
       details.push({ ...syntaxIssue, block: block.filename || block.language || block.kind });
       break;
+    }
+
+    // Python (if available)
+    if (block.language === 'python' || (language === 'python' && hasPythonSignals(block.code))) {
+      const pyIssue = verifyPythonSyntax(block.code);
+      if (pyIssue) {
+        issues.push(pyIssue.issue);
+        details.push({ ...pyIssue, block: block.filename || block.language || block.kind });
+        break;
+      }
+    }
+
+    // Go (if available)
+    if (block.language === 'go' || (language === 'go' && block.code.includes('func '))) {
+      const goIssue = verifyGoSyntax(block.code);
+      if (goIssue) {
+        issues.push(goIssue.issue);
+        details.push({ ...goIssue, block: block.filename || block.language || block.kind });
+        break;
+      }
     }
   }
 
@@ -240,5 +287,7 @@ module.exports = {
   verifyCodeResponse,
   extractCodeBlocks,
   hasBalancedDelimiters,
-  detectLanguageMismatch
+  detectLanguageMismatch,
+  verifyPythonSyntax,
+  verifyGoSyntax
 };

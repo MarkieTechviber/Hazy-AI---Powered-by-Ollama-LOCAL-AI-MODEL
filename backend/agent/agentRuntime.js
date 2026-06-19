@@ -27,15 +27,23 @@ function createToolContext(body = {}, overrides = {}) {
   };
 }
 
+// FIX: getOrch extracted to module scope (was duplicated in createAgentRuntime + each tool execute).
+// Priority: services.memoryOrchestrator > services.memoryManager > default orchestrator > default manager.
+function getOrch(ctx) {
+  if (!ctx || !ctx.services) return defaultMemoryOrchestrator;
+  return ctx.services.memoryOrchestrator
+    || ctx.services.memoryManager
+    || defaultMemoryOrchestrator.memoryManager
+    || defaultMemoryOrchestrator;
+}
+
 function createAgentRuntime({ auditPath = null, confirmationPath = null, planPath = null } = {}) {
   const registry = new ToolRegistry();
   try {
     registry.discover(path.join(__dirname, '..', 'tools'));
   } catch (e) {
-    console.warn('[agentRuntime] tool discovery non-fatal:', e && e.message ? e.message : e);
+    console.warn('[agentRuntime] tool discovery non-fatal:', e?.message || e);
   }
-  // browser register kept (legacy pre-Phase); moved post plan/memory so discover runs before *any* register (satisfies literal prior claim).
-  // web/calc self-reg now via discover + their register() exports (enhance of webSearchTool was per initial Phase4 guidance for removing hardcoded blocks).
 
   const confirmations = new PendingConfirmationStore({
     filePath: confirmationPath === false
@@ -54,16 +62,9 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
   });
   const rateLimiter = new InMemoryRateLimiter();
   const executor = new ToolExecutor(registry, { timeoutMs: 15_000, retries: 0 });
-  const gatekeeper = new ToolGatekeeper({
-    registry,
-    executor,
-    confirmations,
-    audit,
-    rateLimiter
-  });
+  const gatekeeper = new ToolGatekeeper({ registry, executor, confirmations, audit, rateLimiter });
 
-  // Register the plan management tool (high-impact for agent reasoning & long-horizon tasks).
-  // The model uses this to explicitly decompose work, track progress, and self-correct.
+  // Plan management tool
   registry.register({
     name: 'plan.manage',
     description: 'Maintain a persistent, model-visible task list (plan) for the current goal. Strongly recommended for any multi-step or long-running work. Actions: list (see current tasks), add (new task), update (change status or description by id), remove (by id), clear (remove all). Always call with action="list" first to see the live plan. Keep the plan accurate and complete — it is injected into your context on every turn and returned in tool results. Status values: todo, in_progress, done, blocked.',
@@ -83,7 +84,7 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
       additionalProperties: false
     },
     execute: ({ action, description, taskId, status }, ctx) => {
-      const store = ctx && ctx.services && ctx.services.planStore;
+      const store = ctx?.services?.planStore;
       if (!store) {
         return { ok: false, error: { code: 'PLAN_STORE_UNAVAILABLE', message: 'Plan store is not available in this context.' } };
       }
@@ -116,24 +117,17 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
           }
         };
       } catch (err) {
-        return {
-          ok: false,
-          error: { code: 'PLAN_OPERATION_FAILED', message: err.message || String(err) }
-        };
+        return { ok: false, error: { code: 'PLAN_OPERATION_FAILED', message: err.message || String(err) } };
       }
     }
   });
 
-  // Phase 3 memory tools (registered inside create, exactly like plan.manage; uses ctx.services or default orch)
-  // Enhanced getOrch: prefers services (memoryOrchestrator or its .memoryManager or direct memoryManager), falls to default (which now exposes .memoryManager + delegates).
-  const getOrch = (c) => {
-    if (!c || !c.services) return defaultMemoryOrchestrator;
-    return c.services.memoryOrchestrator || c.services.memoryManager || defaultMemoryOrchestrator.memoryManager || defaultMemoryOrchestrator;
-  };
+  // FIX: memory.remember risk was 'read' — it WRITES data, so 'low_write' is correct.
+  // This ensures write-rate-limits and audit trails apply properly.
   registry.register({
     name: 'memory.remember',
     description: 'Store durable agent working memory / trajectory item (explicit_fact, agent_plan, agent_step, failed_attempt, artifact_ref, unresolved_question, etc). Use for self-correction, long-horizon tracking, discovered facts. Supports confidence/salience. Returns the stored record.',
-    risk: 'read',
+    risk: 'low_write',  // FIX: was 'read'
     toolset: 'safe_default',
     requiresConfirmation: false,
     allowedRoles: ['admin', 'cashier', 'user'],
@@ -151,8 +145,9 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
     execute: ({ type, key, value, confidence }, ctx) => {
       const orch = getOrch(ctx);
       try {
-        const rec = (orch && (orch.remember || orch.upsertMemory))
-          ? (orch.remember ? orch.remember({ type: type || 'explicit_fact', key, value, confidence: confidence || 0.7, userId: ctx.userId, conversationId: ctx.chatId || 'default' })
+        const rec = orch && (orch.remember || orch.upsertMemory)
+          ? (orch.remember
+            ? orch.remember({ type: type || 'explicit_fact', key, value, confidence: confidence || 0.7, userId: ctx.userId, conversationId: ctx.chatId || 'default' })
             : orch.upsertMemory({ type: type || 'explicit_fact', key, value, confidence: confidence || 0.7, userId: ctx.userId, conversationId: ctx.chatId || 'default' }))
           : null;
         if (rec && rec.error) {
@@ -163,10 +158,10 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
           data: {
             remembered: true,
             type: type || 'explicit_fact',
-            key: rec && rec.key ? rec.key : (key || makeKey(value)),
+            key: rec?.key || (key || makeKey(value)),
             value: String(value || '').slice(0, 120),
-            confidence: rec && rec.confidence ? rec.confidence : (confidence || 0.7),
-            instruction: 'Stored via agent memory. Call memory.search to retrieve. Fences scrubbed on output.'
+            confidence: rec?.confidence ?? (confidence || 0.7),
+            instruction: 'Stored via agent memory. Call memory.search to retrieve.'
           }
         };
       } catch (err) {
@@ -174,6 +169,7 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
       }
     }
   });
+
   registry.register({
     name: 'memory.search',
     description: 'Query the agent working memory + trajectory (and user facts). Returns ranked items by relevance/confidence. Use often before replan or when facts may be relevant.',
@@ -203,10 +199,12 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
       }
     }
   });
+
+  // FIX: memory.forget risk was 'read' — it DELETES data, 'low_write' is correct.
   registry.register({
     name: 'memory.forget',
     description: 'Remove or disable specific memory entries by target phrase (or id if supported by provider). Use sparingly; "all" disables everything for the profile (destructive).',
-    risk: 'read',
+    risk: 'low_write',  // FIX: was 'read'
     toolset: 'safe_default',
     requiresConfirmation: false,
     allowedRoles: ['admin', 'cashier', 'user'],
@@ -235,7 +233,6 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
     }
   });
 
-  // Legacy browser tools registered last (after discover + Phase1 plan + Phase3 memory) so initial discover precedes every register call.
   registerBrowserTools(registry, defaultBrowserSystem);
 
   return { registry, executor, confirmations, audit, rateLimiter, gatekeeper, planStore, memoryOrchestrator: defaultMemoryOrchestrator };
@@ -243,8 +240,4 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
 
 const defaultAgentRuntime = createAgentRuntime();
 
-module.exports = {
-  createAgentRuntime,
-  createToolContext,
-  defaultAgentRuntime
-};
+module.exports = { createAgentRuntime, createToolContext, defaultAgentRuntime };

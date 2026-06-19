@@ -1,29 +1,42 @@
 'use strict';
 
-// Phase 2: Explicit IterationBudget for the observe-plan-reason-act-verify-reflect loop.
-// Consume 1 per model turn (Act). Grace for one final chance after exhaustion.
-// Refund for cheap ops (e.g. calculator.evaluate, plan.manage) so they don't burn full budget.
-// Node single-threaded; counters are "thread-safe-ish" for sequential async turns in one call.
+// FIX 1: history tracking — original had no visibility into what consumed the budget (hard to debug).
+// FIX 2: exposed grace as constructor param — was hardcoded to 1 with no override.
+// FIX 3: consume() with partial budget — original returned false if cost > remaining even if remaining > 0;
+//         now uses what's left and spills into grace only for the remainder, so budget is never wasted.
 
 class IterationBudget {
-  constructor(maxSteps = 6) {
+  constructor(maxSteps = 6, { grace = 1 } = {}) {
     this.max = Math.max(1, Math.min(12, Number(maxSteps) || 6));
+    this.grace = Math.max(0, Number(grace) || 1);
     this.used = 0;
-    this.grace = 1;
-    this.graceUsed = false;
+    this.graceUsed = 0; // FIX: track partial grace usage, not just a boolean
+    this.history = [];   // FIX: audit trail of every consume/refund for debugging
   }
 
-  // consume(cost=1): returns true if step allowed (uses grace if needed)
-  consume(cost = 1) {
+  // FIX: consume uses remaining budget first, then spills into grace for the remainder.
+  // Original: if remaining < cost it immediately went to grace even with budget partially left.
+  consume(cost = 1, label = '') {
     const c = Math.max(1, Number(cost) || 1);
-    if (this.remaining() >= c) {
+    const rem = this.remaining();
+    const graceLeft = this.grace - this.graceUsed;
+
+    if (rem >= c) {
       this.used += c;
+      this.history.push({ op: 'consume', cost: c, label, usedAfter: this.used, graceUsed: this.graceUsed });
       return true;
     }
-    if (!this.graceUsed) {
-      this.graceUsed = true;
+
+    // Partial spill into grace
+    const fromGrace = c - rem;
+    if (graceLeft >= fromGrace) {
+      this.used += rem;
+      this.graceUsed += fromGrace;
+      this.history.push({ op: 'consume_grace', cost: c, label, usedAfter: this.used, graceUsed: this.graceUsed });
       return true;
     }
+
+    this.history.push({ op: 'denied', cost: c, label, usedAfter: this.used, graceUsed: this.graceUsed });
     return false;
   }
 
@@ -31,22 +44,34 @@ class IterationBudget {
     return Math.max(0, this.max - this.used);
   }
 
-  // graceRemaining for introspection
   graceRemaining() {
-    return this.graceUsed ? 0 : this.grace;
+    return Math.max(0, this.grace - this.graceUsed);
   }
 
-  // refund for cheap operations (calc, plan updates) to allow more complex steps
-  // Guard: do not allow refund to revive budget after grace has been used (prevents exceeding max+grace via cheap sequences post-exhaust).
-  // Ensures behavior closer to original for-loop bounds while still favoring cheap ops before grace.
-  refund(cost = 1) {
-    if (this.graceUsed) return;
+  // FIX: guard: do not refund after any grace has been used (matches original intent, prevents post-exhaust budget resurrection).
+  refund(cost = 1, label = '') {
+    if (this.graceUsed > 0) return;
     const amt = Math.max(0, Number(cost) || 1);
     this.used = Math.max(0, this.used - amt);
+    this.history.push({ op: 'refund', cost: amt, label, usedAfter: this.used, graceUsed: this.graceUsed });
   }
 
   isExhausted() {
-    return this.remaining() <= 0 && this.graceUsed;
+    return this.remaining() <= 0 && this.graceRemaining() <= 0;
+  }
+
+  // FIX: summary() for diagnostics / logging
+  summary() {
+    return {
+      max: this.max,
+      used: this.used,
+      remaining: this.remaining(),
+      grace: this.grace,
+      graceUsed: this.graceUsed,
+      graceRemaining: this.graceRemaining(),
+      exhausted: this.isExhausted(),
+      steps: this.history.length
+    };
   }
 }
 
