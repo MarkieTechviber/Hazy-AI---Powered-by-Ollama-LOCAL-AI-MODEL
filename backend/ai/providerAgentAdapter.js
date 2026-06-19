@@ -199,6 +199,101 @@ function normalizeAnthropicResponse(data) {
   return { type: 'final_answer', text, usage };
 }
 
+function toGeminiContents(input = []) {
+  // map internal {role, content, toolCalls, callId} to Gemini contents + systemInstruction.
+  // assistant toolCalls -> model + functionCall parts; tool results -> user + functionResponse (name via idToName scan for roundtrips); system separate.
+  const idToName = {};
+  for (const msg of input) {
+    if (msg.role === 'assistant' && Array.isArray(msg.toolCalls)) {
+      for (const call of msg.toolCalls) {
+        if (call.id && call.name) idToName[call.id] = call.name;
+      }
+    }
+  }
+  const contents = [];
+  for (const message of input.filter((item) => item.role !== 'system')) {
+    if (message.role === 'assistant' && Array.isArray(message.toolCalls)) {
+      contents.push({
+        role: 'model',
+        parts: [
+          ...(message.content ? [{ text: message.content }] : []),
+          ...message.toolCalls.map((call) => ({
+            functionCall: {
+              name: call.name,
+              args: call.arguments || {}
+            }
+          }))
+        ]
+      });
+      continue;
+    }
+    if (message.role === 'tool') {
+      const name = idToName[message.callId] || 'unknown_tool';
+      let responseObj;
+      try {
+        responseObj = JSON.parse(String(message.content || '{}'));
+      } catch {
+        responseObj = { result: String(message.content || '') };
+      }
+      contents.push({
+        role: 'user',
+        parts: [{
+          functionResponse: {
+            name,
+            response: responseObj
+          }
+        }]
+      });
+      continue;
+    }
+    contents.push({
+      role: message.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: String(message.content || '') }]
+    });
+  }
+  return contents;
+}
+
+function toGeminiTools(tools = []) {
+  if (!tools || !tools.length) return undefined;
+  return [{
+    functionDeclarations: tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description || '',
+      parameters: tool.parameters || { type: 'object', properties: {} }
+    }))
+  }];
+}
+
+function normalizeGeminiResponse(data) {
+  if (data && data.error) {
+    const message = data.error.message || 'Gemini error';
+    const err = new Error(message);
+    err.providerBody = data;
+    throw err;
+  }
+  const candidate = (data && data.candidates && data.candidates[0]) || {};
+  const parts = (candidate.content && candidate.content.parts) || [];
+  const toolCalls = parts
+    .filter((p) => p && p.functionCall)
+    .map((p) => ({
+      id: crypto.randomUUID(),
+      name: p.functionCall.name || '',
+      arguments: p.functionCall.args || {}
+    }))
+    .filter((call) => call.name);
+  const text = parts
+    .filter((p) => p && typeof p.text === 'string')
+    .map((p) => p.text)
+    .join('');
+  const usage = {
+    inputTokens: Number((data && data.usageMetadata && data.usageMetadata.promptTokenCount) || 0),
+    outputTokens: Number((data && data.usageMetadata && data.usageMetadata.candidatesTokenCount) || 0)
+  };
+  if (toolCalls.length) return { type: 'tool_calls', text, toolCalls, usage };
+  return { type: 'final_answer', text, usage };
+}
+
 function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
   const modelId = providerBody.model || cfg.defaults?.textModel || 'ollama/llama3.2';
   const provider = modelId.split('/')[0];
@@ -206,16 +301,29 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
   return async ({ input, tools, temperature }) => {
     if (provider === 'ollama') {
       const baseUrl = new URL(cfg.providers?.ollama?.baseUrl || 'http://localhost:11434');
+      const reasoningMode = providerBody.hazyReasoning?.reasoningMode;
+      const useThink = reasoningMode !== 'off';
+
+      // FIX #2 (Ollama) — map budgetTokens to num_ctx hint so thinking
+      // models (e.g. qwen3, deepseek-r1) get an appropriate context size.
+      // Ollama doesn't have a native budget param so this is the closest
+      // lever we have. Only apply for models that support thinking.
+      const budgetTokens = providerBody.hazyReasoning?.budgetTokens || 0;
+      const numCtx = useThink && budgetTokens > 0
+        ? Math.min(32768, 4096 + budgetTokens * 2)
+        : undefined;
+
       const data = await requestJson(new URL('/api/chat', baseUrl), {
         body: {
           model: modelId.replace(/^ollama\//, ''),
           messages: toOllamaMessages(input),
           tools: toOpenAITools(tools),
           stream: false,
-          think: providerBody.hazyReasoning?.reasoningMode !== 'off',
+          think: useThink,
           options: {
             ...(providerBody.options || {}),
-            temperature
+            temperature,
+            ...(numCtx ? { num_ctx: numCtx } : {})
           }
         }
       });
@@ -225,6 +333,21 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
     if (provider === 'anthropic') {
       const apiKey = getApiKey('anthropic', cfg);
       if (!apiKey) throw new Error('Anthropic API key is not configured.');
+
+      const reasoningMode = providerBody.hazyReasoning?.reasoningMode;
+      const budgetTokens = providerBody.hazyReasoning?.budgetTokens || 0;
+
+      // FIX #2 (Anthropic) — Extended thinking requires:
+      //   1. thinking: { type: 'enabled', budget_tokens: N } in the body
+      //   2. temperature MUST be exactly 1 (API enforces this)
+      //   3. budget_tokens must be at least 1024
+      // Without these, the API returns a 400 or silently ignores the flag.
+      const useExtendedThinking = reasoningMode === 'deep' || budgetTokens >= 1024;
+      const thinkingParam = useExtendedThinking
+        ? { thinking: { type: 'enabled', budget_tokens: Math.max(1024, budgetTokens) } }
+        : {};
+      const effectiveTemperature = useExtendedThinking ? 1 : temperature;
+
       const data = await requestJson('https://api.anthropic.com/v1/messages', {
         headers: {
           'x-api-key': apiKey,
@@ -241,16 +364,43 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
           })),
           tool_choice: { type: 'auto' },
           max_tokens: providerBody.options?.max_tokens || 4096,
-          temperature
+          temperature: effectiveTemperature,
+          ...thinkingParam
         }
       });
       return normalizeAnthropicResponse(data);
+    }
+
+    if (provider === 'gemini') {
+      const apiKey = getApiKey('gemini', cfg);
+      if (!apiKey) throw new Error('Gemini API key is not configured.');
+
+      const gemModel = modelId.replace(/^gemini\//, '');
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${gemModel}:generateContent`;
+      const sys = input.find((message) => message.role === 'system');
+      const body = {
+        contents: toGeminiContents(input),
+        generationConfig: {
+          temperature,
+          maxOutputTokens: providerBody.options?.max_tokens || 4096
+        }
+      };
+      if (sys && sys.content) {
+        body.systemInstruction = { parts: [{ text: sys.content }] };
+      }
+      if (tools && tools.length) {
+        body.tools = toGeminiTools(tools);
+        body.toolConfig = { functionCallingConfig: { mode: 'AUTO' } };
+      }
+      const data = await requestJson(url, { headers: { 'x-goog-api-key': apiKey }, body });
+      return normalizeGeminiResponse(data);
     }
 
     const compatible = {
       openai: {
         url: 'https://api.openai.com/v1/chat/completions',
         keyName: 'openai',
+        // FIX #3 — remove double replace (was: .replace(/^openai\//, ''))
         model: modelId.replace(/^openai\//, '')
       },
       groq: {
@@ -261,7 +411,9 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
       nvidia: {
         url: `${(cfg.providers?.nvidia?.baseUrl || 'https://integrate.api.nvidia.com/v1').replace(/\/$/, '')}/chat/completions`,
         keyName: 'nvidia',
-        model: modelId.replace(/^nvidia\//, '').replace(/^nvidia\//, '')
+        // FIX #3 — nvidia had .replace(/^nvidia\//, '').replace(/^nvidia\//, '')
+        // The second replace was redundant. Cleaned up.
+        model: modelId.replace(/^nvidia\//, '')
       }
     }[provider];
 
@@ -270,6 +422,19 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
     }
     const apiKey = getApiKey(compatible.keyName, cfg);
     if (!apiKey) throw new Error(`${provider} API key is not configured.`);
+    let max_tokens = providerBody.options?.max_tokens || 4096;
+    if (provider === 'groq' && (compatible.model.includes('llama-3.1-8b') || compatible.model.includes('llama-3.3-70b') || compatible.model.includes('qwen3-32b'))) {
+      const msgs = toOpenAIMessages(input);
+      let charCount = 0;
+      for (const m of msgs) {
+        charCount += typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content || '').length;
+      }
+      const estimatedPromptTokens = Math.ceil(charCount / 4);
+      if (estimatedPromptTokens + max_tokens > 5800) {
+        max_tokens = Math.max(512, 5800 - estimatedPromptTokens);
+      }
+    }
+
     const data = await requestJson(compatible.url, {
       headers: { Authorization: `Bearer ${apiKey}` },
       body: {
@@ -278,7 +443,7 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
         tools: toOpenAITools(tools),
         tool_choice: 'auto',
         stream: false,
-        max_tokens: providerBody.options?.max_tokens || 4096,
+        max_tokens,
         temperature
       }
     });
@@ -289,9 +454,12 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
 module.exports = {
   createProviderAgentCaller,
   normalizeAnthropicResponse,
+  normalizeGeminiResponse,
   normalizeOllamaResponse,
   normalizeOpenAIResponse,
   toAnthropicMessages,
+  toGeminiContents,
+  toGeminiTools,
   toOllamaMessages,
   toOpenAIMessages,
   toOpenAITools

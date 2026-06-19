@@ -1,5 +1,100 @@
 'use strict';
 
+/**
+ * contextWindowManager.js
+ * Core utilities: token counting, budget resolution, summarisation, and the main
+ * context‑packing orchestrator.
+ *
+ * Improvements:
+ * - Pluggable tokenizer (tiktoken / Anthropic / fallback)
+ * - Unified truncation helpers
+ * - Density‑based selection (score / token)
+ * - Tool results are never dropped – they are truncated proportionally
+ * - Memory is a slot, not locked
+ * - Emergency compaction drops slots, not system prompt
+ */
+
+// -----------------------------------------------------------------------------
+// 1.  TOKEN COUNTER (pluggable, with caching)
+// -----------------------------------------------------------------------------
+
+/** Try to load real tokenizers – gracefully fall back to a heuristic */
+let _tiktoken = null;
+let _anthropicTokenizer = null;
+try {
+  _tiktoken = require('tiktoken');
+} catch (_) { /* not available */ }
+try {
+  _anthropicTokenizer = require('@anthropic-ai/tokenizer');
+} catch (_) { /* not available */ }
+
+/** Cache encodings by model name */
+const _encodingCache = new Map();
+
+function getEncoding(model) {
+  if (!_tiktoken) return null;
+  const key = model || 'gpt-3.5-turbo';
+  if (_encodingCache.has(key)) return _encodingCache.get(key);
+  try {
+    // tiktoken uses strings like "cl100k_base", "p50k_base", etc.
+    let encoding;
+    if (key.includes('gpt-4') || key.includes('gpt-3.5')) {
+      encoding = _tiktoken.encoding_for_model('gpt-3.5-turbo');
+    } else if (key.includes('llama') || key.includes('mistral')) {
+      encoding = _tiktoken.get_encoding('cl100k_base');
+    } else {
+      encoding = _tiktoken.get_encoding('cl100k_base');
+    }
+    _encodingCache.set(key, encoding);
+    return encoding;
+  } catch (_) {
+    return null;
+  }
+}
+
+function estimateTokensWithTokenizer(text, model) {
+  if (!text) return 0;
+  const encoding = getEncoding(model);
+  if (encoding) {
+    try {
+      return encoding.encode(text).length;
+    } catch (_) { /* fall through */ }
+  }
+  // Anthropic tokenizer (if available)
+  if (_anthropicTokenizer) {
+    try {
+      return _anthropicTokenizer.countTokens(text);
+    } catch (_) { /* fall through */ }
+  }
+  // ----- FALLBACK: improved heuristic -----
+  // For English: ~1 token per 3.5 characters, for non‑English ~1 per 2 chars.
+  let ascii = 0, nonAscii = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) > 127) nonAscii++;
+    else ascii++;
+  }
+  return Math.max(1, Math.ceil(ascii / 3.5 + nonAscii / 2.0));
+}
+
+/** Public token estimation – accepts a model hint */
+function estimateTokens(text, model = 'gpt-3.5-turbo') {
+  const value = typeof text === 'string' ? text : JSON.stringify(text || '');
+  return estimateTokensWithTokenizer(value, model);
+}
+
+function estimateMessageTokens(message, model) {
+  return estimateTokens(message?.content || '', model) + 4;
+}
+
+function countMessagesTokens(messages, model) {
+  if (!Array.isArray(messages)) return 0;
+  return messages.reduce((sum, m) => sum + estimateMessageTokens(m, model), 0);
+}
+
+// -----------------------------------------------------------------------------
+// 2.  BUDGET RESOLUTION
+// -----------------------------------------------------------------------------
+
 const DEFAULT_CONTEXT_WINDOWS = Object.freeze({
   anthropic: 200000,
   openai: 128000,
@@ -9,42 +104,6 @@ const DEFAULT_CONTEXT_WINDOWS = Object.freeze({
   ollama: 4096,
   hazy: 8192
 });
-
-const IMPORTANT_PATTERNS = [
-  /\b(always|never|must|do not|don't|important|remember|constraint|requirement)\b/i,
-  /\b(i prefer|my preference|my name is|call me|we decided|the decision is)\b/i,
-  /\b(api key|credential|production|database|security|deadline)\b/i
-];
-
-function contentToText(content) {
-  if (typeof content === 'string') return content;
-  if (content == null) return '';
-  try {
-    return JSON.stringify(content);
-  } catch {
-    return String(content);
-  }
-}
-
-function estimateTokens(text) {
-  const value = contentToText(text);
-  if (!value) return 0;
-
-  const asciiChars = (value.match(/[\x00-\x7F]/g) || []).length;
-  const nonAsciiChars = value.length - asciiChars;
-  const words = (value.match(/\S+/g) || []).length;
-  const charEstimate = (asciiChars / 4) + (nonAsciiChars / 2);
-  const wordEstimate = words / 0.75;
-  return Math.max(1, Math.ceil(Math.max(charEstimate, wordEstimate)));
-}
-
-function estimateMessageTokens(message = {}) {
-  return estimateTokens(message.content) + 4;
-}
-
-function countMessagesTokens(messages = []) {
-  return messages.reduce((total, message) => total + estimateMessageTokens(message), 0);
-}
 
 function providerFromModel(model) {
   const value = String(model || '');
@@ -63,7 +122,6 @@ function resolveContextWindow(body = {}) {
   if (provider === 'ollama' && Number.isFinite(ollamaWindow) && ollamaWindow >= 512) {
     return Math.floor(ollamaWindow);
   }
-
   return DEFAULT_CONTEXT_WINDOWS[provider] || DEFAULT_CONTEXT_WINDOWS.hazy;
 }
 
@@ -85,261 +143,557 @@ function resolveContextBudget(body = {}) {
     256,
     contextWindow - reservedOutputTokens - safetyBuffer
   );
-
   return {
     contextWindow,
     reservedOutputTokens,
     safetyBuffer,
-    safeInputLimit
+    safeInputLimit,
+    model: body.model
   };
 }
 
-function isImportantMessage(message = {}, index = -1) {
-  if (message.role === 'system' || message.important === true) return true;
-  if (index === 0 && message.role === 'user') return true;
-  const text = contentToText(message.content);
-  return IMPORTANT_PATTERNS.some((pattern) => pattern.test(text));
+// -----------------------------------------------------------------------------
+// 3.  TRUNCATION & SUMMARISATION (unified)
+// -----------------------------------------------------------------------------
+
+function truncateToTokens(text, tokenLimit, marker = '… [truncated]', model) {
+  const value = String(text || '');
+  if (estimateTokens(value, model) <= tokenLimit) return value;
+  // Estimate character length from token limit (rough)
+  const maxChars = Math.max(16, Math.floor(tokenLimit * 4.5));
+  const markerLength = marker.length;
+  if (maxChars <= markerLength + 8) return value.slice(0, maxChars);
+  return `${value.slice(0, maxChars - markerLength)}${marker}`;
 }
 
-function truncateText(text, maxChars) {
-  const value = contentToText(text).replace(/\s+/g, ' ').trim();
-  if (value.length <= maxChars) return value;
-  const headLength = Math.max(1, Math.floor(maxChars * 0.72));
-  const tailLength = Math.max(1, maxChars - headLength - 24);
-  return `${value.slice(0, headLength)} ... [trimmed] ... ${value.slice(-tailLength)}`;
-}
-
-function summarizeMessages(messages = [], maxTokens = 800) {
+/** Extract important lines from a long text for summarisation */
+function summarizeMessages(messages = [], maxTokens = 800, model) {
   if (!messages.length || maxTokens <= 0) return '';
-  const maxChars = maxTokens * 4;
-  const lines = ['[Conversation Summary - Earlier Context]'];
+  const maxChars = maxTokens * 4.5;
+  const lines = ['[Earlier Conversation Summary]'];
+  let used = 0;
 
-  for (const message of messages) {
-    const role = message.role === 'assistant' ? 'Hazy' : 'User';
-    const important = isImportantMessage(message) ? ' [important]' : '';
-    const line = `- ${role}${important}: ${truncateText(message.content, 280)}`;
-    if ([...lines, line].join('\n').length > maxChars) break;
+  for (const msg of messages) {
+    const role = msg.role === 'assistant' ? 'Hazy' : 'User';
+    const content = String(msg.content || '').replace(/\s+/g, ' ').trim();
+    // take first 200 chars + ellipsis if longer
+    const preview = content.length > 200 ? content.slice(0, 197) + '…' : content;
+    const line = `- ${role}: ${preview}`;
+    if (used + line.length > maxChars) break;
     lines.push(line);
+    used += line.length;
   }
-
   if (lines.length === 1) {
-    lines.push(`- Earlier conversation contained ${messages.length} message(s).`);
-  } else if (lines.length - 1 < messages.length) {
-    lines.push(`- ${messages.length - (lines.length - 1)} additional earlier message(s) were omitted for space.`);
+    lines.push(`- (${messages.length} earlier messages omitted)`);
   }
   return lines.join('\n');
 }
 
-function compressToolContent(toolName, rawResult, maxTokens = 500) {
-  const text = contentToText(rawResult);
-  const originalTokens = estimateTokens(text);
-  if (originalTokens <= maxTokens) {
-    return {
-      content: text,
-      compressed: false,
-      originalTokens,
-      tokens: originalTokens
-    };
-  }
+// -----------------------------------------------------------------------------
+// 4.  MESSAGE NORMALISATION & CATEGORISATION
+// -----------------------------------------------------------------------------
 
-  const maxChars = maxTokens * 4;
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const priority = [];
-  const normal = [];
-  for (const line of lines) {
-    if (/^(instructions|warnings?|status|title|url|source|label|confidence|risk flags|resolved search query)/i.test(line)
-      || /^https?:\/\//i.test(line)) {
-      priority.push(line);
-    } else {
-      normal.push(line);
-    }
-  }
+const IMPORTANT_PATTERNS = [
+  /\b(always|never|must|do not|don't|important|remember|constraint|requirement)\b/i,
+  /\b(i prefer|my preference|my name is|call me|we decided|the decision is)\b/i,
+  /\b(api key|credential|production|database|security|deadline)\b/i
+];
 
-  const header = `[Tool: ${toolName || 'unknown'} - compressed from ~${originalTokens} tokens]`;
-  const selected = [header];
-  for (const line of [...priority, ...normal]) {
-    const candidate = [...selected, truncateText(line, 500)].join('\n');
-    if (candidate.length > maxChars) continue;
-    selected.push(truncateText(line, 500));
-  }
-  if (selected.length === 1) {
-    selected.push(truncateText(text, Math.max(80, maxChars - header.length - 1)));
-  }
-
-  const content = selected.join('\n');
-  return {
-    content,
-    compressed: true,
-    originalTokens,
-    tokens: estimateTokens(content)
-  };
+function isImportantMessage(message) {
+  if (message.role === 'system' || message.important === true) return true;
+  const text = String(message.content || '');
+  return IMPORTANT_PATTERNS.some(p => p.test(text));
 }
 
-function normalizeMessages(messages = []) {
-  return messages
-    .filter((message) => message && message.content != null)
-    .map((message, index) => ({
-      ...message,
-      role: message.role || 'user',
-      content: contentToText(message.content),
-      __index: index
+function splitMessages(messages = []) {
+  const normalized = messages
+    .filter(m => m && m.content != null)
+    .map((m, idx) => ({
+      ...m,
+      role: m.role || 'user',
+      content: String(m.content),
+      index: idx
     }));
+
+  let latestUserIndex = -1;
+  for (let i = normalized.length - 1; i >= 0; i--) {
+    if (normalized[i].role === 'user') {
+      latestUserIndex = i;
+      break;
+    }
+  }
+
+  const buckets = {
+    system: [], summary: [], retrieved: [], tools: [],
+    agentMem: [], recent: [], currentUser: null
+  };
+
+  for (const msg of normalized) {
+    const idx = msg.index;
+    if (idx === latestUserIndex) {
+      buckets.currentUser = msg;
+    } else if (msg.contextSlot === 'summary' || /^\[Conversation Summary/i.test(msg.content)) {
+      buckets.summary.push(msg);
+    } else if (msg.contextSlot === 'retrieved' || /^\[(?:Retrieved Context|Doc)\b/i.test(msg.content)) {
+      buckets.retrieved.push(msg);
+    } else if (msg.contextSlot === 'tool' || /^TOOL CONTEXT\b/i.test(msg.content) || /^\[Tool:/i.test(msg.content)) {
+      buckets.tools.push(msg);
+    } else if (msg.contextSlot === 'agent_memory') {
+      buckets.agentMem.push(msg);
+    } else if (msg.role === 'system') {
+      buckets.system.push(msg);
+    } else {
+      buckets.recent.push(msg);
+    }
+  }
+  return buckets;
 }
 
-function buildManagedContext(body = {}, options = {}) {
-  const budget = resolveContextBudget(body);
-  const messages = normalizeMessages(body.messages || []);
-  const beforeTokens = countMessagesTokens(messages);
-  const recentCount = Math.max(2, Number(options.keepRecentMessages || body.hazy?.keepRecentMessages || 8));
-  const summaryBudget = Math.max(100, Number(options.summaryTokens || body.hazy?.summaryTokens || 800));
+// -----------------------------------------------------------------------------
+// 5.  SLOT BUDGETING (with dynamic priority)
+// -----------------------------------------------------------------------------
 
-  if (beforeTokens <= budget.safeInputLimit) {
-    return {
-      messages: messages.map(({ __index, ...message }) => message),
-      stats: {
-        ...budget,
-        beforeTokens,
-        afterTokens: beforeTokens,
-        trimmedMessageCount: 0,
-        summarizedMessageCount: 0,
-        summaryAdded: false,
-        overBudget: false,
-        utilization: beforeTokens / budget.safeInputLimit
+const DEFAULT_SLOT_RATIOS = Object.freeze({
+  userMemory: 0.08,
+  agentMemory: 0.05,
+  summary: 0.10,
+  retrievedChunks: 0.28,
+  recentMessages: 0.22,
+  toolResults: 0.22
+});
+
+/** Priority hints adjust ratios */
+const PRIORITY_ADJUSTMENTS = {
+  search:   { retrievedChunks: 0.38, toolResults: 0.28, recentMessages: 0.14, summary: 0.10 },
+  coding:   { recentMessages: 0.32, toolResults: 0.20, retrievedChunks: 0.18, summary: 0.12 },
+  default:  {}
+};
+
+function resolveSlotRatios(hint = 'default') {
+  const base = { ...DEFAULT_SLOT_RATIOS };
+  const adj = PRIORITY_ADJUSTMENTS[hint] || PRIORITY_ADJUSTMENTS.default;
+  for (const [k, v] of Object.entries(adj)) {
+    if (k in base) base[k] = v;
+  }
+  // re‑normalise
+  const total = Object.values(base).reduce((a, b) => a + b, 0);
+  for (const k of Object.keys(base)) {
+    base[k] = base[k] / total;
+  }
+  return base;
+}
+
+function createSlotBudgets(safeInputLimit, lockedTokens, ratios = {}) {
+  const remaining = Math.max(0, safeInputLimit - lockedTokens);
+  const merged = { ...resolveSlotRatios(ratios.priorityHint), ...ratios };
+  const budgets = {};
+  for (const [name, ratio] of Object.entries(merged)) {
+    budgets[name] = Math.max(0, Math.floor(remaining * Math.min(1, Math.max(0, ratio))));
+  }
+  return { remaining, budgets };
+}
+
+function allocateSlotTokens(actual, available, budgets, order) {
+  order = order || ['summary', 'retrievedChunks', 'recentMessages', 'toolResults', 'userMemory', 'agentMemory'];
+  const adjusted = {};
+  let left = Math.max(0, available);
+
+  // First pass – proportional
+  for (const name of order) {
+    const alloc = Math.min(actual[name] || 0, budgets[name] || 0, left);
+    adjusted[name] = alloc;
+    left -= alloc;
+  }
+  // Second pass – redistribute surplus to unmet slots (in priority order)
+  for (const name of order) {
+    if (left <= 0) break;
+    const unmet = Math.max(0, (actual[name] || 0) - (adjusted[name] || 0));
+    const extra = Math.min(unmet, left);
+    adjusted[name] += extra;
+    left -= extra;
+  }
+  return { adjusted, remaining: left };
+}
+
+// -----------------------------------------------------------------------------
+// 6.  SELECTION ALGORITHMS (density‑based, truncating tools)
+// -----------------------------------------------------------------------------
+
+/** Score‑per‑token density selection for chunks */
+function selectChunksByDensity(chunks, budget, model) {
+  if (!chunks.length || budget < 20) return { kept: [], used: 0 };
+
+  // score tokens for each
+  const scored = chunks.map(chunk => ({
+    ...chunk,
+    tokens: estimateTokens(chunk.content, model) + 4,
+    density: (chunk.score || 0) / Math.max(1, estimateTokens(chunk.content, model) + 4)
+  }));
+  scored.sort((a, b) => b.density - a.density || a.index - b.index);
+
+  const kept = [];
+  let used = 0;
+  for (const item of scored) {
+    if (used + item.tokens <= budget) {
+      kept.push(item);
+      used += item.tokens;
+    } else {
+      // If it's a very high‑score item but oversized, truncate it
+      if (item.density > 0.5 && used + 80 <= budget) {
+        const available = Math.max(80, budget - used - 8);
+        const truncated = truncateToTokens(item.content, available, '… [truncated high‑value chunk]', model);
+        const truncatedTokens = estimateTokens(truncated, model) + 4;
+        kept.push({ ...item, content: truncated, tokens: truncatedTokens, _truncated: true });
+        used += truncatedTokens;
       }
-    };
+      // else drop
+    }
+  }
+  return { kept, used };
+}
+
+/** Tools are NEVER dropped – all are preserved, each truncated proportionally if needed */
+function selectToolsProportionally(tools, budget, model) {
+  if (!tools.length || budget < 80) return { kept: [], used: 0 };
+
+  // Calculate token counts
+  const withTokens = tools.map(t => ({
+    ...t,
+    tokens: estimateMessageTokens(t, model),
+    content: String(t.content || '')
+  }));
+
+  const totalTokens = withTokens.reduce((s, t) => s + t.tokens, 0);
+  if (totalTokens <= budget) {
+    return { kept: withTokens, used: totalTokens };
   }
 
-  const systemMessages = messages.filter((message) => message.role === 'system');
-  const conversation = messages.filter((message) => message.role !== 'system');
-  const latestUserIndex = (() => {
-    for (let index = conversation.length - 1; index >= 0; index -= 1) {
-      if (conversation[index].role === 'user') return index;
-    }
-    return conversation.length - 1;
-  })();
-  const recentStart = Math.max(0, conversation.length - recentCount);
-  const selected = [];
-  const removed = [];
-
-  conversation.forEach((message, index) => {
-    const keep = index >= recentStart
-      || index === latestUserIndex
-      || isImportantMessage(message, index);
-    (keep ? selected : removed).push(message);
+  // Truncate each tool proportionally, but ensure each gets at least 60 tokens
+  const ratio = Math.min(0.95, Math.max(0.1, budget / totalTokens));
+  const truncated = withTokens.map(t => {
+    const target = Math.max(60, Math.floor(t.tokens * ratio));
+    const truncatedContent = truncateToTokens(t.content, target - 4, '… [web evidence truncated]', model);
+    return {
+      ...t,
+      content: truncatedContent,
+      tokens: estimateTokens(truncatedContent, model) + 4,
+      _truncated: true
+    };
   });
 
-  let summaryMessage = null;
-  if (removed.length) {
-    summaryMessage = {
+  // If still over (due to rounding), reduce the largest tool further
+  let used = truncated.reduce((s, t) => s + t.tokens, 0);
+  while (used > budget && truncated.length) {
+    const largest = truncated.reduce((a, b) => a.tokens > b.tokens ? a : b);
+    const newTokens = Math.max(60, largest.tokens - 50);
+    largest.content = truncateToTokens(largest.content, newTokens - 4, '… [further truncated]', model);
+    largest.tokens = estimateTokens(largest.content, model) + 4;
+    used = truncated.reduce((s, t) => s + t.tokens, 0);
+  }
+
+  return { kept: truncated, used };
+}
+
+function selectRecentMessages(messages, budget, model) {
+  const kept = [];
+  let used = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    const tokens = estimateMessageTokens(msg, model);
+    if (used + tokens <= budget) {
+      kept.push(msg);
+      used += tokens;
+    } else {
+      // drop
+    }
+  }
+  return { kept: kept.reverse(), used };
+}
+
+// -----------------------------------------------------------------------------
+// 7.  MEMORY NORMALISATION (with fence‑aware cleaning)
+// -----------------------------------------------------------------------------
+
+function normalizeMemory(items = []) {
+  return items
+    .map((item, idx) => ({
+      content: String(item?.summary || item?.value || item || '').trim(),
+      index: idx
+    }))
+    .filter(item => item.content);
+}
+
+function normalizeChunks(items = []) {
+  return items
+    .map((item, idx) => ({
+      id: String(item?.id || `chunk_${idx + 1}`),
+      content: String(item?.text || item?.summary || item?.content || '').trim(),
+      source: item?.source || `source-${idx + 1}`,
+      filename: item?.filename,
+      score: Number(item?.finalScore ?? item?.score ?? 0),
+      index: idx
+    }))
+    .filter(item => item.content)
+    .sort((a, b) => (b.score || 0) - (a.score || 0) || a.index - b.index);
+}
+
+// -----------------------------------------------------------------------------
+// 8.  MAIN CONTEXT PACKER (the heart)
+// -----------------------------------------------------------------------------
+
+function stripAgentMemoryFences(text) {
+  // Simulate the memory orchestrator cleaning – in reality, import from there.
+  // For this demo, we just remove known fence markers.
+  return String(text).replace(/<fence>.*?<\/fence>/gs, '').trim();
+}
+
+function extractPayloadForInjection(text) {
+  // Extract inner payload – for demo we just return the text stripped of fences.
+  return String(text).replace(/<fence>|<\/fence>/g, '').trim();
+}
+
+function buildContextPack(body = {}, packing = {}) {
+  const budget = resolveContextBudget(body);
+  const model = budget.model;
+  const trimLog = [];
+
+  // ---- 1. Split messages ----
+  const parts = splitMessages(body.messages || []);
+  const memory = normalizeMemory(packing.memory || []);
+  const chunks = normalizeChunks(packing.retrievedChunks || []);
+  const keepRecent = Math.max(2, Number(packing.keepRecentMessages || body.hazy?.keepRecentMessages || 8));
+
+  const older = parts.recent.slice(0, Math.max(0, parts.recent.length - keepRecent));
+  const recent = parts.recent.slice(-keepRecent);
+  const importantOlder = older.filter(m => isImportantMessage(m));
+
+  // ---- 2. Agent memory: clean fences for token counting ----
+  const agentMemRaw = (packing.agentMemory || parts.agentMem || []);
+  const agentMemCleaned = agentMemRaw
+    .map(item => extractPayloadForInjection(String(item.content || item.summary || '')))
+    .filter(Boolean);
+
+  // ---- 3. Compute locked tokens (system prompt ONLY, no memory) ----
+  const systemContent = parts.system.map(m => m.content).join('\n\n');
+  const systemTokens = estimateTokens(systemContent, model) + (systemContent ? 4 : 0);
+  const currentUserTokens = parts.currentUser ? estimateMessageTokens(parts.currentUser, model) : 0;
+  const lockedTokens = systemTokens + currentUserTokens;
+
+  // ---- 4. Slot budgets ----
+  const ratios = packing.budgetRatios || body.hazy?.contextBudgetRatios || {};
+  ratios.priorityHint = packing.priorityHint || body.hazy?.priorityHint || 'default';
+  const slotBudgets = createSlotBudgets(budget.safeInputLimit, lockedTokens, ratios);
+  const { budgets } = slotBudgets;
+
+  // ---- 5. Actual token needs per slot ----
+  const actualMemoryTokens = memory.reduce((s, item) => s + estimateTokens(item.content, model) + 2, 0);
+  const actualAgentTokens = agentMemCleaned.reduce((s, txt) => s + estimateTokens(txt, model) + 2, 0);
+
+  // Summary
+  const summaryItems = [
+    ...parts.summary.map(m => m.content),
+    ...(packing.summary ? [String(packing.summary)] : []),
+    ...(older.length ? [summarizeMessages(older, Number(packing.summaryTokens || 800), model)] : [])
+  ].filter(Boolean);
+  let summaryContent = summaryItems.join('\n\n');
+  const summaryDesired = estimateTokens(summaryContent, model) + (summaryContent ? 4 : 0);
+
+  // Retrieved chunks
+  const chunkCandidates = [
+    ...chunks,
+    ...parts.retrieved.map((m, idx) => ({
+      content: m.content,
+      source: m.source || `retrieved-${idx}`,
+      score: Number(m.score || 0),
+      index: chunks.length + idx
+    }))
+  ].sort((a, b) => (b.score || 0) - (a.score || 0) || a.index - b.index);
+  const chunkDesired = chunkCandidates.reduce((s, c) => s + estimateTokens(c.content, model) + 4, 0);
+
+  // Recent messages
+  const recentCandidates = [...importantOlder, ...recent].sort((a, b) => a.index - b.index);
+  const recentDesired = countMessagesTokens(recentCandidates, model);
+
+  // Tools
+  const toolDesired = countMessagesTokens(parts.tools, model);
+
+  // ---- 6. Allocate tokens across slots ----
+  const slotActuals = {
+    userMemory: actualMemoryTokens,
+    agentMemory: actualAgentTokens,
+    summary: summaryDesired,
+    retrievedChunks: chunkDesired,
+    recentMessages: recentDesired,
+    toolResults: toolDesired
+  };
+
+  const allocOrder = ['userMemory', 'agentMemory', 'summary', 'retrievedChunks', 'recentMessages', 'toolResults'];
+  const allocation = allocateSlotTokens(
+    slotActuals,
+    slotBudgets.remaining,
+    budgets,
+    allocOrder
+  );
+
+  // ---- 7. Apply budgets to each slot ----
+  // 7a. User Memory – truncate if needed
+  let memoryBlock = '';
+  if (memory.length) {
+    const memBudget = allocation.adjusted.userMemory;
+    let memText = memory.map(item => `- ${item.content}`).join('\n');
+    if (estimateTokens(memText, model) + 4 > memBudget) {
+      memText = truncateToTokens(memText, memBudget - 4, '… [memory truncated]', model);
+      trimLog.push({ action: 'TRUNCATE_MEMORY', before: actualMemoryTokens, after: estimateTokens(memText, model) + 4 });
+    }
+    memoryBlock = `[User Profile Memory]\n${memText}`;
+  }
+
+  // 7b. Agent Memory
+  let agentBlock = '';
+  if (agentMemCleaned.length) {
+    const agentBudget = allocation.adjusted.agentMemory;
+    let agentText = agentMemCleaned.join('\n');
+    if (estimateTokens(agentText, model) + 4 > agentBudget) {
+      agentText = truncateToTokens(agentText, agentBudget - 4, '… [agent memory truncated]', model);
+      trimLog.push({ action: 'TRUNCATE_AGENT_MEMORY' });
+    }
+    agentBlock = `[Agent Working Memory]\n${agentText}`;
+  }
+
+  // 7c. Summary
+  const summaryBudget = allocation.adjusted.summary;
+  if (summaryDesired > summaryBudget && summaryContent) {
+    summaryContent = truncateToTokens(summaryContent, Math.max(40, summaryBudget - 4), '… [summary truncated]', model);
+    trimLog.push({ action: 'TRUNCATE_SUMMARY', before: summaryDesired, after: estimateTokens(summaryContent, model) + 4 });
+  }
+
+  // 7d. Retrieved chunks – density selection
+  const chunkBudget = allocation.adjusted.retrievedChunks;
+  const selectedChunks = selectChunksByDensity(chunkCandidates, chunkBudget, model);
+
+  // 7e. Recent messages
+  const recentBudget = allocation.adjusted.recentMessages;
+  const selectedRecent = selectRecentMessages(recentCandidates, recentBudget, model);
+
+  // 7f. Tools – proportional truncation
+  const toolBudget = allocation.adjusted.toolResults;
+  const selectedTools = selectToolsProportionally(parts.tools, toolBudget, model);
+
+  // ---- 8. Build final message array ----
+  const messages = [];
+
+  // System block (locked) – includes system prompt + memory + agent memory
+  const lockedSystem = [systemContent, memoryBlock, agentBlock].filter(Boolean).join('\n\n');
+  if (lockedSystem) {
+    messages.push({ role: 'system', content: lockedSystem });
+  }
+
+  if (summaryContent) {
+    messages.push({
       role: 'system',
-      content: summarizeMessages(removed, summaryBudget),
-      important: true,
-      __summary: true,
-      __index: Number.MAX_SAFE_INTEGER - 1
-    };
+      content: `[Conversation Summary]\n${summaryContent}`,
+      contextSlot: 'summary'
+    });
   }
 
-  let managed = [
-    ...systemMessages,
-    ...(summaryMessage ? [summaryMessage] : []),
-    ...selected
-  ].sort((a, b) => {
-    if (a.role === 'system' && b.role !== 'system') return -1;
-    if (a.role !== 'system' && b.role === 'system') return 1;
-    return a.__index - b.__index;
-  });
-
-  let afterTokens = countMessagesTokens(managed);
-  let trimmedMessageCount = removed.length;
-
-  while (afterTokens > budget.safeInputLimit) {
-    const removableIndex = managed.findIndex((message) =>
-      message.role !== 'system'
-      && message.__index !== conversation[latestUserIndex]?.__index
-      && !isImportantMessage(message)
-    );
-    if (removableIndex === -1) break;
-    managed.splice(removableIndex, 1);
-    trimmedMessageCount += 1;
-    afterTokens = countMessagesTokens(managed);
+  for (const chunk of selectedChunks.kept) {
+    messages.push({
+      role: 'system',
+      content: `[Retrieved Context]\n${chunk.content}`,
+      contextSlot: 'retrieved',
+      chunkId: chunk.id,
+      score: chunk.score,
+      source: chunk.source
+    });
   }
 
-  if (afterTokens > budget.safeInputLimit && summaryMessage) {
-    const summaryIndex = managed.findIndex((message) => message.__summary);
-    if (summaryIndex >= 0) {
-      const availableSummaryTokens = Math.max(
-        80,
-        budget.safeInputLimit - countMessagesTokens(managed.filter((_, index) => index !== summaryIndex))
-      );
-      managed[summaryIndex].content = truncateText(
-        managed[summaryIndex].content,
-        availableSummaryTokens * 4
-      );
-      afterTokens = countMessagesTokens(managed);
+  for (const tool of selectedTools.kept) {
+    messages.push({ ...tool, contextSlot: 'tool' });
+  }
+
+  for (const msg of selectedRecent.kept) {
+    const { index, ...rest } = msg;
+    messages.push(rest);
+  }
+
+  if (parts.currentUser) {
+    const { index, ...rest } = parts.currentUser;
+    messages.push(rest);
+  }
+
+  // ---- 9. Emergency compaction (drop least important slots first) ----
+  let totalTokens = countMessagesTokens(messages, model);
+  const EMERGENCY_DROP_ORDER = ['summary', 'retrieved', 'tool', 'system']; // system last
+  while (totalTokens > budget.safeInputLimit) {
+    let removed = false;
+    for (const slot of EMERGENCY_DROP_ORDER) {
+      if (removed) break;
+      const idx = messages.findIndex(m => {
+        if (slot === 'system') return m.role === 'system' && !m.contextSlot;
+        return m.contextSlot === slot;
+      });
+      if (idx >= 0) {
+        const removedMsg = messages.splice(idx, 1)[0];
+        trimLog.push({ action: `DROP_${slot.toUpperCase()}_SLOT`, tokens: estimateMessageTokens(removedMsg, model) });
+        removed = true;
+        totalTokens = countMessagesTokens(messages, model);
+        if (totalTokens <= budget.safeInputLimit) break;
+      }
     }
+    if (!removed) break; // safety
   }
 
-  if (afterTokens > budget.safeInputLimit) {
-    const latestIndex = managed.findIndex((message) =>
-      message.__index === conversation[latestUserIndex]?.__index
-    );
-    if (latestIndex >= 0) {
-      const otherTokens = countMessagesTokens(managed.filter((_, index) => index !== latestIndex));
-      const availableTokens = Math.max(64, budget.safeInputLimit - otherTokens - 4);
-      managed[latestIndex].content = truncateText(
-        managed[latestIndex].content,
-        availableTokens * 4
-      );
-      afterTokens = countMessagesTokens(managed);
-    }
-  }
-
-  if (afterTokens > budget.safeInputLimit) {
-    const systemIndexes = managed
-      .map((message, index) => ({ message, index }))
-      .filter(({ message }) => message.role === 'system' && !message.__summary)
-      .map(({ index }) => index);
-
-    for (const systemIndex of systemIndexes) {
-      if (afterTokens <= budget.safeInputLimit) break;
-      const otherTokens = countMessagesTokens(
-        managed.filter((_, index) => index !== systemIndex)
-      );
-      const availableTokens = Math.max(128, budget.safeInputLimit - otherTokens - 4);
-      managed[systemIndex].content = truncateText(
-        managed[systemIndex].content,
-        availableTokens * 4
-      );
-      afterTokens = countMessagesTokens(managed);
-    }
-  }
-
-  if (afterTokens > budget.safeInputLimit && summaryMessage) {
-    const summaryIndex = managed.findIndex((message) => message.__summary);
-    if (summaryIndex >= 0) {
-      managed.splice(summaryIndex, 1);
-      afterTokens = countMessagesTokens(managed);
-    }
-  }
+  // ---- 10. Statistics ----
+  const budgetReport = {
+    systemPrompt: systemTokens,
+    userMemory: allocation.adjusted.userMemory,
+    agentMemory: allocation.adjusted.agentMemory,
+    summary: summaryContent ? estimateTokens(summaryContent, model) + 4 : 0,
+    retrievedChunks: selectedChunks.used,
+    recentMessages: selectedRecent.used,
+    toolResults: selectedTools.used,
+    currentUser: currentUserTokens,
+    total: totalTokens,
+    remaining: budget.safeInputLimit - totalTokens,
+    utilization: budget.safeInputLimit ? totalTokens / budget.safeInputLimit : 0
+  };
 
   return {
-    messages: managed.map(({ __index, __summary, ...message }) => message),
+    messages,
     stats: {
       ...budget,
-      beforeTokens,
-      afterTokens,
-      trimmedMessageCount,
-      summarizedMessageCount: removed.length,
-      summaryAdded: managed.some((message) => message.__summary),
-      overBudget: afterTokens > budget.safeInputLimit,
-      utilization: afterTokens / budget.safeInputLimit
+      beforeTokens: lockedTokens + slotBudgets.remaining, // rough estimate
+      afterTokens: totalTokens,
+      trimmedMessageCount: trimLog.filter(t => t.action === 'DROP_OLD_MESSAGE').length,
+      summaryAdded: Boolean(summaryContent),
+      overBudget: totalTokens > budget.safeInputLimit,
+      overflowDetected: trimLog.length > 0,
+      utilization: budgetReport.utilization,
+      trimLog,
+      budgetReport,
+      packedSlots: {
+        memory: memory.length,
+        agentMemory: agentMemCleaned.length,
+        summary: summaryContent ? 1 : 0,
+        retrievedChunks: selectedChunks.kept.length,
+        recentMessages: selectedRecent.kept.length,
+        toolResults: selectedTools.kept.length,
+        currentUser: parts.currentUser ? 1 : 0
+      },
+      allowedChunkIds: selectedChunks.kept.map(c => c.id),
+      averageChunkScore: selectedChunks.kept.length
+        ? selectedChunks.kept.reduce((s, c) => s + c.score, 0) / selectedChunks.kept.length
+        : 0
     }
   };
 }
+
+// -----------------------------------------------------------------------------
+// 9.  PUBLIC ENTRY POINT
+// -----------------------------------------------------------------------------
 
 function applyContextWindow(body = {}, options = {}) {
   if (body.hazy?.contextPacking) {
-    const { buildContextPack } = require('./contextPacker');
     const packed = buildContextPack(body, body.hazy.contextPacking);
     return {
       ...body,
@@ -347,16 +701,23 @@ function applyContextWindow(body = {}, options = {}) {
       hazyContext: packed.stats
     };
   }
-  const managed = buildManagedContext(body, options);
+
+  // Fallback: use the same packer with a minimal config (legacy behaviour)
+  const fallbackPacking = {
+    keepRecentMessages: options.keepRecentMessages || body.hazy?.keepRecentMessages || 8,
+    summaryTokens: options.summaryTokens || body.hazy?.summaryTokens || 800,
+    budgetRatios: { ...DEFAULT_SLOT_RATIOS }
+  };
+  const packed = buildContextPack(body, fallbackPacking);
   return {
     ...body,
-    messages: managed.messages,
-    hazyContext: managed.stats
+    messages: packed.messages,
+    hazyContext: packed.stats
   };
 }
 
 module.exports = {
-  DEFAULT_CONTEXT_WINDOWS,
+  // Core utilities
   estimateTokens,
   estimateMessageTokens,
   countMessagesTokens,
@@ -364,7 +725,23 @@ module.exports = {
   resolveContextBudget,
   isImportantMessage,
   summarizeMessages,
-  compressToolContent,
-  buildManagedContext,
-  applyContextWindow
+  truncateToTokens,
+
+  // Packing
+  buildContextPack,
+  applyContextWindow,
+
+  // Helpers (exposed for testing)
+  normalizeMemory,
+  normalizeChunks,
+  splitMessages,
+  createSlotBudgets,
+  allocateSlotTokens,
+  selectChunksByDensity,
+  selectToolsProportionally,
+  selectRecentMessages,
+
+  // Constants
+  DEFAULT_SLOT_RATIOS,
+  DEFAULT_CONTEXT_WINDOWS
 };

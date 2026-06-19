@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildSystemPrompt } = require('../ai/promptBuilder');
+const { buildSystemPrompt, buildPersonaPrompt } = require('../ai/promptBuilder');
 
 function baseContext(overrides = {}) {
   return {
@@ -67,7 +67,7 @@ test('buildSystemPrompt includes Hazy reasoning controls without raw chain-of-th
   assert.match(prompt, /Reasoning level: structured/);
   assert.match(prompt, /Effort: medium/);
   assert.match(prompt, /Public summary: on/);
-  assert.match(prompt, /never expose chain-of-thought/i);
+  assert.match(prompt, /do not expose internal reasoning/i);
   assert.match(prompt, /<thinking>/);
   assert.match(prompt, /scratchpad/i);
 });
@@ -111,4 +111,71 @@ test('buildSystemPrompt keeps required operational sections', () => {
   assert.ok(sectionNames.includes('Reasoning control'));
   assert.ok(sectionNames.includes('Operational reply guidance'));
   assert.match(prompt, /web_search: no useful result for "current docs"/);
+});
+
+test('buildSystemPrompt includes Chat Mode instructions when agentic is off and reasoningMode is not deep', () => {
+  const prompt = buildSystemPrompt(baseContext({
+    agentEnabled: false,
+    reasoning: { reasoningMode: 'auto' }
+  }));
+
+  assert.match(prompt, /You are in Chat Mode\. Think like a senior assistant/);
+  assert.match(prompt, /Do NOT output any reasoning block, thinking block, scratchpad, or <thinking> block\./);
+  assert.match(prompt, /No files or folders must be touched\./);
+});
+
+test('buildSystemPrompt includes Deep Think Mode instructions when agentic is off and reasoningMode is deep', () => {
+  const prompt = buildSystemPrompt(baseContext({
+    agentEnabled: false,
+    reasoning: { reasoningMode: 'deep' }
+  }));
+
+  assert.match(prompt, /You are in Deep Think Mode\. Think like a senior engineer/);
+  assert.match(prompt, /Before replying, output a <thinking> block/);
+  assert.match(prompt, /Do NOT create or modify any files or folders\./);
+});
+
+test('buildSystemPrompt includes Agentic Mode instructions when agentic is enabled', () => {
+  const prompt = buildSystemPrompt(baseContext({
+    agentEnabled: true,
+    reasoning: { reasoningMode: 'deep' }
+  }));
+
+  assert.match(prompt, /You are in Agentic Mode\. Act as a senior autonomous engineer/);
+  assert.match(prompt, /Before acting, output a <thinking> block/);
+  assert.match(prompt, /Code lives in created, named, editable files in the workspace/);
+});
+
+test('buildSystemPrompt includes companion emotion tag instructions', () => {
+  const prompt = buildSystemPrompt(baseContext());
+  assert.match(prompt, /Companion emotion tags/);
+  assert.match(prompt, /\[\[happy\]\]/);
+  assert.match(prompt, /\[\[annoyed\]\]/);
+  assert.match(prompt, /\[\[flustered\]\]/);
+});
+test('buildPersonaPrompt interpolates values correctly', () => {
+  const p = {
+    personaRelation: 'bestfriend',
+    personaName: 'Charlie',
+    personaUserName: 'Jordan',
+    personaLanguage: 'playful',
+    personaTraits: ['funny', 'sarcastic'],
+    scenarioDesc: 'Jordan and {name} are coding a project together.',
+    scenarioSetting: 'school',
+    scenarioCharRole: 'coding buddy',
+    scenarioUserRole: 'novice coder',
+    scenarioOpener: 'Hey {userName}, ready to write some code?'
+  };
+
+  const prompt = buildPersonaPrompt(p);
+
+  assert.match(prompt, /You are Charlie, a character in an ongoing roleplay\/story\./);
+  assert.match(prompt, /Your relationship to the user is: best friend \(specifically: coding buddy\)\./);
+  assert.match(prompt, /The user's name in this world is Jordan and they are: novice coder\./);
+  assert.match(prompt, /Your personality and tone: You are playful/);
+  assert.match(prompt, /natural sense of humor/);
+  assert.match(prompt, /dry sarcasm/);
+  assert.match(prompt, /Jordan and Charlie are coding a project together\./);
+  assert.match(prompt, /The setting is: School \/ Campus\./);
+  assert.match(prompt, /Hey Jordan, ready to write some code\?/);
 });

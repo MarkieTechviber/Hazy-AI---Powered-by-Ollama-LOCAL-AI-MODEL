@@ -1,13 +1,44 @@
 'use strict';
 
+// FIX #5 — Original extractResponseText handled Ollama and OpenAI formats
+// but missed Anthropic's streaming delta structure entirely.
+// Anthropic SSE sends content_block_delta events with this shape:
+//   { type: 'content_block_delta', delta: { type: 'text_delta', text: '...' } }
+// Without this branch, streaming from Anthropic produced empty responses.
 function extractResponseText(payload) {
   if (!payload || typeof payload !== 'object') return '';
-  return String(
-    payload.message?.content
-    || payload.response
-    || payload.choices?.[0]?.message?.content
-    || ''
-  );
+
+  // Anthropic streaming delta
+  if (payload.type === 'content_block_delta' && payload.delta?.type === 'text_delta') {
+    return String(payload.delta.text || '');
+  }
+
+  // Anthropic thinking block delta (skip — private reasoning, never surface)
+  if (payload.type === 'content_block_delta' && payload.delta?.type === 'thinking_delta') {
+    return '';
+  }
+
+  // Ollama streaming format
+  if (payload.message?.content !== undefined) {
+    return String(payload.message.content || '');
+  }
+
+  // Ollama single-response (non-streaming)
+  if (payload.response !== undefined) {
+    return String(payload.response || '');
+  }
+
+  // OpenAI / compatible streaming delta
+  if (payload.choices?.[0]?.delta?.content !== undefined) {
+    return String(payload.choices[0].delta.content || '');
+  }
+
+  // OpenAI non-streaming
+  if (payload.choices?.[0]?.message?.content !== undefined) {
+    return String(payload.choices[0].message.content || '');
+  }
+
+  return '';
 }
 
 function createStreamResponseCollector(onComplete = () => {}) {

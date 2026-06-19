@@ -325,6 +325,11 @@
     }
 
     async init() {
+      if (window.location.protocol !== 'file:') {
+        this.initialized = true;
+        console.log('✅ RAG System initialized (using server-side storage)');
+        return true;
+      }
       try {
         await this.db.init();
         
@@ -359,7 +364,21 @@
           throw new Error('Unsupported file type');
         }
 
-        // Create document record
+        if (window.location.protocol !== 'file:') {
+          const response = await fetch('/hazy/rag/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: fileName, content: text, type: fileType })
+          });
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `Upload failed with status ${response.status}`);
+          }
+          const data = await response.json();
+          return { success: true, docId: data.docId, chunkCount: data.chunkCount };
+        }
+
+        // Create document record (local IndexedDB pathway)
         const doc = {
           name: fileName,
           type: fileType,
@@ -505,10 +524,24 @@
     }
 
     async getDocuments() {
+      if (window.location.protocol !== 'file:') {
+        const response = await fetch('/hazy/rag/documents');
+        if (!response.ok) throw new Error('Failed to fetch documents from server');
+        return await response.json();
+      }
       return await this.db.getAllDocuments();
     }
 
     async deleteDocument(docId) {
+      if (window.location.protocol !== 'file:') {
+        const response = await fetch('/hazy/rag/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileId: docId })
+        });
+        if (!response.ok) throw new Error('Failed to delete document on server');
+        return;
+      }
       await this.db.deleteDocument(docId);
       
       // Rebuild vocabulary
@@ -756,7 +789,7 @@
       listEl.querySelectorAll('.doc-delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          const docId = parseInt(btn.dataset.docId);
+          const docId = window.location.protocol === 'file:' ? parseInt(btn.dataset.docId, 10) : btn.dataset.docId;
           if (confirm('Delete this document from knowledge base?')) {
             await this.rag.deleteDocument(docId);
             showToast('Document deleted', 'success');
@@ -830,8 +863,8 @@
       window.sendMessage = async function(...args) {
         let userMessage = args[0];
 
-        // If RAG is enabled, inject context
-        if (ragSystem.isActive()) {
+        // If RAG is enabled and running locally/offline, inject context
+        if (ragSystem.isActive() && window.location.protocol === 'file:') {
           const context = await ragSystem.getContext(userMessage, 3);
           if (context) {
             userMessage = context + userMessage;

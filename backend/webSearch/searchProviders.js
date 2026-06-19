@@ -9,7 +9,7 @@ async function requestJson(url, options = {}) {
     const response = await (options.fetchImpl || fetch)(url, {
       method: options.method || 'GET',
       headers: {
-        'User-Agent': 'HazyResearch/1.0',
+        'User-Agent': 'HazyResearch/1.1 (+local-first; safe-fetch)',
         'Accept': 'application/json',
         ...(options.headers || {})
       },
@@ -26,9 +26,13 @@ async function requestJson(url, options = {}) {
   }
 }
 
+function getDomain(rawUrl = '') {
+  try { return new URL(rawUrl).hostname.replace(/^www\./, '').toLowerCase(); } catch { return ''; }
+}
+
 function hostnameAllowed(url, options = {}) {
   try {
-    const host = new URL(url).hostname.toLowerCase();
+    const host = getDomain(url);
     const allowed = options.allowedDomains || [];
     const blocked = options.blockedDomains || [];
     if (allowed.length && !allowed.some((domain) => host === domain || host.endsWith(`.${domain}`))) return false;
@@ -39,15 +43,41 @@ function hostnameAllowed(url, options = {}) {
   }
 }
 
+function normalizeDate(value) {
+  if (!value) return null;
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString();
+  const text = String(value).trim();
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : text.slice(0, 80);
+}
+
 function normalizeResult(item, index, providerName) {
+  const rawUrl = String(item.url || item.link || '').trim().slice(0, 1200);
+  const domain = getDomain(rawUrl);
+  const title = String(item.title || item.name || domain || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+  const snippet = String(item.snippet || item.description || item.content || item.text || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1400);
+  const rawRank = Number(item.rawRank || item.rank || index + 1);
   return {
-    title: String(item.title || item.name || '').trim().slice(0, 240),
-    url: String(item.url || item.link || '').trim().slice(0, 1200),
-    snippet: String(item.snippet || item.description || item.content || item.text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1200),
-    sourceName: String(item.sourceName || item.source || providerName || '').trim().slice(0, 120),
-    publishedAt: item.publishedAt || item.published_at || item.age || null,
-    rank: Number(item.rank || index + 1),
-    provider: providerName
+    title,
+    url: rawUrl,
+    snippet,
+    domain,
+    sourceName: String(item.sourceName || item.source || domain || providerName || '').trim().slice(0, 120),
+    publishedAt: normalizeDate(item.publishedAt || item.published_at || item.date || item.age),
+    providerName,
+    provider: providerName,
+    rawRank,
+    rank: rawRank,
+    qualitySignals: {
+      hasTitle: Boolean(title),
+      hasSnippet: snippet.length > 40,
+      hasDate: Boolean(item.publishedAt || item.published_at || item.date || item.age),
+      providerRank: rawRank
+    }
   };
 }
 
@@ -58,9 +88,7 @@ class BraveSearchProvider {
     this.name = 'Brave Search';
   }
 
-  isAvailable() {
-    return Boolean(this.apiKey);
-  }
+  isAvailable() { return Boolean(this.apiKey); }
 
   async search(query, options = {}) {
     const params = new URLSearchParams({
@@ -74,7 +102,10 @@ class BraveSearchProvider {
       headers: { 'X-Subscription-Token': this.apiKey }
     });
     return (data?.web?.results || [])
-      .map((item, index) => normalizeResult(item, index, this.name))
+      .map((item, index) => normalizeResult({
+        ...item,
+        publishedAt: item.age || item.page_age || item.publishedAt
+      }, index, this.name))
       .filter((item) => hostnameAllowed(item.url, options));
   }
 }
@@ -86,9 +117,7 @@ class TavilySearchProvider {
     this.name = 'Tavily Search';
   }
 
-  isAvailable() {
-    return Boolean(this.apiKey);
-  }
+  isAvailable() { return Boolean(this.apiKey); }
 
   async search(query, options = {}) {
     const data = await requestJson('https://api.tavily.com/search', {
@@ -101,7 +130,7 @@ class TavilySearchProvider {
       body: JSON.stringify({
         query,
         topic: options.freshnessRequired ? 'news' : 'general',
-        search_depth: 'basic',
+        search_depth: options.researchMode ? 'advanced' : 'basic',
         max_results: Math.min(options.maxResults || 10, 20),
         include_answer: false,
         include_raw_content: false,
@@ -110,7 +139,10 @@ class TavilySearchProvider {
       })
     });
     return (data?.results || [])
-      .map((item, index) => normalizeResult(item, index, this.name))
+      .map((item, index) => normalizeResult({
+        ...item,
+        publishedAt: item.published_date || item.publishedAt
+      }, index, this.name))
       .filter((item) => hostnameAllowed(item.url, options));
   }
 }
@@ -118,14 +150,98 @@ class TavilySearchProvider {
 class DuckDuckGoProvider {
   constructor({ fetchImpl } = {}) {
     this.fetchImpl = fetchImpl;
-    this.name = 'DuckDuckGo Instant Answer';
+    this.name = 'DuckDuckGo';
   }
 
-  isAvailable() {
-    return true;
-  }
+  isAvailable() { return true; }
 
   async search(query, options = {}) {
+    const maxResults = options.maxResults || 10;
+
+    // --- Strategy 1: Scrape the DDG HTML search page for real results ---
+    try {
+      const htmlResults = await this._scrapeHtmlResults(query, maxResults, options);
+      if (htmlResults.length > 0) return htmlResults;
+    } catch {
+      // Fall through to Instant Answer fallback
+    }
+
+    // --- Strategy 2: Instant Answer API fallback (Wikipedia-style) ---
+    try {
+      return await this._instantAnswerFallback(query, maxResults, options);
+    } catch {
+      return [];
+    }
+  }
+
+  async _scrapeHtmlResults(query, maxResults, options) {
+    const fetchImpl = this.fetchImpl || fetch;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 9000);
+    try {
+      const params = new URLSearchParams({ q: query });
+      const response = await fetchImpl('https://lite.duckduckgo.com/lite/', {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString(),
+        signal: controller.signal,
+        redirect: 'follow'
+      });
+      if (!response.ok) return [];
+      const html = await response.text();
+      return this._parseHtmlResults(html, maxResults, options);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  _parseHtmlResults(html, maxResults, options) {
+    const items = [];
+    // DuckDuckGo Lite uses a table structure where each result is spread across 3-4 <tr> elements.
+    // The easiest way to parse is to split by `<td valign="top">` which marks the start of each result numbering.
+    const resultBlocks = html.split('<td valign="top">').slice(1);
+    
+    for (const block of resultBlocks) {
+      if (items.length >= maxResults) break;
+      
+      // Extract URL and Title from the first link in the block: <a rel="nofollow" href="...uddg=URL...">Title</a>
+      const urlMatch = block.match(/href="([^"]+)"/i);
+      const titleMatch = block.match(/<a[^>]*>([\s\S]*?)<\/a>/i);
+      // Extract snippet from <td class='result-snippet'>...</td>
+      const snippetMatch = block.match(/class=['"]result-snippet['"][^>]*>([\s\S]*?)<\/td>/i);
+
+      let rawUrl = urlMatch ? urlMatch[1].trim() : '';
+      if (rawUrl.includes('uddg=')) {
+        try {
+          const parsed = new URL(rawUrl, 'https://duckduckgo.com');
+          rawUrl = decodeURIComponent(parsed.searchParams.get('uddg') || rawUrl);
+        } catch { /* keep rawUrl as-is */ }
+      }
+
+      const title = titleMatch
+        ? titleMatch[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#39;/g, "'").trim()
+        : '';
+      const snippet = snippetMatch
+        ? snippetMatch[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim()
+        : '';
+
+      if (rawUrl && (title || snippet) && /^https?:\/\//i.test(rawUrl)) {
+        items.push(normalizeResult({
+          title: title || rawUrl,
+          url: rawUrl,
+          snippet,
+          sourceName: this.name
+        }, items.length, this.name));
+      }
+    }
+    return items.filter((item) => hostnameAllowed(item.url, options));
+  }
+
+  async _instantAnswerFallback(query, maxResults, options) {
     const data = await requestJson(
       `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
       { fetchImpl: this.fetchImpl }
@@ -154,11 +270,12 @@ class DuckDuckGoProvider {
     };
     collect(data?.RelatedTopics || []);
     return items
-      .slice(0, options.maxResults || 10)
+      .slice(0, maxResults)
       .map((item, index) => normalizeResult(item, index, this.name))
       .filter((item) => hostnameAllowed(item.url, options));
   }
 }
+
 
 class WikipediaProvider {
   constructor({ fetchImpl } = {}) {
@@ -166,11 +283,10 @@ class WikipediaProvider {
     this.name = 'Wikipedia OpenSearch';
   }
 
-  isAvailable() {
-    return true;
-  }
+  isAvailable() { return true; }
 
   async search(query, options = {}) {
+    if (options.officialOnly) return [];
     const data = await requestJson(
       `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=${Math.min(options.maxResults || 10, 10)}&namespace=0&format=json&origin=*`,
       { fetchImpl: this.fetchImpl }
@@ -191,9 +307,7 @@ class CompositeSearchProvider {
     this.name = 'Composite Search';
   }
 
-  isAvailable() {
-    return this.providers.length > 0;
-  }
+  isAvailable() { return this.providers.length > 0; }
 
   async search(query, options = {}) {
     const settled = await Promise.allSettled(
@@ -203,10 +317,7 @@ class CompositeSearchProvider {
     const errors = [];
     settled.forEach((item, index) => {
       if (item.status === 'fulfilled') results.push(...item.value);
-      else errors.push({
-        provider: this.providers[index].name,
-        error: item.reason?.message || String(item.reason)
-      });
+      else errors.push({ provider: this.providers[index].name, error: item.reason?.message || String(item.reason) });
     });
     return { results, errors, providersTried: this.providers.map((provider) => provider.name) };
   }
@@ -215,20 +326,12 @@ class CompositeSearchProvider {
 function createSearchProvider(cfg = {}, options = {}) {
   const search = cfg.providers?.search || cfg.search || {};
   const providers = [
-    new BraveSearchProvider({
-      apiKey: process.env.BRAVE_SEARCH_API_KEY || search.braveApiKey || cfg.providers?.brave?.apiKey,
-      fetchImpl: options.fetchImpl
-    }),
-    new TavilySearchProvider({
-      apiKey: process.env.TAVILY_API_KEY || search.tavilyApiKey || cfg.providers?.tavily?.apiKey,
-      fetchImpl: options.fetchImpl
-    })
+    new BraveSearchProvider({ apiKey: process.env.BRAVE_SEARCH_API_KEY || search.braveApiKey || cfg.providers?.brave?.apiKey, fetchImpl: options.fetchImpl }),
+    new TavilySearchProvider({ apiKey: process.env.TAVILY_API_KEY || search.tavilyApiKey || cfg.providers?.tavily?.apiKey, fetchImpl: options.fetchImpl })
   ];
   if (search.allowPublicFallbacks !== false) {
-    providers.push(
-      new DuckDuckGoProvider({ fetchImpl: options.fetchImpl }),
-      new WikipediaProvider({ fetchImpl: options.fetchImpl })
-    );
+    providers.push(new DuckDuckGoProvider({ fetchImpl: options.fetchImpl }));
+    providers.push(new WikipediaProvider({ fetchImpl: options.fetchImpl }));
   }
   return new CompositeSearchProvider(providers);
 }
@@ -242,5 +345,6 @@ module.exports = {
   createSearchProvider,
   normalizeResult,
   hostnameAllowed,
+  getDomain,
   requestJson
 };

@@ -31,9 +31,11 @@ BACKEND_DIR = ROOT_DIR / "backend"
 STATE_DIR = ROOT_DIR / "cache" / "hazy-control"
 STATE_FILE = STATE_DIR / "processes.json"
 LOG_FILE = STATE_DIR / "controller-services.log"
-HAZY_HEALTH_URL = "http://127.0.0.1:8080"
+HAZY_HEALTH_URL = "http://localhost:8080/health"
 HAZY_WEBSITE_URL = "http://localhost:8080"
 OLLAMA_HEALTH_URL = "http://127.0.0.1:11434/api/tags"
+KOKORO_HEALTH_URL = "http://127.0.0.1:8880/health"
+STARTUP_TIMEOUT_SECONDS = 90.0
 
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -53,6 +55,7 @@ class ServiceStatus:
 class StackStatus:
     hazy: ServiceStatus
     ollama: ServiceStatus
+    kokoro: ServiceStatus
 
 
 class ControllerError(RuntimeError):
@@ -152,6 +155,10 @@ class HazyProcessManager:
             name = ""
         return "ollama" in name or "ollama serve" in command
 
+    def _is_verified_kokoro(self, process) -> bool:
+        command = self._normalized_command(process)
+        return "kokoro_server.py" in command
+
     def _service_status(
         self,
         name: str,
@@ -186,6 +193,7 @@ class HazyProcessManager:
         return StackStatus(
             hazy=self._service_status("hazy", 8080, self._is_verified_hazy),
             ollama=self._service_status("ollama", 11434, self._is_verified_ollama),
+            kokoro=self._service_status("kokoro", 8880, self._is_verified_kokoro),
         )
 
     def _require_stoppable(
@@ -237,16 +245,27 @@ class HazyProcessManager:
             self._terminate_tree(service.pid)
         self._set_managed_pid("ollama", None)
 
+    def stop_kokoro(self, allow_adopted: bool = False) -> None:
+        service = self.status().kokoro
+        self._require_stoppable(service, allow_adopted)
+        if service.pid:
+            self._terminate_tree(service.pid)
+        self._set_managed_pid("kokoro", None)
+
     def stop_all(self, allow_adopted: bool = False) -> None:
         current = self.status()
         self._require_stoppable(current.hazy, allow_adopted)
         self._require_stoppable(current.ollama, allow_adopted)
+        self._require_stoppable(current.kokoro, allow_adopted)
         if current.hazy.pid:
             self._terminate_tree(current.hazy.pid)
         if current.ollama.pid:
             self._terminate_tree(current.ollama.pid)
+        if current.kokoro.pid:
+            self._terminate_tree(current.kokoro.pid)
         self._set_managed_pid("hazy", None)
         self._set_managed_pid("ollama", None)
+        self._set_managed_pid("kokoro", None)
 
     def _spawn_hidden(self, command: Iterable[str], cwd: Path) -> int:
         self._ensure_state_dir()
@@ -275,7 +294,7 @@ class HazyProcessManager:
                     return True
             except (urllib.error.URLError, TimeoutError, OSError):
                 pass
-            self.sleep(0.4)
+            self.sleep(2.5)
         return False
 
     def start_ollama(self) -> ServiceStatus:
@@ -289,18 +308,23 @@ class HazyProcessManager:
             raise ControllerError("Ollama was not found on PATH.")
         pid = self._spawn_hidden([executable, "serve"], self.root_dir)
         self._set_managed_pid("ollama", pid)
-        if not self._wait_for_url(OLLAMA_HEALTH_URL, timeout=20):
-            raise ControllerError("Ollama did not become ready within 20 seconds.")
+        if not self._wait_for_url(OLLAMA_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
+            raise ControllerError(f"Ollama did not become ready within {int(STARTUP_TIMEOUT_SECONDS)} seconds.")
         return self.status().ollama
 
     def _hazy_command(self) -> list[str]:
-        node = self.which("node")
-        if node:
-            return [node, "server.js"]
-        python = self.which("python") or sys.executable
-        if python:
-            return [python, "server.py"]
-        raise ControllerError("Neither Node.js nor Python is available for Hazy.")
+        # Always run Python backend (server.py) instead of Node.js backend (server.js)
+        # Check if project backend virtual environment exists first
+        backend_venv_py = self.root_dir / ".venv-backend" / "Scripts" / "python.exe"
+        if backend_venv_py.exists():
+            return [str(backend_venv_py), "server.py"]
+
+        # Prefer the interpreter that is running the controller, falling back to system Pythons
+        candidates = [sys.executable, self.which("python"), self.which("python3")]
+        for python in candidates:
+            if python:
+                return [python, "server.py"]
+        raise ControllerError("Python is not available for Hazy.")
 
     def start_hazy(self) -> ServiceStatus:
         current = self.status().hazy
@@ -308,20 +332,56 @@ class HazyProcessManager:
             if not current.verified:
                 raise ControllerError(current.detail)
             return current
+        # Ensure Ollama is ready before starting Hazy
+        if not self._wait_for_url(OLLAMA_HEALTH_URL, timeout=5.0):
+            self.start_ollama()
         command = self._hazy_command()
         pid = self._spawn_hidden(command, self.backend_dir)
         self._set_managed_pid("hazy", pid)
-        if not self._wait_for_url(HAZY_HEALTH_URL, timeout=20):
-            raise ControllerError("Hazy did not become ready on port 8080 within 20 seconds.")
+        if not self._wait_for_url(HAZY_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
+            raise ControllerError(f"Hazy did not become ready on port 8080 within {int(STARTUP_TIMEOUT_SECONDS)} seconds.")
         return self.status().hazy
+
+    def start_kokoro(self) -> ServiceStatus:
+        current = self.status().kokoro
+        if current.running:
+            if not current.verified:
+                raise ControllerError(current.detail)
+            return current
+        
+        # Use the kokoro venv if it exists
+        kokoro_venv_py = self.root_dir / ".venv-kokoro" / "Scripts" / "python.exe"
+        if kokoro_venv_py.exists():
+            python = str(kokoro_venv_py)
+        else:
+            # Smart search for a compatible python version (3.10 to 3.13)
+            # This avoids picking up experimental versions like 3.14 that lack AI library support.
+            python = None
+            for version in ["3.12", "3.11", "3.13", "3.10"]:
+                found = self.which(f"python{version}") or self.which(f"py -{version}")
+                if found:
+                    python = found
+                    break
+            
+            if not python:
+                python = sys.executable
+            
+        pid = self._spawn_hidden([python, "kokoro_server.py"], self.root_dir)
+        self._set_managed_pid("kokoro", pid)
+        if not self._wait_for_url(KOKORO_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
+            raise ControllerError(f"Kokoro TTS did not become ready on port 8880 within {int(STARTUP_TIMEOUT_SECONDS)} seconds.")
+        return self.status().kokoro
 
     def ensure_all_ready(self) -> StackStatus:
         self.start_ollama()
-        if not self._wait_for_url(OLLAMA_HEALTH_URL, timeout=20):
+        if not self._wait_for_url(OLLAMA_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
             raise ControllerError("Ollama is running but its API is not ready.")
         self.start_hazy()
-        if not self._wait_for_url(HAZY_HEALTH_URL, timeout=20):
+        if not self._wait_for_url(HAZY_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
             raise ControllerError("Hazy is running but its website is not ready.")
+        self.start_kokoro()
+        if not self._wait_for_url(KOKORO_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
+            raise ControllerError("Kokoro TTS is running but its API is not ready.")
         return self.status()
 
     def restart_all(self, allow_adopted: bool = False) -> StackStatus:
@@ -374,6 +434,7 @@ def launch_gui(auto_start_and_open: bool = False) -> None:
     busy = tk.BooleanVar(value=False)
     hazy_status = tk.StringVar(value="Checking...")
     ollama_status = tk.StringVar(value="Checking...")
+    kokoro_status = tk.StringVar(value="Checking...")
     countdown = tk.StringVar(value="")
     countdown_job = {"id": None}
 
@@ -400,6 +461,7 @@ def launch_gui(auto_start_and_open: bool = False) -> None:
     status_frame.pack(fill="x", pady=(0, 14))
     tk.Label(status_frame, textvariable=hazy_status, bg="#171a21", fg="#ddd7ca", anchor="w", padx=12, pady=8).pack(fill="x")
     tk.Label(status_frame, textvariable=ollama_status, bg="#171a21", fg="#ddd7ca", anchor="w", padx=12, pady=8).pack(fill="x")
+    tk.Label(status_frame, textvariable=kokoro_status, bg="#171a21", fg="#ddd7ca", anchor="w", padx=12, pady=8).pack(fill="x")
 
     buttons = ttk.Frame(outer)
     buttons.pack(fill="x")
@@ -447,6 +509,7 @@ def launch_gui(auto_start_and_open: bool = False) -> None:
     def apply_status(status: StackStatus) -> None:
         hazy_status.set(format_service(status.hazy))
         ollama_status.set(format_service(status.ollama))
+        kokoro_status.set(format_service(status.kokoro))
 
     def pump_events() -> None:
         try:
@@ -495,7 +558,7 @@ def launch_gui(auto_start_and_open: bool = False) -> None:
         status = manager.status()
         external = [
             service.name.title()
-            for service in (status.hazy, status.ollama)
+            for service in (status.hazy, status.ollama, status.kokoro)
             if service.running and service.verified and not service.managed
         ]
         if not external:

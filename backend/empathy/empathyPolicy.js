@@ -1,5 +1,8 @@
+const { getHumanSupportGuide } = require("./humanEmotionalSupport");
+
 function selectEmpathyStrategy({ emotion, intent, intensity, safety }) {
   if (safety?.riskLevel === "tier_3") {
+    const guide = getHumanSupportGuide(emotion, safety, intensity);
     return {
       mode: "calm_supporter",
       template: "crisis_support_response",
@@ -8,9 +11,24 @@ function selectEmpathyStrategy({ emotion, intent, intensity, safety }) {
       useAnalogy: false,
       explanationDepth: "brief",
       questionLimit: 1,
-      reviewMode: "strict"
+      reviewMode: "strict",
+      supportGuide: guide   // raw human emotional support data injected
     };
   }
+
+  // Emotion-driven default modes (sourced from emotionDetector's recommendations)
+  // This fixes the previous disconnect where emotion.recommendedMode was ignored in most cases.
+  const emotionDefaultModes = {
+    confused: "patient_tutor",
+    frustrated: "direct_engineer",
+    sad: "calm_supporter",
+    anxious: "calm_supporter",
+    excited: "excited_collaborator",
+    proud: "excited_collaborator",
+    angry: "calm_supporter",
+    overwhelmed: "low_energy_soft",
+    curious: "warm_clear"
+  };
 
   const strategies = {
     "confused:technical_question": {
@@ -100,18 +118,34 @@ function selectEmpathyStrategy({ emotion, intent, intensity, safety }) {
     technical_question: "technical_response",
     direct_answer: "technical_response"
   };
+  // Dynamic question limit to reduce hardcoding: fewer questions when high intensity or crisis risk
+  const dynamicQuestionLimit = (intensity === "high" || intensity === "crisis" || safety?.riskLevel === "tier_2") ? 1 : 2;
+
   const fallback = {
-    mode: intent === "direct_answer" || intent === "debugging" ? "direct_engineer" : "warm_clear",
+    // Prefer emotion's recommended mode (fixes bug where proud/angry/etc fell back to warm_clear ignoring emotion rules)
+    mode: emotionDefaultModes[emotion] || (intent === "direct_answer" || intent === "debugging" ? "direct_engineer" : "warm_clear"),
     template: fallbackTemplate[intent] || "companion_conversation_response",
     empathyLead: intensity !== "low",
-    validateFirst: ["venting", "emotional_support", "expressing_confusion", "debugging"].includes(intent),
+    validateFirst: ["venting", "emotional_support", "expressing_confusion", "debugging", "sad", "angry", "anxious"].includes(intent) || ["sad", "angry", "anxious"].includes(emotion),
     useAnalogy: emotion === "confused",
     explanationDepth: intensity === "high" ? "focused" : "balanced",
-    questionLimit: 1,
+    questionLimit: dynamicQuestionLimit,
     reviewMode: "standard"
   };
 
-  return strategies[`${emotion}:${intent}`] || fallback;
+  const chosen = strategies[`${emotion}:${intent}`] || fallback;
+
+  // Always enrich emotional / support cases with raw human support pattern data
+  // so the planner and tone layer make HAZY think/generate like a real companion
+  // instead of filtered AI.
+  if (["calm_supporter", "low_energy_soft", "excited_collaborator"].includes(chosen.mode) ||
+      ["sad", "angry", "anxious", "overwhelmed", "grieving", "lonely"].includes(emotion) ||
+      intensity === "high" || intensity === "crisis" ||
+      safety?.riskLevel === "tier_2") {
+    chosen.supportGuide = getHumanSupportGuide(emotion, safety, intensity);
+  }
+
+  return chosen;
 }
 
 module.exports = { selectEmpathyStrategy };

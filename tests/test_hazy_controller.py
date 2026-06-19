@@ -145,6 +145,7 @@ class HazyControllerTests(unittest.TestCase):
                     "hazy", True, pid=10, verified=True, managed=False
                 ),
                 ollama=ServiceStatus("ollama", False),
+                kokoro=ServiceStatus("kokoro", False),
             )
         )
         manager._terminate_tree = Mock()
@@ -161,11 +162,13 @@ class HazyControllerTests(unittest.TestCase):
         manager.ensure_all_ready = Mock(side_effect=lambda: calls.append("ready") or StackStatus(
             hazy=ServiceStatus("hazy", True, verified=True),
             ollama=ServiceStatus("ollama", True, verified=True),
+            kokoro=ServiceStatus("kokoro", True, verified=True),
         ))
         manager.status = Mock(
             return_value=StackStatus(
                 hazy=ServiceStatus("hazy", True, verified=True),
                 ollama=ServiceStatus("ollama", True, verified=True),
+                kokoro=ServiceStatus("kokoro", True, verified=True),
             )
         )
 
@@ -178,10 +181,12 @@ class HazyControllerTests(unittest.TestCase):
         calls = []
         manager.start_ollama = Mock(side_effect=lambda: calls.append("start_ollama"))
         manager.start_hazy = Mock(side_effect=lambda: calls.append("start_hazy"))
+        manager.start_kokoro = Mock(side_effect=lambda: calls.append("start_kokoro"))
         manager._wait_for_url = Mock(side_effect=lambda url, timeout: calls.append(url) or True)
         expected = StackStatus(
             hazy=ServiceStatus("hazy", True, verified=True),
             ollama=ServiceStatus("ollama", True, verified=True),
+            kokoro=ServiceStatus("kokoro", True, verified=True),
         )
         manager.status = Mock(return_value=expected)
 
@@ -192,6 +197,8 @@ class HazyControllerTests(unittest.TestCase):
         self.assertIn("11434", calls[1])
         self.assertEqual(calls[2], "start_hazy")
         self.assertIn("8080", calls[3])
+        self.assertEqual(calls[4], "start_kokoro")
+        self.assertIn("8880", calls[5])
 
     def test_health_check_retries_until_service_is_ready(self):
         urlopen = Mock(

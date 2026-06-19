@@ -47,7 +47,7 @@
   function buildAgentEndpoint() {
     return window.location.protocol === 'file:'
       ? `${STATE.ollamaUrl}/api/chat`
-      : '/hazy/chat';
+      : '/hazy/agent';
   }
 
   async function callBackendTool(toolName, args) {
@@ -253,14 +253,24 @@
     enable() {
       this.isEnabled = true;
       localStorage.setItem('hazyAgentEnabled', 'true');
+      if (document.getElementById('pageNav') && typeof window.setHazyPage === 'function') {
+        window.setHazyPage('agent');
+      }
     }
 
     disable() {
       this.isEnabled = false;
       localStorage.setItem('hazyAgentEnabled', 'false');
+      if (document.getElementById('pageNav') && typeof window.setHazyPage === 'function' && this.isActive()) {
+        window.setHazyPage('chat');
+      }
     }
 
     isActive() {
+      if (document.getElementById('pageNav')) {
+        if (typeof window.getHazyPage === 'function') return window.getHazyPage() === 'agent';
+        return document.body?.dataset?.hazyPage === 'agent';
+      }
       return this.isEnabled;
     }
 
@@ -270,257 +280,6 @@
       }
       this.tools[tool.name] = tool;
       console.log(`✅ Registered tool: ${tool.name}`);
-    }
-
-    getToolsPrompt() {
-      const toolDescriptions = Object.values(this.tools).map(tool => {
-        return `Tool: ${tool.name}\nDescription: ${tool.description}\nParameters: ${JSON.stringify(tool.parameters, null, 2)}`;
-      }).join('\n\n');
-
-      return `You are Hazy, the user's local companion, and you have access to the following tools. When you need to use a tool, respond with a JSON object in this EXACT format:
-
-{
-  "thought": "Why I'm using this tool",
-  "tool": "tool_name",
-  "parameters": { "param": "value" }
-}
-
-After using a tool, you'll receive the result and can use another tool or provide a final answer.
-
-AVAILABLE TOOLS:
-${toolDescriptions}
-
-IMPORTANT:
-- Keep presenting yourself as Hazy, a companion who can help with support, thinking, and practical tasks.
-- Do not use old assistant-style labels, model labels, bot labels, or mechanical self-descriptions.
-- Only use tools when necessary
-- Think step by step
-- Use multiple tools if needed to solve complex problems
-- Always explain your reasoning in the "thought" field
-- When you have enough information, provide a final answer without calling more tools`;
-    }
-
-    parseToolCall(text) {
-      // Try to extract JSON from the response
-      const jsonMatch = text.match(/\{[\s\S]*"tool"[\s\S]*\}/);
-      if (!jsonMatch) return null;
-
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.tool && this.tools[parsed.tool]) {
-          return parsed;
-        }
-      } catch (e) {
-        console.error('Failed to parse tool call:', e);
-      }
-
-      return null;
-    }
-
-    async executeTool(toolName, parameters) {
-      const tool = this.tools[toolName];
-      if (!tool) {
-        return {
-          success: false,
-          error: `Tool "${toolName}" not found`
-        };
-      }
-
-      try {
-        const result = await tool.execute(parameters);
-        
-        // Log tool call
-        this.toolCallHistory.push({
-          tool: toolName,
-          parameters,
-          result,
-          timestamp: new Date().toISOString()
-        });
-
-        return result;
-      } catch (error) {
-        return {
-          success: false,
-          error: error.message
-        };
-      }
-    }
-
-    async processAgentLoop(userMessage, sendMessageFn) {
-      if (!this.isEnabled) {
-        return { useAgent: false };
-      }
-
-      this.toolCallHistory = [];
-      let iteration = 0;
-      const messages = [{ role: 'user', content: userMessage }];
-
-      // Add tool instructions to system prompt
-      const agentPrompt = this.getToolsPrompt();
-      const originalSystemPrompt = STATE.systemPrompt;
-      STATE.systemPrompt = agentPrompt + '\n\n' + originalSystemPrompt;
-
-      try {
-        while (iteration < this.maxIterations) {
-          iteration++;
-
-          // Get Hazy response
-          const response = await this.getAIResponse(messages);
-          
-          // Check if response contains a tool call
-          const toolCall = this.parseToolCall(response);
-          messages.push({ role: 'assistant', content: response });
-
-          if (!toolCall) {
-            // No tool call - this is the final answer
-            return {
-              useAgent: true,
-              finalResponse: response,
-              toolCalls: this.toolCallHistory
-            };
-          }
-
-          // Execute the tool
-          this.displayToolCall(toolCall);
-          const toolResult = await this.executeTool(toolCall.tool, toolCall.parameters);
-          this.displayToolResult(toolCall.tool, toolResult);
-
-          // Prepare next message with tool result
-          messages.push({
-            role: 'user',
-            content: `Tool result for ${toolCall.tool}: ${JSON.stringify(toolResult)}\n\nContinue reasoning. If you need another tool, respond with JSON only. Otherwise provide the final answer.`
-          });
-        }
-
-        // Max iterations reached
-        return {
-          useAgent: true,
-          finalResponse: 'Agent reached maximum iterations. Here\'s what I found:\n\n' + 
-                        this.summarizeToolCalls(),
-          toolCalls: this.toolCallHistory
-        };
-
-      } catch (error) {
-        console.error('Agent loop error:', error);
-        return {
-          useAgent: false,
-          error: error.message
-        };
-      } finally {
-        STATE.systemPrompt = originalSystemPrompt;
-      }
-    }
-
-    async getAIResponse(messageInput) {
-      const savedModel = getActiveAgentModel();
-      const endpoint = buildAgentEndpoint();
-      const messages = Array.isArray(messageInput)
-        ? messageInput
-        : [{ role: 'user', content: String(messageInput) }];
-
-      const requestBody = {
-        model: endpoint === '/hazy/chat' ? savedModel : STATE.model,
-        messages: [
-          { role: 'system', content: STATE.systemPrompt },
-          ...messages
-        ],
-        stream: false,
-        options: {
-          temperature: STATE.temperature,
-          num_predict: Math.min(STATE.maxTokens || 2048, 2048),
-          max_tokens: Math.min(STATE.maxTokens || 2048, 2048),
-          top_p: STATE.topP,
-          top_k: STATE.topK,
-          repeat_penalty: STATE.repeatPenalty,
-          num_ctx: STATE.contextSize
-        }
-      };
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => response.statusText);
-        throw new Error(`Agent request failed (${response.status}): ${errorText}`);
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-
-      if (contentType.includes('application/json')) {
-        const data = await response.json();
-        return data.message?.content || data.choices?.[0]?.message?.content || '';
-      }
-
-      const rawText = await response.text();
-      const lines = rawText.split('\n').map(line => line.trim()).filter(Boolean);
-      let combined = '';
-
-      for (const line of lines) {
-        try {
-          const parsed = JSON.parse(line);
-          combined += parsed.message?.content || '';
-        } catch (error) {
-          // Ignore malformed streaming fragments and keep best-effort output.
-        }
-      }
-
-      return combined || rawText.trim();
-    }
-
-    displayToolCall(toolCall) {
-      const chatBox = document.getElementById('chatBox');
-      if (!chatBox) return;
-
-      const toolDiv = document.createElement('div');
-      toolDiv.className = 'message assistant tool-call';
-      toolDiv.innerHTML = `
-        <div class="tool-call-header">
-          <span class="tool-icon">🔧</span>
-          <span class="tool-name">Using: ${toolCall.tool}</span>
-        </div>
-        <div class="tool-thought">${escapeHtml(toolCall.thought)}</div>
-        <div class="tool-params">
-          <strong>Parameters:</strong>
-          <pre>${JSON.stringify(toolCall.parameters, null, 2)}</pre>
-        </div>
-      `;
-      
-      chatBox.appendChild(toolDiv);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    displayToolResult(toolName, result) {
-      const chatBox = document.getElementById('chatBox');
-      if (!chatBox) return;
-
-      const resultDiv = document.createElement('div');
-      resultDiv.className = 'message assistant tool-result';
-      
-      const resultText = result.success 
-        ? (typeof result.result === 'object' ? JSON.stringify(result.result, null, 2) : result.result)
-        : result.error;
-
-      resultDiv.innerHTML = `
-        <div class="tool-result-header">
-          <span class="tool-icon">${result.success ? '✅' : '❌'}</span>
-          <span class="tool-name">Result: ${toolName}</span>
-        </div>
-        <div class="tool-result-content">
-          <pre>${escapeHtml(String(resultText))}</pre>
-        </div>
-      `;
-      
-      chatBox.appendChild(resultDiv);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    summarizeToolCalls() {
-      return this.toolCallHistory.map((call, idx) => {
-        return `${idx + 1}. ${call.tool}: ${call.result.success ? '✅ ' + call.result.result : '❌ ' + call.result.error}`;
-      }).join('\n');
     }
 
     getToolsList() {
@@ -548,6 +307,14 @@ IMPORTANT:
     }
 
     createUI() {
+      // Hazy is page-driven now: the sidebar owns Chat vs Agentic Mode.
+      // Keep this module only as a tool registry/legacy compatibility layer.
+      if (document.getElementById('pageNav')) {
+        const legacyIndicator = document.getElementById('agentIndicator');
+        if (legacyIndicator) legacyIndicator.remove();
+        return;
+      }
+
       const mountTarget = document.querySelector('.header-right')
         || document.querySelector('.input-mode-bar')
         || document.querySelector('.conversation-header')
@@ -662,13 +429,17 @@ IMPORTANT:
     }
 
     openModal() {
-      this.modal.classList.add('open');
+      if (!this.modal && typeof window.setHazyPage === 'function') {
+        window.setHazyPage('agent');
+        return;
+      }
+      this.modal?.classList.add('open');
       this.refreshToolsList();
       this.refreshHistory();
     }
 
     closeModal() {
-      this.modal.classList.remove('open');
+      this.modal?.classList.remove('open');
     }
 
     refreshToolsList() {
@@ -719,7 +490,8 @@ IMPORTANT:
     }
 
     loadState() {
-      const enabled = localStorage.getItem('hazyAgentEnabled') === 'true';
+      const pageDriven = Boolean(document.getElementById('pageNav'));
+      const enabled = pageDriven ? this.agent.isActive() : localStorage.getItem('hazyAgentEnabled') === 'true';
       const maxIterations = localStorage.getItem('hazyAgentMaxIterations') || '5';
       
       const toggle = this.modal?.querySelector('#agentEnableToggle');
@@ -728,8 +500,8 @@ IMPORTANT:
       if (toggle) toggle.checked = enabled;
       if (iterInput) iterInput.value = maxIterations;
       
-      if (enabled) this.agent.enable();
-      this.agent.maxIterations = parseInt(maxIterations);
+      if (!pageDriven && enabled) this.agent.enable();
+      this.agent.maxIterations = parseInt(maxIterations, 10) || 5;
       
       this.updateIndicator();
     }

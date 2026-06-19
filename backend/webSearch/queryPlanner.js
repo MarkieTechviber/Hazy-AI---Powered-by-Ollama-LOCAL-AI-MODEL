@@ -2,7 +2,7 @@
 
 const { extractDomains } = require('./searchRouter');
 
-const VALID_INTENTS = new Set(['primary', 'official', 'news', 'docs', 'comparison', 'fact_check']);
+const VALID_INTENTS = new Set(['primary', 'official', 'news', 'docs', 'comparison', 'fact_check', 'fresh']);
 const QUERY_NOISE = /\b(can|could|would|please|you|search|browse|look\s*up|lookup|google|online|internet|web|tell me|show me|give me)\b/gi;
 
 function cleanQuery(text = '') {
@@ -13,7 +13,7 @@ function cleanQuery(text = '') {
     .replace(/\s+/g, ' ')
     .replace(/^[,.:;?!\s]+|[,.:;?!\s]+$/g, '')
     .trim()
-    .slice(0, 300);
+    .slice(0, 320);
 }
 
 function previousUserSubject(messages = []) {
@@ -27,8 +27,8 @@ function previousUserSubject(messages = []) {
 
 function resolveUserQuestion(userMessage = '', messages = []) {
   let query = cleanQuery(userMessage);
-  const vague = /\b(it|that|this|those|them|the source|the link)\b/i.test(userMessage)
-    && query.split(/\s+/).length <= 8;
+  const vague = /\b(it|that|this|those|them|the source|the link|its|their)\b/i.test(userMessage)
+    && query.split(/\s+/).length <= 10;
   if (vague) {
     const previous = previousUserSubject(messages);
     if (previous) query = `${previous} ${query}`;
@@ -36,12 +36,18 @@ function resolveUserQuestion(userMessage = '', messages = []) {
   return query || String(userMessage || '').trim();
 }
 
-function addQuery(queries, query, intent, priority) {
+function addQuery(queries, query, intent, priority, options = {}) {
   const value = cleanQuery(query);
   if (value.length < 4) return;
   const key = value.toLowerCase();
   if (queries.some((item) => item.query.toLowerCase() === key)) return;
-  queries.push({ query: value, intent, priority });
+  queries.push({ query: value, intent, priority, ...options });
+}
+
+function addDomainQueries(queries, domains, question, intent = 'official') {
+  for (const domain of domains || []) {
+    addQuery(queries, `site:${domain} ${question}`, intent, 115, { domain });
+  }
 }
 
 function planQueries(userMessage, decision, options = {}) {
@@ -53,34 +59,41 @@ function planQueries(userMessage, decision, options = {}) {
   const year = new Date().getFullYear();
   const queries = [];
 
-  addQuery(queries, question, 'primary', 100);
-  if (decision.mode === 'technical_docs') {
-    addQuery(queries, `${question} official documentation`, 'docs', 95);
-    addQuery(queries, `${question} release notes changelog ${year}`, 'official', 90);
+  if (decision.mode === 'domain_limited') {
+    addDomainQueries(queries, domains, question, decision.category === 'technical' ? 'docs' : 'official');
+    addQuery(queries, question, 'primary', 60);
+  } else if (decision.mode === 'official_only') {
+    addQuery(queries, `${question} official documentation`, 'docs', 105);
+    addQuery(queries, `${question} official source`, 'official', 100);
+    addQuery(queries, `${question} release notes changelog ${year}`, 'fresh', 90);
     addQuery(queries, `${question} GitHub`, 'fact_check', 70);
-  } else if (decision.mode === 'news') {
-    addQuery(queries, `${question} ${year}`, 'news', 95);
-    addQuery(queries, `${question} official statement`, 'official', 85);
-    addQuery(queries, `${question} fact check`, 'fact_check', 75);
-  } else if (decision.mode === 'shopping') {
-    addQuery(queries, `${question} official price specifications`, 'official', 90);
-    addQuery(queries, `${question} comparison reviews`, 'comparison', 80);
-    addQuery(queries, `${question} availability ${year}`, 'primary', 75);
+  } else if (decision.mode === 'fresh_required') {
+    addQuery(queries, `${question} ${year}`, 'fresh', 105);
+    addQuery(queries, `${question} latest update`, 'news', 95);
+    addQuery(queries, `${question} official source`, 'official', 85);
+    addQuery(queries, `${question} price availability schedule`, 'primary', 70);
+  } else if (decision.mode === 'research_mode') {
+    addQuery(queries, question, 'primary', 100);
+    addQuery(queries, `${question} official source`, 'official', 98);
+    addQuery(queries, `${question} ${year} latest`, 'fresh', 94);
+    addQuery(queries, `${question} analysis`, 'primary', 82);
+    addQuery(queries, `${question} criticism limitations`, 'comparison', 76);
+    addQuery(queries, `${question} fact check`, 'fact_check', 72);
+    addQuery(queries, `${question} primary source`, 'official', 70);
   } else if (decision.mode === 'deep_web') {
+    addQuery(queries, question, 'primary', 100);
     addQuery(queries, `${question} official source`, 'official', 95);
     addQuery(queries, `${question} analysis`, 'primary', 85);
-    addQuery(queries, `${question} criticism limitations`, 'comparison', 75);
-    addQuery(queries, `${question} fact check`, 'fact_check', 70);
+    addQuery(queries, `${question} fact check`, 'fact_check', 75);
   } else {
-    addQuery(queries, `${question} official source`, 'official', 85);
-    if (decision.freshnessRequired) addQuery(queries, `${question} ${year}`, 'news', 80);
-    if (decision.needsCitations) addQuery(queries, `${question} evidence`, 'fact_check', 70);
+    addQuery(queries, question, 'primary', 100);
+    addQuery(queries, `${question} official source`, 'official', 88);
+    if (decision.freshnessRequired) addQuery(queries, `${question} ${year}`, 'fresh', 84);
+    if (decision.needsCitations) addQuery(queries, `${question} evidence`, 'fact_check', 72);
   }
 
-  if (domains.length) {
-    for (const domain of domains) {
-      addQuery(queries, `site:${domain} ${question}`, decision.mode === 'technical_docs' ? 'docs' : 'official', 110);
-    }
+  if (domains.length && decision.mode !== 'domain_limited') {
+    addDomainQueries(queries, domains, question, decision.mode === 'official_only' ? 'docs' : 'official');
   }
 
   return queries

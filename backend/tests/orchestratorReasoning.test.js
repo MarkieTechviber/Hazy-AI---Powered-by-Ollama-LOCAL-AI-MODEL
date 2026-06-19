@@ -5,13 +5,13 @@ const assert = require('node:assert/strict');
 
 const { prepareChatRequest } = require('../orchestrator');
 
-test('prepareChatRequest normalizes OpenAI reasoning metadata', () => {
-  const { analysis, providerBody } = prepareChatRequest({
+test('prepareChatRequest normalizes OpenAI reasoning metadata', async () => {
+  const { analysis, providerBody } = await prepareChatRequest({
     model: 'openai/o3',
     hazy: {
       mode: 'code',
       reasoningMode: 'deep',
-      showReasoningSummary: true
+      showReasoningSummary: false
     },
     messages: [
       { role: 'user', content: 'Refactor this JavaScript app and verify the routing edge cases.' }
@@ -22,17 +22,17 @@ test('prepareChatRequest normalizes OpenAI reasoning metadata', () => {
   assert.equal(providerBody.hazyReasoning.mode, 'deep');
   assert.equal(providerBody.hazyReasoning.level, 'agentic');
   assert.equal(providerBody.hazyReasoning.effort, 'high');
-  assert.equal(providerBody.hazyReasoning.publicSummaryEnabled, true);
+  assert.equal(providerBody.hazyReasoning.publicSummaryEnabled, false);
   assert.match(analysis.prompt, /Hazy extended reasoning policy/);
 });
 
-test('prepareChatRequest falls back to Hazy reasoning metadata for local providers', () => {
-  const { providerBody } = prepareChatRequest({
+test('prepareChatRequest falls back to Hazy reasoning metadata for local providers', async () => {
+  const { providerBody } = await prepareChatRequest({
     model: 'llama3.2',
     hazy: {
       mode: 'build',
       reasoningMode: 'auto',
-      showReasoningSummary: true
+      showReasoningSummary: false
     },
     messages: [
       { role: 'user', content: 'Build a small restaurant website with menu and booking sections.' }
@@ -41,12 +41,12 @@ test('prepareChatRequest falls back to Hazy reasoning metadata for local provide
 
   assert.equal(providerBody.hazyReasoning.nativeProvider, 'hazy');
   assert.equal(providerBody.hazyReasoning.mode, 'auto');
-  assert.equal(providerBody.hazyReasoning.level, 'structured');
-  assert.equal(providerBody.hazyReasoning.effort, 'medium');
+  assert.equal(providerBody.hazyReasoning.level, 'light');
+  assert.equal(providerBody.hazyReasoning.effort, 'low');
 });
 
-test('prepareChatRequest treats unknown provider strings as Hazy-managed reasoning', () => {
-  const { providerBody } = prepareChatRequest({
+test('prepareChatRequest treats unknown provider strings as Hazy-managed reasoning', async () => {
+  const { providerBody } = await prepareChatRequest({
     model: 'typo-provider/some-new-model',
     hazy: { mode: 'chat', reasoningMode: 'auto' },
     messages: [{ role: 'user', content: 'Explain this feature briefly.' }]
@@ -56,20 +56,20 @@ test('prepareChatRequest treats unknown provider strings as Hazy-managed reasoni
   assert.equal(providerBody.hazyReasoning.mode, 'auto');
 });
 
-test('prepareChatRequest handles null or empty model values with default Hazy reasoning', () => {
+test('prepareChatRequest handles null or empty model values with default Hazy reasoning', async () => {
   for (const model of [null, '']) {
-    const { providerBody } = prepareChatRequest({
+    const { providerBody } = await prepareChatRequest({
       model,
       hazy: { mode: 'chat', reasoningMode: 'auto' },
       messages: [{ role: 'user', content: 'Say hello.' }]
     });
 
     assert.equal(providerBody.hazyReasoning.nativeProvider, 'hazy');
-    assert.equal(providerBody.hazyReasoning.level, 'direct');
+    assert.equal(providerBody.hazyReasoning.level, 'light');
   }
 });
 
-test('prepareChatRequest applies context-window management before provider routing', () => {
+test('prepareChatRequest applies context-window management before provider routing', async () => {
   const messages = [{ role: 'system', content: 'You are Hazy.' }];
   for (let index = 0; index < 18; index += 1) {
     messages.push({
@@ -79,7 +79,7 @@ test('prepareChatRequest applies context-window management before provider routi
   }
   messages.push({ role: 'user', content: 'Keep this latest request.' });
 
-  const { analysis, providerBody } = prepareChatRequest({
+  const { analysis, providerBody } = await prepareChatRequest({
     model: 'ollama/llama3.2',
     hazy: { mode: 'chat', reasoningMode: 'auto' },
     options: { num_ctx: 2048, num_predict: 512 },

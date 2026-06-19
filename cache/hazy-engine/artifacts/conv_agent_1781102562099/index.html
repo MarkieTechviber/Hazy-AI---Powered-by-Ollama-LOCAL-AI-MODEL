@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hazy Tetris</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="stats">
+            <h1>TETRIS</h1>
+            <div class="stat-box">
+                <p>SCORE</p>
+                <span id="score">0</span>
+            </div>
+            <div class="stat-box">
+                <p>LINES</p>
+                <span id="lines">0</span>
+            </div>
+            <button id="start-btn">START GAME</button>
+        </div>
+        <canvas id="tetris" width="240" height="400"></canvas>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>

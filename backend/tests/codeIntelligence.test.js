@@ -42,3 +42,24 @@ test('analyzeCodeRequest stays non-coding below intent threshold', () => {
 
   assert.equal(result.isCodingRequest, false);
 });
+
+test('analyzeCodeRequest propagates currentProject and detects edit iteration', () => {
+  const mockProject = {
+    project: 'My Website',
+    files: [
+      { filename: 'index.html', content: '<h1>Hello</h1>' }
+    ]
+  };
+
+  const result = analyzeCodeRequest(
+    'Please fix the button size in index.html.',
+    [],
+    null,
+    null,
+    mockProject
+  );
+
+  assert.equal(result.isCodingRequest, true);
+  assert.equal(result.isEditIteration, true);
+  assert.equal(result.currentProject, mockProject);
+});

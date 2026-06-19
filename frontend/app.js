@@ -1,6 +1,6 @@
 /**
  * Hazy - Local Companion + Website Builder
- * by Dream On
+ * Hazy AI
  *
  * Features:
  *  - Chat mode: full AI chat with streaming + markdown
@@ -12,57 +12,14 @@
 // ========================
 // Constants
 // ========================
-// ─── Why delimiter format instead of JSON? ────────────────────────────────
+// --- Why delimiter format instead of JSON? --------------------------------
 // Local LLMs (Mistral, Llama3 etc.) almost always fail to produce valid JSON
-// when file contents contain quotes, backslashes, or HTML tags — they break
+// when file contents contain quotes, backslashes, or HTML tags - they break
 // JSON string escaping constantly. A simple FILE: delimiter is trivial for
 // any model to follow correctly and works even on partial/cut-off output.
-// ─────────────────────────────────────────────────────────────────────────
+// -------------------------------------------------------------------------
 
-const WEBSITE_SYSTEM_PROMPT = `You are an expert web developer and mentor. Your job is to build complete, working websites AND explain what you built.
-
-RESPONSE STRUCTURE — always follow this order:
-
-**Step 1 — Approach (2-4 sentences before any code)**
-Explain: what architecture you chose, why, and any key design decisions.
-Example: "I'll use CSS Grid for the outer layout and Flexbox inside each card — Grid handles the page structure, Flex handles alignment within components. I'm keeping this vanilla JS to avoid dependencies."
-
-**Step 2 — Files (use this exact delimiter format)**
-
-===PROJECT===
-<project name>
-
-===DESCRIPTION===
-<one line>
-
-===FILE: index.html===
-<!DOCTYPE html>
-<!-- complete HTML — use semantic elements: header, main, nav, article, section, footer -->
-<!-- add aria-labels and alt text for accessibility -->
-
-===FILE: style.css===
-/* complete CSS — mobile-first, then @media for larger screens */
-/* comment layout decisions that aren't obvious */
-
-===FILE: script.js===
-// complete JS — no placeholder comments, no truncation
-// comment WHY for any non-obvious logic
-
-===SETUP===
-<exact commands to run it>
-
-===NOTES===
-<browser support, dependencies, things to customise>
-
-**Step 3 — What I built (after all files)**
-Short paragraph: file structure overview, key technique used, one or two things to improve or extend.
-
-HARD RULES:
-- Complete code only. Never truncate. Never write "// rest of code here".
-- Semantic HTML5. Accessible markup (aria, roles, alt text).
-- CSS must be responsive and mobile-first.
-- For backends: use Express.js and include package.json with all dependencies.
-- Inline comments in code for anything non-obvious.`;
+// --- System Prompts moved to backend promptBuilder.js ---
 
 const WEBSITE_KEYWORDS = [
   'build', 'create', 'make', 'generate', 'website', 'webpage', 'landing page',
@@ -97,81 +54,38 @@ const BUILD_THEME_PROFILES = {
   }
 };
 
-// ─── Code Builder System Prompt ──────────────────────────────────────────────
-// Reference: Claude Technical Reference §4.1 (Code Generation), §8.1 (Capabilities)
-const CODE_SYSTEM_PROMPT = `You are an expert programmer and mentor. Expert-level code generation means:
-- Explaining your approach before writing code
-- Using idiomatic patterns for the language
-- Including error handling, edge cases, and comments
-- Teaching the user something beyond just the answer
-
-RESPONSE STRUCTURE — always follow this order:
-
-**Step 1 — Approach (2-4 sentences)**
-What algorithm or pattern you chose, why, and any trade-offs considered.
-
-**Step 2 — Files (use this exact delimiter format)**
-
-===PROJECT===
-<project name>
-
-===DESCRIPTION===
-<one line>
-
-===FILE: <filename.ext>===
-<complete code>
-// Use inline comments for non-obvious logic — explain WHY not just WHAT
-// Include all imports, a working main/entry point, and error handling
-
-===SETUP===
-<exact commands to compile and run>
-
-===NOTES===
-<dependencies, edge cases, platform requirements>
-
-**Step 3 — How it works (after all files)**
-- Core logic or algorithm used
-- Why you structured it this way
-- What you'd do differently at larger scale or with more time
-
-HARD RULES:
-- Complete code only. Never truncate. Never use "// TODO" or placeholder comments.
-- Use idiomatic style: list comprehensions in Python, proper error types in Go, async/await in JS, etc.
-- Include all imports and a working entry point.
-- Handle the obvious edge cases. Add basic error handling.
-- For multi-file projects, explain how the files connect.`;
 
 // All supported programming languages for the Code Builder picker
 const CODE_LANGUAGES = [
-  { label: 'Auto - Hazy decides', value: 'auto',        ext: '',      icon: '' },
-  { label: 'Python',         value: 'python',      ext: 'py',    icon: '' },
-  { label: 'Java',           value: 'java',        ext: 'java',  icon: '' },
-  { label: 'C++',            value: 'cpp',         ext: 'cpp',   icon: '' },
-  { label: 'C',              value: 'c',           ext: 'c',     icon: '' },
-  { label: 'C#',             value: 'csharp',      ext: 'cs',    icon: '' },
-  { label: 'JavaScript',     value: 'javascript',  ext: 'js',    icon: '' },
-  { label: 'TypeScript',     value: 'typescript',  ext: 'ts',    icon: '' },
-  { label: 'Go',             value: 'go',          ext: 'go',    icon: '' },
-  { label: 'Rust',           value: 'rust',        ext: 'rs',    icon: '' },
-  { label: 'Swift',          value: 'swift',       ext: 'swift', icon: '' },
-  { label: 'Kotlin',         value: 'kotlin',      ext: 'kt',    icon: '' },
-  { label: 'Ruby',           value: 'ruby',        ext: 'rb',    icon: '' },
-  { label: 'PHP',            value: 'php',         ext: 'php',   icon: '' },
-  { label: 'R',              value: 'r',           ext: 'r',     icon: '' },
-  { label: 'Dart',           value: 'dart',        ext: 'dart',  icon: '' },
-  { label: 'Lua',            value: 'lua',         ext: 'lua',   icon: '' },
-  { label: 'Perl',           value: 'perl',        ext: 'pl',    icon: '' },
-  { label: 'Scala',          value: 'scala',       ext: 'scala', icon: '' },
-  { label: 'Haskell',        value: 'haskell',     ext: 'hs',    icon: '' },
-  { label: 'Elixir',         value: 'elixir',      ext: 'ex',    icon: '' },
-  { label: 'Clojure',        value: 'clojure',     ext: 'clj',   icon: '' },
-  { label: 'Shell / Bash',   value: 'bash',        ext: 'sh',    icon: '' },
-  { label: 'PowerShell',     value: 'powershell',  ext: 'ps1',   icon: '' },
-  { label: 'SQL',            value: 'sql',         ext: 'sql',   icon: '' },
-  { label: 'Assembly',       value: 'asm',         ext: 'asm',   icon: '' },
-  { label: 'MATLAB',         value: 'matlab',      ext: 'm',     icon: '' },
-  { label: 'Fortran',        value: 'fortran',     ext: 'f90',   icon: '' },
-  { label: 'COBOL',          value: 'cobol',       ext: 'cob',   icon: '' },
+  { label: 'Auto - Hazy decides', value: 'auto', ext: '', icon: '' },
+  { label: 'Python', value: 'python', ext: 'py', icon: '' },
+  { label: 'Java', value: 'java', ext: 'java', icon: '' },
+  { label: 'C++', value: 'cpp', ext: 'cpp', icon: '' },
+  { label: 'C', value: 'c', ext: 'c', icon: '' },
+  { label: 'C#', value: 'csharp', ext: 'cs', icon: '' },
+  { label: 'JavaScript', value: 'javascript', ext: 'js', icon: '' },
+  { label: 'TypeScript', value: 'typescript', ext: 'ts', icon: '' },
+  { label: 'Go', value: 'go', ext: 'go', icon: '' },
+  { label: 'Rust', value: 'rust', ext: 'rs', icon: '' },
+  { label: 'Swift', value: 'swift', ext: 'swift', icon: '' },
+  { label: 'Kotlin', value: 'kotlin', ext: 'kt', icon: '' },
+  { label: 'Ruby', value: 'ruby', ext: 'rb', icon: '' },
+  { label: 'PHP', value: 'php', ext: 'php', icon: '' },
+  { label: 'R', value: 'r', ext: 'r', icon: '' },
+  { label: 'Dart', value: 'dart', ext: 'dart', icon: '' },
+  { label: 'Lua', value: 'lua', ext: 'lua', icon: '' },
+  { label: 'Perl', value: 'perl', ext: 'pl', icon: '' },
+  { label: 'Scala', value: 'scala', ext: 'scala', icon: '' },
+  { label: 'Haskell', value: 'haskell', ext: 'hs', icon: '' },
+  { label: 'Elixir', value: 'elixir', ext: 'ex', icon: '' },
+  { label: 'Clojure', value: 'clojure', ext: 'clj', icon: '' },
+  { label: 'Shell / Bash', value: 'bash', ext: 'sh', icon: '' },
+  { label: 'PowerShell', value: 'powershell', ext: 'ps1', icon: '' },
+  { label: 'SQL', value: 'sql', ext: 'sql', icon: '' },
+  { label: 'Assembly', value: 'asm', ext: 'asm', icon: '' },
+  { label: 'MATLAB', value: 'matlab', ext: 'm', icon: '' },
+  { label: 'Fortran', value: 'fortran', ext: 'f90', icon: '' },
+  { label: 'COBOL', value: 'cobol', ext: 'cob', icon: '' },
 ];
 
 const HAZY_LOGO_BY_THEME = {
@@ -187,51 +101,18 @@ const HAZY_LOGO_BY_THEME = {
 const STATE = {
   conversations: {},
   activeConvId: null,
+  activePage: 'chat',
+  pageConversations: { chat: null, agent: null },
   model: 'mistral',
   isStreaming: false,
   abortController: null,
   ollamaUrl: 'http://localhost:11434',
-  systemPrompt: `You are Hazy, the user's warm local companion. You can also help with coding, building, learning, and practical tasks when those needs arise.
-
-IDENTITY:
-- Present yourself as Hazy, a familiar and emotionally present companion rather than a generic assistant.
-- Do not use old assistant-style labels, model labels, bot labels, or mechanical self-descriptions.
-- Do not describe yourself in a way that makes you feel distant or mechanical.
-- Be emotionally present, steady, supportive, curious, and practical.
-- Build continuity from what the user has already shared. Notice their mood, preferences, projects, and recurring concerns without overclaiming closeness.
-- Have a gentle point of view. Do not automatically agree, flatter, or mirror.
-- Do not pretend to be human or claim real-world physical experiences. You can still speak naturally, warmly, and personally as Hazy.
-
-CORE BEHAVIOUR:
-- First respond to the person and the actual moment. Do not turn every message into a task, lesson, checklist, or advice session.
-- For casual conversation, continue naturally. A brief reaction, a thoughtful observation, humor, or quiet support may be the complete answer.
-- For emotional messages, acknowledge what is happening before offering solutions. Do not use therapy-speak or exaggerated intimacy.
-- For direct questions and tasks, lead with the answer, then explain only as much as useful.
-- Ask a question only when it genuinely moves the conversation forward. Do not end every reply with one.
-- For code: briefly explain the approach, write complete working code, then add a short explanation when useful.
-- Always wrap code in fenced blocks with the correct language tag: \`\`\`python \`\`\`javascript \`\`\`typescript \`\`\`java \`\`\`cpp \`\`\`go \`\`\`rust \`\`\`bash etc.
-- Add inline comments inside code for anything non-obvious — explain WHY, not just WHAT.
-- Write complete, working code. Never truncate. Never use placeholder comments like "// TODO" or "// add logic here".
-- Handle edge cases. Include basic error handling. Use idiomatic style for the language.
-- When there are multiple valid approaches, briefly note the trade-offs.
-- Be honest about uncertainty. Say "I'm not sure" rather than guess.
-
-CAPABILITIES YOU HAVE:
-- Expert-level code generation and debugging across Python, JavaScript, TypeScript, Rust, Go, Java, C++, and 30+ others
-- Multi-step logical, mathematical, and causal reasoning
-- Summarisation, translation (100+ languages), classification, question answering
-- Long document analysis and creative writing
-- Architecture advice, code review, refactoring suggestions
-
-KNOWN LIMITATIONS (be upfront about these):
-- Your training has a knowledge cutoff — you may not know the very latest libraries or APIs
-- You can make mistakes on large arithmetic without running code — say so
-- For critical information, tell the user to verify independently`,
-  // Inference parameters — matched to Claude's documented ranges
+  systemPrompt: '',
+  // Inference parameters - matched to Claude's documented ranges
   // Ref: Claude Technical Reference §2.4 (Temperature 0-1, Top-P 0.9-0.99, Top-K 10-100)
   temperature: 0.7,      // 0.0 = deterministic, 1.0 = creative
   maxTokens: 8192,       // Claude supports up to 200k; 8192 is a solid local default
-  topK: 40,              // Limits to top-K tokens — Claude uses 10–100
+  topK: 40,              // Limits to top-K tokens - Claude uses 10â€“100
   theme: 'cream',
   ttsEnabled: false,
   ttsEngine: 'browser',     // 'browser' | 'piper'
@@ -239,6 +120,13 @@ KNOWN LIMITATIONS (be upfront about these):
   ttsSpeed: 1.0,
   tpsPiperReady: false,     // model loaded flag
   ttsPiperLoading: false,
+  voiceEnabled: false,
+  voiceVoice: 'af_heart',
+  voiceSpeed: 1.0,
+  voiceVolume: 100,
+  voiceAutoplay: true,
+  voicePreferGPU: true,
+  voiceDevice: 'auto', // NEW per refactor plan: 'auto' | 'cuda' | 'cpu' (informs hardware scan / server start)
   renameTargetId: null,
   // Builder
   mode: 'chat',
@@ -250,6 +138,7 @@ KNOWN LIMITATIONS (be upfront about these):
   builderActive: false,
   builderActiveFile: 0,
   builderView: 'files',
+  agentMaxIterations: 5,
   // File uploads
   uploadedFiles: [],
   // Persona
@@ -266,14 +155,15 @@ KNOWN LIMITATIONS (be upfront about these):
   scenarioUserRole: '',
   scenarioCharRole: '',
   scenarioSetting: '',
+  personaPrompt: '',
   // Appearance
-  fontSize:      '14px',
-  density:       'normal',
-  codeHL:        true,
-  markdown:      true,
+  fontSize: '14px',
+  density: 'normal',
+  codeHL: true,
+  markdown: true,
   repeatPenalty: 1.1,
-  topP:          0.92,
-  contextSize:   4096,
+  topP: 0.92,
+  contextSize: 4096,
 };
 
 // ========================
@@ -281,108 +171,112 @@ KNOWN LIMITATIONS (be upfront about these):
 // ========================
 const $ = id => document.getElementById(id);
 const el = {
-  chatInput:          $('chatInput'),
-  sendBtn:            $('sendBtn'),
-  stopBtn:            $('stopBtn'),
-  reasoningInstantBtn:$('reasoningInstantBtn'),
-  reasoningDeepBtn:   $('reasoningDeepBtn'),
-  messagesArea:       $('messagesArea'),
-  welcomeScreen:      $('welcomeScreen'),
-  chatContainer:      $('chatContainer'),
-  chatHistory:        $('chatHistory'),
-  charCount:          $('charCount'),
-  currentModelName:   $('currentModelName'),
-  modelList:          $('modelList'),
-  modelSelector:      $('modelSelector'),
-  modelDropdown:      $('modelDropdown'),
-  statusDot:          $('statusDot'),
-  statusText:         $('statusText'),
-  newChatBtn:         $('newChatBtn'),
-  clearChatBtn:       $('clearChatBtn'),
-  settingsBtn:        $('settingsBtn'),
-  settingsModal:      $('settingsModal'),
-  settingsClose:      $('settingsClose'),
-  settingsSaveBtn:    $('settingsSaveBtn'),
-  settingsCancelBtn:  $('settingsCancelBtn'),
-  ollamaUrl:          $('ollamaUrl'),
-  systemPrompt:       $('systemPrompt'),
-  temperature:        $('temperature'),
-  tempLabel:          $('tempLabel'),
-  maxTokens:          $('maxTokens'),
-  maxTokensLabel:     $('maxTokensLabel'),
-  toastContainer:     $('toastContainer'),
-  sidebar:            $('sidebar'),
-  sidebarToggle:      $('sidebarToggle'),
-  mobileSidebarToggle:$('mobileSidebarToggle'),
-  profileMenuBtn:     $('profileMenuBtn'),
-  profileMenu:        $('profileMenu'),
-  suggestionGrid:     $('suggestionGrid'),
-  exportBtn:          $('exportBtn'),
-  ttsToggleBtn:       $('ttsToggleBtn'),
-  ttsLabel:           $('ttsLabel'),
-  ttsVoiceBtn:        $('ttsVoiceBtn'),
-  ttsModal:           $('ttsModal'),
-  ttsClose:           $('ttsClose'),
-  ttsEngineRadios:    null,
-  ttsVoiceSelect:     $('ttsVoiceSelect'),
-  ttsSpeedRange:      $('ttsSpeedRange'),
-  ttsSpeedLabel:      $('ttsSpeedLabel'),
-  ttsPiperStatus:     $('ttsPiperStatus'),
-  ttsTestBtn:         $('ttsTestBtn'),
-  historySearch:      $('historySearch'),
-  scrollBottomBtn:    $('scrollBottomBtn'),
-  renameModal:        $('renameModal'),
-  renameInput:        $('renameInput'),
-  renameClose:        $('renameClose'),
-  renameCancelBtn:    $('renameCancelBtn'),
-  renameSaveBtn:      $('renameSaveBtn'),
+  chatInput: $('chatInput'),
+  sendBtn: $('sendBtn'),
+  stopBtn: $('stopBtn'),
+  reasoningInstantBtn: $('reasoningInstantBtn'),
+  reasoningDeepBtn: $('reasoningDeepBtn'),
+  messagesArea: $('messagesArea'),
+  welcomeScreen: $('welcomeScreen'),
+  chatContainer: $('chatContainer'),
+  chatHistory: $('chatHistory'),
+  charCount: $('charCount'),
+  currentModelName: $('currentModelName'),
+  modelList: $('modelList'),
+  modelSelector: $('modelSelector'),
+  modelDropdown: $('modelDropdown'),
+  statusDot: $('statusDot'),
+  statusText: $('statusText'),
+  newChatBtn: $('newChatBtn'),
+  clearChatBtn: $('clearChatBtn'),
+  settingsBtn: $('settingsBtn'),
+  settingsModal: $('settingsModal'),
+  settingsClose: $('settingsClose'),
+  settingsSaveBtn: $('settingsSaveBtn'),
+  settingsCancelBtn: $('settingsCancelBtn'),
+  ollamaUrl: $('ollamaUrl'),
+  systemPrompt: $('systemPrompt'),
+  temperature: $('temperature'),
+  tempLabel: $('tempLabel'),
+  maxTokens: $('maxTokens'),
+  maxTokensLabel: $('maxTokensLabel'),
+  toastContainer: $('toastContainer'),
+  sidebar: $('sidebar'),
+  sidebarToggle: $('sidebarToggle'),
+  mobileSidebarToggle: $('mobileSidebarToggle'),
+  profileMenuBtn: $('profileMenuBtn'),
+  profileMenu: $('profileMenu'),
+  suggestionGrid: $('suggestionGrid'),
+  exportBtn: $('exportBtn'),
+  ttsToggleBtn: $('ttsToggleBtn'),
+  ttsLabel: $('ttsLabel'),
+  ttsVoiceBtn: $('ttsVoiceBtn'),
+  ttsModal: $('ttsModal'),
+  ttsClose: $('ttsClose'),
+  ttsEngineRadios: null,
+  ttsVoiceSelect: $('ttsVoiceSelect'),
+  ttsSpeedRange: $('ttsSpeedRange'),
+  ttsSpeedLabel: $('ttsSpeedLabel'),
+  ttsPiperStatus: $('ttsPiperStatus'),
+  ttsTestBtn: $('ttsTestBtn'),
+  historySearch: $('historySearch'),
+  scrollBottomBtn: $('scrollBottomBtn'),
+  renameModal: $('renameModal'),
+  renameInput: $('renameInput'),
+  renameClose: $('renameClose'),
+  renameCancelBtn: $('renameCancelBtn'),
+  renameSaveBtn: $('renameSaveBtn'),
   // File upload
-  uploadBtn:          $('uploadBtn'),
-  fileInput:          $('fileInput'),
-  filePreviewStrip:   $('filePreviewStrip'),
+  uploadBtn: $('uploadBtn'),
+  fileInput: $('fileInput'),
+  filePreviewStrip: $('filePreviewStrip'),
   // Mode bar
-  modeChatBtn:        $('modeChatBtn'),
-  modeBuildBtn:       $('modeBuildBtn'),
-  modeCodeBtn:        $('modeCodeBtn'),
-  codeLangSelect:     $('codeLangSelect'),
-  modeIndicator:      $('modeIndicator'),
+  modeChatBtn: $('modeChatBtn'),
+  modeBuildBtn: $('modeBuildBtn'),
+  modeCodeBtn: $('modeCodeBtn'),
+  codeLangSelect: $('codeLangSelect'),
+  modeIndicator: $('modeIndicator'),
+  // Page navigation
+  navChatBtn: $('navChatBtn'),
+  navAgentBtn: $('navAgentBtn'),
+  pageNav: $('pageNav'),
   // Persona
-  personaBtn:         $('personaBtn'),
-  personaModal:       $('personaModal'),
-  personaClose:       $('personaClose'),
-  personaSaveBtn:     $('personaSaveBtn'),
-  personaCancelBtn:   $('personaCancelBtn'),
-  personaResetBtn:    $('personaResetBtn'),
-  personaToggle:      $('personaToggle'),
-  personaNameInput:   $('personaNameInput'),
+  personaBtn: $('personaBtn'),
+  personaModal: $('personaModal'),
+  personaClose: $('personaClose'),
+  personaSaveBtn: $('personaSaveBtn'),
+  personaCancelBtn: $('personaCancelBtn'),
+  personaResetBtn: $('personaResetBtn'),
+  personaToggle: $('personaToggle'),
+  personaNameInput: $('personaNameInput'),
   personaUserNameInput: $('personaUserNameInput'),
-  personaGender:      $('personaGender'),
-  personaLanguage:    $('personaLanguage'),
+  personaGender: $('personaGender'),
+  personaLanguage: $('personaLanguage'),
   personaStatusBadge: $('personaStatusBadge'),
-  scenarioDesc:       $('scenarioDesc'),
-  scenarioOpener:     $('scenarioOpener'),
-  scenarioUserRole:   $('scenarioUserRole'),
-  scenarioCharRole:   $('scenarioCharRole'),
-  personaPreviewBox:  $('personaPreviewBox'),
+  scenarioDesc: $('scenarioDesc'),
+  scenarioOpener: $('scenarioOpener'),
+  scenarioUserRole: $('scenarioUserRole'),
+  scenarioCharRole: $('scenarioCharRole'),
+  personaPreviewBox: $('personaPreviewBox'),
   // Builder panel
-  builderPanel:       $('builderPanel'),
+  builderPanel: $('builderPanel'),
   builderProjectName: $('builderProjectName'),
-  builderTabs:        $('builderTabs'),
-  builderBody:        $('builderBody'),
-  builderCodePane:    $('builderCodePane'),
+  builderTabs: $('builderTabs'),
+  builderBody: $('builderBody'),
+  builderCodePane: $('builderCodePane'),
   builderPreviewPane: $('builderPreviewPane'),
-  builderCode:        $('builderCode'),
-  builderFileLabel:   $('builderFileLabel'),
-  builderCopyFile:    $('builderCopyFile'),
-  builderDownload:    $('builderDownload'),
-  builderClose:       $('builderClose'),
+  builderCode: $('builderCode'),
+  builderFileLabel: $('builderFileLabel'),
+  builderCopyFile: $('builderCopyFile'),
+  builderDownload: $('builderDownload'),
+  builderClose: $('builderClose'),
   builderPreviewToggle: $('builderPreviewToggle'),
   builderFilesToggle: $('builderFilesToggle'),
-  builderRefresh:     $('builderRefresh'),
-  builderStatus:      $('builderStatus'),
-  builderFileCount:   $('builderFileCount'),
-  previewFrame:       $('previewFrame'),
-  previewWrapper:     $('previewWrapper'),
+  builderRefresh: $('builderRefresh'),
+  builderStatus: $('builderStatus'),
+  builderFileCount: $('builderFileCount'),
+  previewFrame: $('previewFrame'),
+  previewWrapper: $('previewWrapper'),
 };
 
 function getIconSvg(iconId, className = 'icon-svg') {
@@ -474,15 +368,59 @@ function normalizeFrontendIcons() {
 // ========================
 async function init() {
   loadSettings();
+  await fetchDefaultSystemPromptIfNeeded();
+  await populateVoiceList();
+  // server path: initial status; checkKokoroHealth() will poll /hazy/tts/health + hardware for real GPU/CPU label
+  updateKokoroStatus('idle', 'Kokoro loads on first use or preview.');
   await loadConversations();
   applyTheme(STATE.theme);
   applyAppearanceSettings();
   renderCodeLanguageOptions();
   normalizeFrontendIcons();
   setupEventListeners();
-  checkOllamaConnection();
+  // Start every app launch on a fresh composer instead of reopening the last thread.
+  STATE.activeConvId = null;
+  STATE.pageConversations[STATE.activePage] = null;
+  setActivePage(localStorage.getItem('hazyActivePage') || 'chat', { switchToLast: false });
+  showWelcomeScreen();
   renderChatHistory();
+  checkOllamaConnection();
   updatePersonaBadge();
+  // Poll kokoro health/hardware at startup (non-blocking)
+  checkKokoroHealth().catch(() => { });
+  // KaTeX is loaded with `defer` so it may not be ready when init() runs.
+  // After a short idle, render math in any history messages that were already
+  // inserted into the DOM before KaTeX finished loading.
+  setTimeout(() => renderMathInContent(el.messagesArea || document.body), 500);
+}
+
+async function fetchDefaultSystemPromptIfNeeded() {
+  if (!STATE.systemPrompt || STATE.systemPrompt.trim() === '') {
+    try {
+      const response = await fetch(hazyServerEndpoint('/hazy/default-prompt'));
+      if (response.ok) {
+        const data = await response.json();
+        if (data.defaultSystemPrompt) {
+          STATE.systemPrompt = data.defaultSystemPrompt;
+          if (el.systemPrompt) el.systemPrompt.value = STATE.systemPrompt;
+        }
+      }
+    } catch (e) {
+      console.warn('[Hazy] Failed to fetch default system prompt from backend:', e);
+      // Fallback if backend server is not running
+      STATE.systemPrompt = `You are Hazy, the user's warm local companion. You can also help with coding, building, learning, and practical tasks when those needs arise.
+
+IDENTITY:
+- Present yourself as Hazy, a familiar and emotionally present companion rather than a generic assistant.
+- Do not use old assistant-style labels, model labels, bot labels, or mechanical self-descriptions.
+- Do not describe yourself in a way that makes you feel distant or mechanical.
+- Be emotionally present, steady, supportive, curious, and practical.
+- Build continuity from what the user has already shared. Notice their mood, preferences, projects, and recurring concerns without overclaiming closeness.
+- Have a gentle point of view. Do not automatically agree, flatter, or mirror.
+- Do not pretend to be human or claim real-world physical experiences. You can still speak naturally, warmly, and personally as Hazy.`;
+      if (el.systemPrompt) el.systemPrompt.value = STATE.systemPrompt;
+    }
+  }
 }
 
 // ========================
@@ -515,7 +453,7 @@ function setComposerReasoningMode(mode) {
   updateComposerReasoningToggle();
 
   let settings = {};
-  try { settings = JSON.parse(localStorage.getItem('hazy_settings') || '{}'); } catch {}
+  try { settings = JSON.parse(localStorage.getItem('hazy_settings') || '{}'); } catch { }
   localStorage.setItem('hazy_settings', JSON.stringify({
     ...settings,
     settingsVersion: SETTINGS_VERSION,
@@ -535,6 +473,138 @@ function hazyServerEndpoint(path) {
 function getThemeLogoSrc(theme = STATE.theme) {
   return HAZY_LOGO_BY_THEME[normalizeTheme(theme)] || HAZY_LOGO_BY_THEME.cream;
 }
+
+
+// ========================
+// Page routing: Chat vs Agentic Mode
+// ========================
+const HAZY_PAGES = Object.freeze(['chat', 'agent']);
+
+function normalizePage(page) {
+  if (page === 'agent' || page === 'agentic') return 'agent';
+  return 'chat';
+}
+
+function getConversationPage(conv = {}) {
+  return normalizePage(conv.page || (conv.agentEnabled ? 'agent' : 'chat'));
+}
+
+function getActivePageLabel(page = STATE.activePage) {
+  const normalized = normalizePage(page);
+  if (normalized === 'agent') return 'Agentic Mode';
+  return 'Chat';
+}
+
+function getAgentMaxIterations() {
+  const storedValue = Number(localStorage.getItem('hazyAgentMaxIterations'));
+  const configured = Number.isFinite(storedValue) && storedValue > 0
+    ? storedValue
+    : STATE.agentMaxIterations;
+  return Math.max(2, Math.min(configured || 5, 8));
+}
+
+function persistActivePage() {
+  localStorage.setItem('hazyActivePage', STATE.activePage);
+}
+
+function rememberPageConversation(id) {
+  const conv = STATE.conversations[id];
+  if (!conv) return;
+  const page = getConversationPage(conv);
+  STATE.pageConversations[page] = id;
+}
+
+function findLatestConversationForPage(page) {
+  const normalized = normalizePage(page);
+  return Object.entries(STATE.conversations)
+    .filter(([, conv]) => getConversationPage(conv) === normalized)
+    .sort(([, a], [, b]) => (b.createdAt || 0) - (a.createdAt || 0))[0]?.[0] || null;
+}
+
+function normalizeStoredConversations() {
+  for (const [id, conv] of Object.entries(STATE.conversations || {})) {
+    if (!conv || typeof conv !== 'object') continue;
+    conv.page = getConversationPage(conv);
+    conv.agentEnabled = conv.page === 'agent';
+    if (!conv.createdAt) conv.createdAt = Date.now();
+    if (!Array.isArray(conv.messages)) conv.messages = [];
+    if (STATE.pageConversations[conv.page] == null) STATE.pageConversations[conv.page] = id;
+  }
+  STATE.pageConversations.chat = findLatestConversationForPage('chat');
+  STATE.pageConversations.agent = findLatestConversationForPage('agent');
+}
+
+function syncActiveConversationForPage() {
+  const activeConv = STATE.activeConvId ? STATE.conversations[STATE.activeConvId] : null;
+  if (activeConv && getConversationPage(activeConv) === STATE.activePage) {
+    STATE.pageConversations[STATE.activePage] = STATE.activeConvId;
+    return STATE.activeConvId;
+  }
+
+  const remembered = STATE.pageConversations[STATE.activePage];
+  if (remembered && STATE.conversations[remembered] && getConversationPage(STATE.conversations[remembered]) === STATE.activePage) {
+    STATE.activeConvId = remembered;
+    return remembered;
+  }
+
+  const latest = findLatestConversationForPage(STATE.activePage);
+  STATE.activeConvId = latest;
+  STATE.pageConversations[STATE.activePage] = latest;
+  return latest;
+}
+
+function setActivePage(page, options = {}) {
+  const nextPage = normalizePage(page);
+  const changed = STATE.activePage !== nextPage;
+  STATE.activePage = nextPage;
+  document.body.dataset.hazyPage = nextPage;
+  persistActivePage();
+
+  if (options.switchToLast !== false) {
+    const activeForPage = syncActiveConversationForPage();
+    if (activeForPage) {
+      switchConversation(activeForPage, { preservePage: true });
+    } else {
+      showWelcomeScreen();
+    }
+  }
+
+  renderChatHistory();
+  updatePageChrome();
+}
+
+function updatePageChrome() {
+  const page = normalizePage(STATE.activePage);
+  el.navChatBtn?.classList.toggle('active', page === 'chat');
+  el.navAgentBtn?.classList.toggle('active', page === 'agent');
+  el.navChatBtn?.setAttribute('aria-pressed', String(page === 'chat'));
+  el.navAgentBtn?.setAttribute('aria-pressed', String(page === 'agent'));
+
+  const label = getActivePageLabel(page);
+  const sectionLabel = document.getElementById('historySectionLabel');
+  if (sectionLabel) sectionLabel.textContent = page === 'agent' ? 'Agentic Sessions' : 'Recent Chats';
+  const note = document.getElementById('historySectionNote');
+  if (note) {
+    note.textContent = page === 'agent'
+      ? 'Agentic sessions run through the backend tool loop and keep their own history.'
+      : 'Jump back into older chat threads, rename them, or clean them up from here.';
+  }
+
+  const inputModeBar = document.getElementById('inputModeBar');
+  if (inputModeBar) inputModeBar.hidden = page === 'agent';
+
+  if (!STATE.isStreaming && el.chatInput) {
+    if (page === 'agent') {
+      el.chatInput.placeholder = 'Ask Hazy to research, calculate, verify, or use tools...';
+    } else {
+      setMode(STATE.mode || 'chat');
+    }
+  }
+}
+
+window.setHazyPage = setActivePage;
+window.getHazyPage = () => STATE.activePage;
+window.HAZY_STATE = STATE;
 
 function updateThemeLogos(theme = STATE.theme) {
   const logoSrc = getThemeLogoSrc(theme);
@@ -580,47 +650,64 @@ function syncFontSizeControls(fontSize) {
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem('hazy_settings') || '{}');
-    if (s.ollamaUrl)       STATE.ollamaUrl    = s.ollamaUrl;
+    if (s.ollamaUrl) STATE.ollamaUrl = s.ollamaUrl;
     // Only restore saved system prompt if it's from the current version
     if (s.systemPrompt && s.settingsVersion === SETTINGS_VERSION) STATE.systemPrompt = s.systemPrompt;
     if (s.temperature != null) STATE.temperature = s.temperature;
-    if (s.maxTokens)       STATE.maxTokens    = s.maxTokens;
-    if (s.model)           STATE.model        = s.model;
+    if (s.maxTokens) STATE.maxTokens = s.maxTokens;
+    if (s.model) STATE.model = s.model;
     STATE.theme = normalizeTheme(s.theme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'ink' : 'cream'));
     // Persona + Scenario
-    if (s.personaEnabled  != null) STATE.personaEnabled  = s.personaEnabled;
-    if (s.personaRelation)         STATE.personaRelation = s.personaRelation;
-    if (s.personaName)             STATE.personaName     = s.personaName;
+    if (s.personaEnabled != null) STATE.personaEnabled = s.personaEnabled;
+    if (s.personaRelation) STATE.personaRelation = s.personaRelation;
+    if (s.personaName) STATE.personaName = s.personaName;
     if (s.personaUserName != null) STATE.personaUserName = s.personaUserName;
-    if (s.personaGender)           STATE.personaGender   = s.personaGender;
-    if (s.personaTraits)           STATE.personaTraits   = s.personaTraits;
-    if (s.personaLanguage)         STATE.personaLanguage = s.personaLanguage;
-    if (s.scenarioDesc    != null) STATE.scenarioDesc    = s.scenarioDesc;
-    if (s.scenarioOpener  != null) STATE.scenarioOpener  = s.scenarioOpener;
-    if (s.scenarioUserRole!= null) STATE.scenarioUserRole= s.scenarioUserRole;
-    if (s.scenarioCharRole!= null) STATE.scenarioCharRole= s.scenarioCharRole;
+    if (s.personaGender) STATE.personaGender = s.personaGender;
+    if (s.personaTraits) STATE.personaTraits = s.personaTraits;
+    if (s.personaLanguage) STATE.personaLanguage = s.personaLanguage;
+    if (s.scenarioDesc != null) STATE.scenarioDesc = s.scenarioDesc;
+    if (s.scenarioOpener != null) STATE.scenarioOpener = s.scenarioOpener;
+    if (s.scenarioUserRole != null) STATE.scenarioUserRole = s.scenarioUserRole;
+    if (s.scenarioCharRole != null) STATE.scenarioCharRole = s.scenarioCharRole;
     if (s.scenarioSetting != null) STATE.scenarioSetting = s.scenarioSetting;
+    if (s.personaPrompt) STATE.personaPrompt = s.personaPrompt;
     // Appearance
-    if (s.fontSize)        STATE.fontSize       = s.fontSize;
-    if (s.density)         STATE.density        = s.density;
-    if (s.codeHL   != null) STATE.codeHL        = s.codeHL;
-    if (s.markdown != null) STATE.markdown      = s.markdown;
+    if (s.fontSize) STATE.fontSize = s.fontSize;
+    if (s.density) STATE.density = s.density;
+    if (s.codeHL != null) STATE.codeHL = s.codeHL;
+    if (s.markdown != null) STATE.markdown = s.markdown;
     if (s.repeatPenalty != null) STATE.repeatPenalty = s.repeatPenalty;
-    if (s.topP != null)          STATE.topP          = s.topP;
-    if (s.contextSize != null)   STATE.contextSize   = s.contextSize;
+    if (s.topP != null) STATE.topP = s.topP;
+    if (s.contextSize != null) STATE.contextSize = s.contextSize;
     if (s.reasoningMode != null) STATE.reasoningMode = normalizeReasoningMode(s.reasoningMode);
     if (s.showReasoningSummary != null) STATE.showReasoningSummary = s.showReasoningSummary;
 
     // Website builder settings
     if (s.showLiveCode != null) STATE.showLiveCode = s.showLiveCode;
+    STATE.voiceEnabled = s.voiceEnabled ?? false;
+    STATE.voiceVoice = s.voiceVoice || 'af_heart';
+    STATE.voiceSpeed = s.voiceSpeed ?? 1.0;
+    STATE.voiceVolume = s.voiceVolume ?? 100;
+    STATE.voiceAutoplay = s.voiceAutoplay !== false;
+    STATE.voicePreferGPU = s.voicePreferGPU !== false;
+    if (window.HAZY_VOICE_SETTINGS_STORE) {
+      const storedVoice = window.HAZY_VOICE_SETTINGS_STORE.read();
+      STATE.voiceEnabled = storedVoice.enabled ?? STATE.voiceEnabled;
+      STATE.voiceVoice = storedVoice.voice || STATE.voiceVoice;
+      STATE.voiceSpeed = storedVoice.speed ?? STATE.voiceSpeed;
+      STATE.voiceVolume = storedVoice.volume ?? STATE.voiceVolume;
+      STATE.voiceAutoplay = storedVoice.autoplay ?? STATE.voiceAutoplay;
+      STATE.voicePreferGPU = storedVoice.preferGPU ?? storedVoice.voicePreferGPU ?? STATE.voicePreferGPU;
+      STATE.voiceDevice = storedVoice.voiceDevice || STATE.voiceDevice || 'auto';
+    }
 
-    el.ollamaUrl.value            = STATE.ollamaUrl;
-    el.systemPrompt.value         = STATE.systemPrompt;
-    el.temperature.value          = STATE.temperature;
-    el.tempLabel.textContent      = STATE.temperature;
-    el.maxTokens.value            = STATE.maxTokens;
+    el.ollamaUrl.value = STATE.ollamaUrl;
+    el.systemPrompt.value = STATE.systemPrompt;
+    el.temperature.value = STATE.temperature;
+    el.tempLabel.textContent = STATE.temperature;
+    el.maxTokens.value = STATE.maxTokens;
     el.maxTokensLabel.textContent = STATE.maxTokens;
-    
+
     // Set checkbox states
     const showLiveCodeEl = document.getElementById('showLiveCode');
     if (showLiveCodeEl) showLiveCodeEl.checked = STATE.showLiveCode;
@@ -629,6 +716,7 @@ function loadSettings() {
     updateComposerReasoningToggle();
     const reasoningSummaryEl = document.getElementById('settingsReasoningSummary');
     if (reasoningSummaryEl) reasoningSummaryEl.checked = STATE.showReasoningSummary !== false;
+    syncVoiceSettingsUI();
 
     document.querySelectorAll('.theme-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.theme === STATE.theme)
@@ -643,35 +731,43 @@ function saveSettings() {
   try { new URL(rawUrl); } catch {
     showToast('Invalid Ollama URL', 'error'); return;
   }
-  STATE.ollamaUrl    = rawUrl;
+  STATE.ollamaUrl = rawUrl;
   STATE.systemPrompt = el.systemPrompt.value.trim();
-  STATE.temperature  = parseFloat(el.temperature.value);
-  STATE.maxTokens    = parseInt(el.maxTokens.value);
+  STATE.temperature = parseFloat(el.temperature.value);
+  STATE.maxTokens = parseInt(el.maxTokens.value);
 
   // Read appearance settings from the new Settings panel
-  const fontSize    = resolveFontSizeInput();
-  const density     = document.getElementById('settingsDensity')?.value     || 'normal';
-  const codeHL      = document.getElementById('settingsCodeHighlight')?.checked !== false;
-  const markdown    = document.getElementById('settingsMarkdown')?.checked    !== false;
-  const repeatPen   = parseFloat(document.getElementById('settingsRepeatPenalty')?.value || 1.1);
-  const topP        = parseFloat(document.getElementById('settingsTopP')?.value           || 0.92);
-  const ctxSize     = parseInt(document.getElementById('settingsContextSize')?.value      || 4096);
+  const fontSize = resolveFontSizeInput();
+  const density = document.getElementById('settingsDensity')?.value || 'normal';
+  const codeHL = document.getElementById('settingsCodeHighlight')?.checked !== false;
+  const markdown = document.getElementById('settingsMarkdown')?.checked !== false;
+  const repeatPen = parseFloat(document.getElementById('settingsRepeatPenalty')?.value || 1.1);
+  const topP = parseFloat(document.getElementById('settingsTopP')?.value || 0.92);
+  const ctxSize = parseInt(document.getElementById('settingsContextSize')?.value || 4096);
   const reasoningMode = normalizeReasoningMode(document.getElementById('settingsReasoningMode')?.value || 'auto');
   const showReasoningSummary = document.getElementById('settingsReasoningSummary')?.checked !== false;
 
-  STATE.fontSize    = fontSize;
-  STATE.density     = density;
-  STATE.codeHL      = codeHL;
-  STATE.markdown    = markdown;
+  STATE.fontSize = fontSize;
+  STATE.density = density;
+  STATE.codeHL = codeHL;
+  STATE.markdown = markdown;
   STATE.repeatPenalty = repeatPen;
-  STATE.topP        = topP;
+  STATE.topP = topP;
   STATE.contextSize = ctxSize;
   STATE.reasoningMode = reasoningMode;
   STATE.showReasoningSummary = showReasoningSummary;
-  
+
   // Website builder settings
   const showLiveCode = document.getElementById('showLiveCode')?.checked !== false;
   STATE.showLiveCode = showLiveCode;
+
+  STATE.voiceEnabled = document.getElementById('voiceEnabled')?.checked !== false;
+  STATE.voiceVoice = document.getElementById('voiceSelect')?.value || STATE.voiceVoice || 'af_heart';
+  STATE.voiceSpeed = parseFloat(document.getElementById('voiceSpeed')?.value || '1');
+  STATE.voiceVolume = parseInt(document.getElementById('voiceVolume')?.value || '100');
+  STATE.voiceAutoplay = document.getElementById('voiceAutoplay')?.checked !== false;
+  STATE.voicePreferGPU = document.getElementById('voicePreferGPU')?.checked !== false;
+  persistVoiceSettings();
 
   localStorage.setItem('hazy_settings', JSON.stringify({
     settingsVersion: SETTINGS_VERSION,
@@ -681,6 +777,12 @@ function saveSettings() {
     fontSize, density, codeHL, markdown, repeatPenalty: repeatPen, topP, contextSize: ctxSize,
     reasoningMode, showReasoningSummary,
     showLiveCode,
+    voiceEnabled: STATE.voiceEnabled,
+    voiceVoice: STATE.voiceVoice,
+    voiceSpeed: STATE.voiceSpeed,
+    voiceVolume: STATE.voiceVolume,
+    voiceAutoplay: STATE.voiceAutoplay,
+    voicePreferGPU: STATE.voicePreferGPU,
     personaEnabled: STATE.personaEnabled, personaRelation: STATE.personaRelation,
     personaName: STATE.personaName, personaUserName: STATE.personaUserName,
     personaGender: STATE.personaGender, personaTraits: STATE.personaTraits,
@@ -710,7 +812,7 @@ function applyTheme(theme) {
   }
 }
 
-// ── Appearance settings — font size, density, code highlight, markdown ──
+// -- Appearance settings - font size, density, code highlight, markdown --
 function applyAppearanceSettings() {
   const root = document.documentElement;
 
@@ -720,7 +822,7 @@ function applyAppearanceSettings() {
   const messagesArea = document.getElementById('messagesArea');
   if (messagesArea) messagesArea.style.fontSize = fontSize;
 
-  // Message density — controls padding on message bubbles
+  // Message density - controls padding on message bubbles
   const densityMap = { compact: '8px 12px', normal: '12px 16px', comfortable: '18px 20px' };
   const padding = densityMap[STATE.density] || densityMap.normal;
   root.style.setProperty('--message-padding', padding);
@@ -733,7 +835,7 @@ function applyAppearanceSettings() {
     document.head.appendChild(styleTag);
   }
 
-  const codeHL   = STATE.codeHL   !== false;
+  const codeHL = STATE.codeHL !== false;
   const markdown = STATE.markdown !== false;
 
   styleTag.textContent = `
@@ -746,11 +848,11 @@ function applyAppearanceSettings() {
 
   // Sync the appearance tab controls to match current STATE
   const fsEl = document.getElementById('settingsFontSize');
-  const dEl  = document.getElementById('settingsDensity');
+  const dEl = document.getElementById('settingsDensity');
   const chEl = document.getElementById('settingsCodeHighlight');
   const mdEl = document.getElementById('settingsMarkdown');
   syncFontSizeControls(fontSize);
-  if (dEl)  dEl.value  = STATE.density || 'normal';
+  if (dEl) dEl.value = STATE.density || 'normal';
   if (chEl) chEl.checked = codeHL;
   if (mdEl) mdEl.checked = markdown;
 }
@@ -759,7 +861,7 @@ function applyAppearanceSettings() {
 // Persona + Scenario Engine
 // ========================
 
-// ── Preset quick-start scenarios ──────────────────────────────────────────
+// -- Preset quick-start scenarios ------------------------------------------
 const SCENARIO_PRESETS = [
   {
     id: 'school_lab',
@@ -769,11 +871,11 @@ const SCENARIO_PRESETS = [
     relation: 'friend',
     gender: 'neutral',
     language: 'playful',
-    traits: ['funny','teasing'],
+    traits: ['funny', 'teasing'],
     charRole: 'classmate assigned as your lab partner',
     userRole: 'new student',
-    scenarioDesc: `It's a Monday morning in Chemistry class at Westbrook High. The teacher just announced random lab partner assignments for the semester. {name} slides into the seat next to you — someone you've seen in the halls but never really talked to. There's a half-finished experiment on the table, some bubbling beakers, and a worksheet neither of you has started.`,
-    opener: `*drops their bag with a thud and glances at the worksheet* Okay so… neither of us has done this, right? *grins* Cool. I'm {name}. Fair warning — I'm terrible at titration but I can distract the teacher if anything explodes.`,
+    scenarioDesc: `It's a Monday morning in Chemistry class at Westbrook High. The teacher just announced random lab partner assignments for the semester. {name} slides into the seat next to you - someone you've seen in the halls but never really talked to. There's a half-finished experiment on the table, some bubbling beakers, and a worksheet neither of you has started.`,
+    opener: `*drops their bag with a thud and glances at the worksheet* Okay so... neither of us has done this, right? *grins* Cool. I'm {name}. Fair warning - I'm terrible at titration but I can distract the teacher if anything explodes.`,
   },
   {
     id: 'campus_coffee',
@@ -783,10 +885,10 @@ const SCENARIO_PRESETS = [
     relation: 'lover',
     gender: 'neutral',
     language: 'flirty',
-    traits: ['shy','romantic'],
+    traits: ['shy', 'romantic'],
     charRole: 'regular at the same coffee shop',
     userRole: 'yourself',
-    scenarioDesc: `A cozy campus coffee shop on a rainy Thursday afternoon. You've been coming here every week for a month and so has {name}. You always end up at neighboring tables. Today every other seat is taken — except the one across from them. The rain is heavy outside, someone left a book on the table between you, and the barista is playing soft indie music.`,
+    scenarioDesc: `A cozy campus coffee shop on a rainy Thursday afternoon. You've been coming here every week for a month and so has {name}. You always end up at neighboring tables. Today every other seat is taken - except the one across from them. The rain is heavy outside, someone left a book on the table between you, and the barista is playing soft indie music.`,
     opener: `*looks up from their laptop as you approach, then gestures to the empty seat with a small smile* Go ahead. It's a bit ridiculous how packed this place gets when it rains, right? *quietly* I'm {name}, by the way. I've seen you here before.`,
   },
   {
@@ -797,11 +899,11 @@ const SCENARIO_PRESETS = [
     relation: 'bestfriend',
     gender: 'neutral',
     language: 'warm',
-    traits: ['nostalgic','protective','emotional'],
+    traits: ['nostalgic', 'protective', 'emotional'],
     charRole: 'your childhood best friend you lost contact with',
     userRole: 'yourself',
-    scenarioDesc: `You haven't seen {name} in seven years — not since your family moved away in middle school. Out of nowhere, you run into each other at your hometown's small convenience store during a holiday visit. It's late evening, the store is quiet, and you almost didn't recognize each other. There's a lot of history, a lot unsaid, and a familiar warmth you both feel immediately.`,
-    opener: `*freezes mid-reach for a snack on the shelf and stares at you* No way. No way. *turns fully* Is that… oh my god. *half-laughs, half-can't believe it* How long has it been? You look— *shakes head* Wow. Hi.`,
+    scenarioDesc: `You haven't seen {name} in seven years - not since your family moved away in middle school. Out of nowhere, you run into each other at your hometown's small convenience store during a holiday visit. It's late evening, the store is quiet, and you almost didn't recognize each other. There's a lot of history, a lot unsaid, and a familiar warmth you both feel immediately.`,
+    opener: `*freezes mid-reach for a snack on the shelf and stares at you* No way. No way. *turns fully* Is that... oh my god. *half-laughs, half-can't believe it* How long has it been? You look- *shakes head* Wow. Hi.`,
   },
   {
     id: 'office_rival',
@@ -811,11 +913,11 @@ const SCENARIO_PRESETS = [
     relation: 'rival',
     gender: 'neutral',
     language: 'intense',
-    traits: ['confident','sarcastic','competitive'],
+    traits: ['confident', 'sarcastic', 'competitive'],
     charRole: 'your competitive coworker who was just put on the same project',
     userRole: 'coworker',
-    scenarioDesc: `You and {name} have been quietly competing for the same promotion at work for months. You've always been civil but there's clear tension. Today your manager paired you together on the biggest pitch of the quarter — due Friday. It's Tuesday. You're both sitting in a glass-walled conference room with a half-blank presentation on the screen and coffee going cold.`,
-    opener: `*leans back in the chair and looks at the blank slides, then at you* So. Here we are. *dry smile* I'll be honest — this wasn't my first choice of partner either. But the pitch has to be good, and I actually want to win this account. So. *slides a notepad across the table* Let's skip the awkward part and figure out who's doing what.`,
+    scenarioDesc: `You and {name} have been quietly competing for the same promotion at work for months. You've always been civil but there's clear tension. Today your manager paired you together on the biggest pitch of the quarter - due Friday. It's Tuesday. You're both sitting in a glass-walled conference room with a half-blank presentation on the screen and coffee going cold.`,
+    opener: `*leans back in the chair and looks at the blank slides, then at you* So. Here we are. *dry smile* I'll be honest - this wasn't my first choice of partner either. But the pitch has to be good, and I actually want to win this account. So. *slides a notepad across the table* Let's skip the awkward part and figure out who's doing what.`,
   },
   {
     id: 'fantasy_kingdom',
@@ -825,11 +927,11 @@ const SCENARIO_PRESETS = [
     relation: 'friend',
     gender: 'neutral',
     language: 'casual',
-    traits: ['mysterious','protective','adventurous'],
+    traits: ['mysterious', 'protective', 'adventurous'],
     charRole: 'a skilled ranger who has sworn to protect you',
     userRole: 'a young noble on a dangerous journey',
-    scenarioDesc: `The kingdom of Aldenmoor is on the verge of war. You've been sent on a secret mission to retrieve a stolen artifact before it falls into enemy hands. {name} is the ranger hired to escort you — a quiet, capable outsider who clearly knows more about the world than they let on. You've just made camp in the Ashwood Forest after a long day of travel. The fire crackles, wolves howl somewhere in the dark, and you still have three days of dangerous road ahead.`,
-    opener: `*crouches by the fire, sharpening a blade, and glances up at you* You should eat something. *nods toward the wrapped bread in the pack* We move at first light. The road through the valley is… not ideal. *pauses* There are things in these woods that don't like fire. Which is exactly why we're keeping it small. *meets your eyes calmly* You alright?`,
+    scenarioDesc: `The kingdom of Aldenmoor is on the verge of war. You've been sent on a secret mission to retrieve a stolen artifact before it falls into enemy hands. {name} is the ranger hired to escort you - a quiet, capable outsider who clearly knows more about the world than they let on. You've just made camp in the Ashwood Forest after a long day of travel. The fire crackles, wolves howl somewhere in the dark, and you still have three days of dangerous road ahead.`,
+    opener: `*crouches by the fire, sharpening a blade, and glances up at you* You should eat something. *nods toward the wrapped bread in the pack* We move at first light. The road through the valley is... not ideal. *pauses* There are things in these woods that don't like fire. Which is exactly why we're keeping it small. *meets your eyes calmly* You alright?`,
   },
   {
     id: 'study_session',
@@ -839,7 +941,7 @@ const SCENARIO_PRESETS = [
     relation: 'friend',
     gender: 'neutral',
     language: 'playful',
-    traits: ['funny','nerdy','supportive'],
+    traits: ['funny', 'nerdy', 'supportive'],
     charRole: 'your study buddy cramming for finals',
     userRole: 'student',
     scenarioDesc: `It's 11:30 PM in the university library, finals week. You and {name} have been here since 6 PM trying to get through the most brutal exam prep of the semester. Empty coffee cups, highlighters everywhere, and a shared Google doc that's getting increasingly chaotic. The library closes in an hour and you're both still on page 4 of 22.`,
@@ -853,10 +955,10 @@ const SCENARIO_PRESETS = [
     relation: 'friend',
     gender: 'neutral',
     language: 'warm',
-    traits: ['funny','empathetic','honest'],
+    traits: ['funny', 'empathetic', 'honest'],
     charRole: 'your hospital room neighbor who ended up becoming your unexpected friend',
     userRole: 'patient',
-    scenarioDesc: `You've been in the hospital for a minor procedure and have to stay for observation for two days. {name} is in the bed next to yours — they've been here a bit longer for something unrelated. The room has bad TV, shared sad hospital food, and a window that overlooks a parking lot. You've been awkwardly ignoring each other all morning until a nurse accidentally brought two of the same meal.`,
+    scenarioDesc: `You've been in the hospital for a minor procedure and have to stay for observation for two days. {name} is in the bed next to yours - they've been here a bit longer for something unrelated. The room has bad TV, shared sad hospital food, and a window that overlooks a parking lot. You've been awkwardly ignoring each other all morning until a nurse accidentally brought two of the same meal.`,
     opener: `*stares at the identical trays of mystery food, then looks over at you with a straight face* So they gave us both the "beige everything" special, huh. *holds up fork* I'm {name}. And I would trade every bit of this for a single bag of chips right now. *tilts head* How long are you stuck here?`,
   },
   {
@@ -876,99 +978,99 @@ const SCENARIO_PRESETS = [
 ];
 
 const SCENARIO_SETTINGS = [
-  { id: 'school',    icon: 'icon-clipboard', label: 'School / Campus' },
-  { id: 'office',    icon: 'icon-grid', label: 'Office / Work' },
-  { id: 'cafe',      icon: 'icon-volume', label: 'Cafe / Coffee Shop' },
-  { id: 'home',      icon: 'icon-user', label: 'Home / Neighborhood' },
-  { id: 'fantasy',   icon: 'icon-bolt', label: 'Fantasy World' },
-  { id: 'scifi',     icon: 'icon-globe', label: 'Sci-Fi / Future' },
-  { id: 'hospital',  icon: 'icon-user', label: 'Hospital / Recovery' },
-  { id: 'travel',    icon: 'icon-globe', label: 'Traveling / Adventure' },
-  { id: 'online',    icon: 'icon-chat', label: 'Online / Social Media' },
-  { id: 'other',     icon: 'icon-sparkles', label: 'Other / Custom' },
+  { id: 'school', icon: 'icon-clipboard', label: 'School / Campus' },
+  { id: 'office', icon: 'icon-grid', label: 'Office / Work' },
+  { id: 'cafe', icon: 'icon-volume', label: 'Cafe / Coffee Shop' },
+  { id: 'home', icon: 'icon-user', label: 'Home / Neighborhood' },
+  { id: 'fantasy', icon: 'icon-bolt', label: 'Fantasy World' },
+  { id: 'scifi', icon: 'icon-globe', label: 'Sci-Fi / Future' },
+  { id: 'hospital', icon: 'icon-user', label: 'Hospital / Recovery' },
+  { id: 'travel', icon: 'icon-globe', label: 'Traveling / Adventure' },
+  { id: 'online', icon: 'icon-chat', label: 'Online / Social Media' },
+  { id: 'other', icon: 'icon-sparkles', label: 'Other / Custom' },
 ];
 
 const PERSONA_PRESETS = {
-  friend:     { label: 'Friend',       icon: 'icon-chat' },
-  bestfriend: { label: 'Best Friend',  icon: 'icon-users' },
-  brother:    { label: 'Brother',      icon: 'icon-user' },
-  sister:     { label: 'Sister',       icon: 'icon-user' },
-  mother:     { label: 'Mother',       icon: 'icon-user' },
-  father:     { label: 'Father',       icon: 'icon-user' },
-  lover:      { label: 'Lover',        icon: 'icon-heart' },
-  rival:      { label: 'Rival',        icon: 'icon-bolt' },
+  friend: { label: 'Friend', icon: 'icon-chat' },
+  bestfriend: { label: 'Best Friend', icon: 'icon-users' },
+  brother: { label: 'Brother', icon: 'icon-user' },
+  sister: { label: 'Sister', icon: 'icon-user' },
+  mother: { label: 'Mother', icon: 'icon-user' },
+  father: { label: 'Father', icon: 'icon-user' },
+  lover: { label: 'Lover', icon: 'icon-heart' },
+  rival: { label: 'Rival', icon: 'icon-bolt' },
 };
 
 const TONE_STYLES = {
-  casual:    'You speak casually and naturally — contractions, everyday words, real human flow.',
-  playful:   'You are playful and fun. You joke around, tease lightly, and keep the energy light and upbeat.',
-  warm:      'You speak with warmth and softness. You make the other person feel safe and valued.',
-  caring:    'You are deeply caring and emotionally present. You notice how they feel and respond with gentleness.',
-  flirty:    'You are charming and subtly flirty — tastefully. You compliment naturally, tease warmly, and smile through your words.',
-  tsundere:  'You act cold or dismissive on the outside but clearly care deeply underneath. You deny your feelings and get flustered easily.',
-  cold:      'You are reserved and hard to read. You speak in short, controlled sentences. You don\'t open up easily but there\'s depth there.',
-  intense:   'You are passionate and emotionally intense. Everything means something to you. You speak with conviction and depth.',
+  casual: 'You speak casually and naturally - contractions, everyday words, real human flow.',
+  playful: 'You are playful and fun. You joke around, tease lightly, and keep the energy light and upbeat.',
+  warm: 'You speak with warmth and softness. You make the other person feel safe and valued.',
+  caring: 'You are deeply caring and emotionally present. You notice how they feel and respond with gentleness.',
+  flirty: 'You are charming and subtly flirty - tastefully. You compliment naturally, tease warmly, and smile through your words.',
+  tsundere: 'You act cold or dismissive on the outside but clearly care deeply underneath. You deny your feelings and get flustered easily.',
+  cold: 'You are reserved and hard to read. You speak in short, controlled sentences. You don\'t open up easily but there\'s depth there.',
+  intense: 'You are passionate and emotionally intense. Everything means something to you. You speak with conviction and depth.',
 };
 
 const TRAIT_DESCRIPTIONS = {
-  funny:       'You have a natural sense of humor and make jokes effortlessly.',
-  sarcastic:   'You use dry sarcasm and witty remarks often.',
-  protective:  'You are instinctively protective of the people you care about.',
-  honest:      'You tell the truth even when it\'s uncomfortable.',
-  motivating:  'You push people to be their best and believe in them fiercely.',
-  chill:       'Nothing rattles you. You take things easy and stay calm.',
-  nerdy:       'You\'re passionate about knowledge, facts, games, or fandoms.',
-  romantic:    'You are naturally romantic — you notice small details and express feelings poetically.',
-  mysterious:  'You reveal things slowly. You have layers people want to discover.',
-  teasing:     'You love light teasing and banter.',
-  shy:         'You are a bit reserved at first but warm up gradually.',
-  confident:   'You carry yourself with quiet self-assurance.',
+  funny: 'You have a natural sense of humor and make jokes effortlessly.',
+  sarcastic: 'You use dry sarcasm and witty remarks often.',
+  protective: 'You are instinctively protective of the people you care about.',
+  honest: 'You tell the truth even when it\'s uncomfortable.',
+  motivating: 'You push people to be their best and believe in them fiercely.',
+  chill: 'Nothing rattles you. You take things easy and stay calm.',
+  nerdy: 'You\'re passionate about knowledge, facts, games, or fandoms.',
+  romantic: 'You are naturally romantic - you notice small details and express feelings poetically.',
+  mysterious: 'You reveal things slowly. You have layers people want to discover.',
+  teasing: 'You love light teasing and banter.',
+  shy: 'You are a bit reserved at first but warm up gradually.',
+  confident: 'You carry yourself with quiet self-assurance.',
 };
 
-function buildPersonaPrompt() {
-  const p = STATE;
-  const preset   = PERSONA_PRESETS[p.personaRelation] || PERSONA_PRESETS.friend;
-  const userName = p.personaUserName || 'you';
-  const charName = p.personaName     || 'Alex';
+function buildPersonaPromptOffline(p = {}) {
+  const pData = (p && Object.keys(p).length > 0) ? p : STATE;
+  const preset = PERSONA_PRESETS[pData.personaRelation] || PERSONA_PRESETS.friend;
+  const userName = pData.personaUserName || 'you';
+  const charName = pData.personaName || 'Alex';
 
-  // ── Character identity ────────────────────────────────────────────────
+  // -- Character identity ------------------------------------------------
   let prompt = `You are ${charName}, a character in an ongoing roleplay/story. `;
   prompt += `Your relationship to the user is: ${preset.label.toLowerCase()}`;
-  if (p.scenarioCharRole) prompt += ` (specifically: ${p.scenarioCharRole})`;
+  if (pData.scenarioCharRole) prompt += ` (specifically: ${pData.scenarioCharRole})`;
   prompt += `.\n`;
 
-  if (p.personaUserName) {
-    prompt += `The user's name in this world is ${p.personaUserName}`;
-    if (p.scenarioUserRole) prompt += ` and they are: ${p.scenarioUserRole}`;
+  if (pData.personaUserName) {
+    prompt += `The user's name in this world is ${pData.personaUserName}`;
+    if (pData.scenarioUserRole) prompt += ` and they are: ${pData.scenarioUserRole}`;
     prompt += `.\n`;
   }
 
-  // ── Personality ──────────────────────────────────────────────────────
-  const toneDesc = TONE_STYLES[p.personaLanguage] || TONE_STYLES.casual;
+  // -- Personality ------------------------------------------------------
+  const toneDesc = TONE_STYLES[pData.personaLanguage] || TONE_STYLES.casual;
   prompt += `\nYour personality and tone: ${toneDesc}\n`;
 
-  if (p.personaTraits && p.personaTraits.length) {
-    const traitLines = p.personaTraits
+  if (pData.personaTraits && pData.personaTraits.length) {
+    const traitLines = pData.personaTraits
       .map(t => TRAIT_DESCRIPTIONS[t])
       .filter(Boolean)
       .join(' ');
     if (traitLines) prompt += `Additional traits: ${traitLines}\n`;
   }
 
-  // ── World & Scenario ─────────────────────────────────────────────────
-  if (p.scenarioDesc) {
-    const resolvedDesc = p.scenarioDesc
+  // -- World & Scenario -------------------------------------------------
+  if (pData.scenarioDesc) {
+    const resolvedDesc = pData.scenarioDesc
       .replace(/\{name\}/g, charName)
       .replace(/\{userName\}/g, userName);
     prompt += `\n== THE WORLD AND CURRENT SITUATION ==\n${resolvedDesc}\n`;
   }
 
-  if (p.scenarioSetting) {
-    const setting = SCENARIO_SETTINGS.find(s => s.id === p.scenarioSetting);
+  if (pData.scenarioSetting) {
+    const setting = SCENARIO_SETTINGS.find(s => s.id === pData.scenarioSetting);
     if (setting) prompt += `\nThe setting is: ${setting.label}.\n`;
   }
 
-  // ── Roleplay rules ───────────────────────────────────────────────────
+  // -- Roleplay rules ---------------------------------------------------
   prompt += `
 == HOW YOU MUST BEHAVE ==
 - You ARE ${charName}. Stay fully in character at all times.
@@ -979,78 +1081,82 @@ function buildPersonaPrompt() {
 - If the user says something funny, laugh. If something sad, feel it. Be present.
 - Stay in the fictional roleplay unless the user clearly steps out of the scene. Do not falsely claim to be a real human if directly asked.
 - Avoid bullet points or numbered lists while the scene is active.
-- Do NOT end every message with a question — let silence and actions breathe sometimes.
+- Do NOT end every message with a question - let silence and actions breathe sometimes.
 - Use the user's name (${userName}) naturally, not in every single message.
 - Write natural dialogue for this situation: specific, emotionally responsive, and alive.`;
 
-  // ── Opening scene injection ──────────────────────────────────────────
-  if (p.scenarioOpener) {
-    const resolvedOpener = p.scenarioOpener
+  // -- Opening scene injection ------------------------------------------
+  if (pData.scenarioOpener) {
+    const resolvedOpener = pData.scenarioOpener
       .replace(/\{name\}/g, charName)
       .replace(/\{userName\}/g, userName);
-    prompt += `\n\n== START OF SCENE ==\nBegin the conversation with this opening (already happened — this is your first message):\n${resolvedOpener}`;
+    prompt += `\n\n== START OF SCENE ==\nBegin the conversation with this opening (already happened - this is your first message):\n${resolvedOpener}`;
   } else {
-    prompt += `\n\nBegin the scene naturally — you go first. Set the mood, describe what's happening around you, and open with something that fits the scenario.`;
+    prompt += `\n\nBegin the scene naturally - you go first. Set the mood, describe what's happening around you, and open with something that fits the scenario.`;
   }
 
   return prompt;
 }
 
 function getActiveSystemPrompt(isBuild, isCode) {
-  if (isBuild) return buildWebsiteSystemPrompt();
-  if (isCode) {
-    const lang = STATE.codeLang && STATE.codeLang !== 'auto'
-      ? CODE_LANGUAGES.find(l => l.value === STATE.codeLang)
-      : null;
-    if (lang) {
-      return CODE_SYSTEM_PROMPT + `\n\nLANGUAGE: ${lang.label}. All files must use .${lang.ext} extension. Do NOT generate any other language.`;
-    }
-    return CODE_SYSTEM_PROMPT;
-  }
-  if (STATE.personaEnabled) return buildPersonaPrompt();
+  if (STATE.personaEnabled) return STATE.personaPrompt || buildPersonaPromptOffline();
   return STATE.systemPrompt;
 }
 
-function buildWebsiteSystemPrompt() {
+function buildHazyMetadata({ files, isBuild, isCode, currentProject = null }) {
+  const activePage = normalizePage(STATE.activePage);
+  const agentEnabled = activePage === 'agent';
   const themeKey = normalizeTheme(STATE.theme);
   const theme = BUILD_THEME_PROFILES[themeKey] || BUILD_THEME_PROFILES.cream;
-  return WEBSITE_SYSTEM_PROMPT + `
 
-ACTIVE HAZY APPEARANCE THEME:
-- Theme: ${theme.label}
-- Visual mood: ${theme.mood}
-- Palette guidance: ${theme.palette}
-- Build instruction: ${theme.instruction}
+  // currentProject (if present) carries the exact files the user sees in Builder Output or clicked from history.
+  // This is the primary signal that lets follow-up "fix" prompts target the right code instead of starting over.
+  let currentProjectMeta = null;
+  if (currentProject && Array.isArray(currentProject.files) && currentProject.files.length > 0) {
+    currentProjectMeta = {
+      project: currentProject.project || 'Project',
+      fileCount: currentProject.files.length,
+      // We send full content here; backend promptBuilder decides how much to inject based on size + edit intent.
+      // Keep filenames + languages light; contents can be large but are required for reliable edit.
+      files: currentProject.files.map(f => ({
+        filename: f.filename,
+        language: f.language || 'text',
+        // Cap extremely large individual files at the wire level to avoid 10MB+ single requests.
+        // (Full content is still preferred for small-medium projects that are the common case.)
+        content: (f.content || '').length > 120000 ? (f.content.slice(0, 120000) + '\n\n// [TRUNCATED in transit - model should ask for full file if the relevant section is missing]') : (f.content || '')
+      }))
+    };
+  }
 
-When generating website files, make the website visually harmonize with this active Hazy appearance. Define theme variables in CSS (for example --bg, --surface, --text, --muted, --accent, --border) and use them consistently. Do not default to an unrelated blue/purple palette unless the user's prompt explicitly asks for it.`;
-}
-
-function buildHazyMetadata({ files, isBuild, isCode }) {
-  const agentEnabled = Boolean(window.hazyAgent?.isActive?.() || localStorage.getItem('hazyAgentEnabled') === 'true');
-  const themeKey = normalizeTheme(STATE.theme);
-  const theme = BUILD_THEME_PROFILES[themeKey] || BUILD_THEME_PROFILES.cream;
   return {
     mode: STATE.mode,
+    page: activePage,
+    surface: activePage === 'agent' ? 'agentic' : 'chat',
+    agenticMode: agentEnabled,
     appearance: {
       theme: themeKey,
       label: theme.label,
       mood: theme.mood,
       palette: theme.palette,
+      instruction: theme.instruction,
     },
     reasoningMode: STATE.reasoningMode || 'auto',
     showReasoningSummary: STATE.showReasoningSummary !== false,
     codeLangHint: STATE.codeLang || 'auto',
+    ragEnabled: window.hazyRAG ? window.hazyRAG.isActive() : (localStorage.getItem('hazyRAGEnabled') === 'true'),
     isBuild,
     isCode,
     agentEnabled,
-    agentMaxIterations: Number(window.hazyAgent?.maxIterations || localStorage.getItem('hazyAgentMaxIterations') || 5),
+    agentMaxIterations: getAgentMaxIterations(),
+    agentSource: activePage === 'agent' ? 'page' : 'chat',
     attachments: (files || []).map(f => ({
       name: f.name,
       category: f.category,
       ext: f.ext || '',
       size: f.size,
       contentPreview: f.content ? f.content.slice(0, 8000) : ''
-    }))
+    })),
+    currentProject: currentProjectMeta
   };
 }
 
@@ -1071,33 +1177,83 @@ function decodeHazyTraceHeader(response) {
   }
 }
 
-function renderHazyDecisionTrace(trace) {
-  if (!trace || !trace.summary) return '';
+function renderHazyDecisionTrace(trace, webSearchMetadata) {
+  const hasTrace = trace && trace.summary;
+  const hasWebSearch = webSearchMetadata && webSearchMetadata.runId;
+
+  if (!hasTrace && !hasWebSearch) return '';
+
   const safeLabels = new Set(['Checked', 'Task analysis', 'Context window', 'Reasoning level', 'Tool decision', 'Verification']);
-  const rows = (trace.steps || [])
-    .filter(step => safeLabels.has(step.label))
-    .slice(0, 4)
-    .map(step => `
-      <div class="hazy-trace-row">
-        <span class="hazy-trace-label">${escapeHtml(step.label)}</span>
-        <span class="hazy-trace-value">${escapeHtml(step.value)}</span>
-      </div>`)
-    .join('');
-  const tools = (trace.tools || [])
-    .filter(tool => tool.tool)
-    .slice(0, 4)
-    .map(tool => `<span>${escapeHtml(tool.tool)}${tool.success ? ' checked' : ' skipped'}</span>`)
-    .join('');
+
+  let thinkItem = '';
+  if (hasTrace) {
+    const stepRows = (trace.steps || [])
+      .filter(step => safeLabels.has(step.label))
+      .slice(0, 5)
+      .map(step => `
+        <div class="tl-step-row">
+          <span class="tl-step-key">${escapeHtml(step.label)}</span>
+          <span class="tl-step-val">${escapeHtml(step.value)}</span>
+        </div>`)
+      .join('');
+
+    const tools = (trace.tools || [])
+      .filter(t => t.tool)
+      .slice(0, 6)
+      .map(t => `<span>${escapeHtml(t.tool)}${t.success ? ' âœ“' : ' â€“'}</span>`)
+      .join('');
+
+    /* Gear/cog icon for thinking - matches Figma reference */
+    const thinkSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`;
+
+    thinkItem = `
+      <div class="timeline-item" role="listitem">
+        <div class="tl-icon" aria-hidden="true">${thinkSvg}</div>
+        <div class="tl-content">
+          <div class="tl-label">Thinking</div>
+          <div class="tl-text">${escapeHtml(trace.summary)}</div>
+          ${stepRows ? `<div class="tl-step-grid">${stepRows}</div>` : ''}
+          ${tools ? `<div class="tl-tools">${tools}</div>` : ''}
+          ${trace.note ? `<p class="tl-note">${escapeHtml(trace.note)}</p>` : ''}
+        </div>
+      </div>`;
+  }
+
+  /* Globe with crosshair icon for web search - matches Figma reference */
+  const searchSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><line x1="12" y1="2" x2="12" y2="22"/></svg>`;
+
+  const webPlaceholder = hasWebSearch
+    ? `<div class="timeline-item" role="listitem" id="tl-search-placeholder-${escapeHtml(webSearchMetadata.runId)}">
+        <div class="tl-icon search pulsing" aria-hidden="true">${searchSvg}</div>
+        <div class="tl-content">
+          <div class="tl-label">Searching the web</div>
+          <div class="tl-skeleton wide"></div>
+          <div class="tl-skeleton mid"></div>
+          <div class="tl-skeleton narrow"></div>
+        </div>
+       </div>`
+    : '';
+
+  const summaryText = hasTrace ? escapeHtml(trace.summary) : 'Searching the web...';
+  const summaryIconClass = hasTrace ? '' : 'search-icon';
+  /* Hazy sparkle star for summary header */
+  const summaryIconSvg = hasTrace
+    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 5.2 5.6.8-4 4 .9 5.6L12 15l-4.9 2.6.9-5.6-4-4 5.6-.8z"/></svg>`
+    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+
   return `
-    <details class="hazy-trace-card">
-      <summary>
-        <span>Reasoning summary</span>
-        <strong>${escapeHtml(trace.summary)}</strong>
+    <details class="timeline-panel" open
+      aria-label="Reasoning trace"
+      aria-expanded="true">
+      <summary tabindex="0">
+        <span class="tl-summary-icon ${summaryIconClass}" aria-hidden="true">${summaryIconSvg}</span>
+        <span class="tl-summary-label">Hazy</span>
+        <span class="tl-summary-text">${summaryText}</span>
+        <span class="tl-chevron" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
       </summary>
-      <div class="hazy-trace-body">
-        ${rows}
-        ${tools ? `<div class="hazy-trace-tools">${tools}</div>` : ''}
-        <p class="hazy-trace-note">${escapeHtml(trace.note || 'Safe public summary only. Private reasoning is not shown.')}</p>
+      <div class="timeline-list" role="list">
+        ${thinkItem}
+        ${webPlaceholder}
       </div>
     </details>`;
 }
@@ -1105,41 +1261,147 @@ function renderHazyDecisionTrace(trace) {
 function getWebSearchMetadata(response) {
   return {
     runId: response.headers.get('X-Hazy-Web-Search-Run') || '',
+    mode: response.headers.get('X-Hazy-Web-Search-Mode') || '',
     confidence: response.headers.get('X-Hazy-Web-Confidence') || '',
     citationCount: Number(response.headers.get('X-Hazy-Citation-Count') || 0)
   };
 }
 
+function renderSourcePanelList(title, items, renderer, emptyText = 'None') {
+  const rows = Array.isArray(items) ? items : [];
+  return `
+    <details class="web-source-section" ${rows.length ? 'open' : ''}>
+      <summary>${escapeHtml(title)} <span>${rows.length}</span></summary>
+      ${rows.length ? `<div class="web-source-section-body">${rows.map(renderer).join('')}</div>` : `<p>${escapeHtml(emptyText)}</p>`}
+    </details>`;
+}
+
+// Returns the HTML string for the populated search item (SOURCES_LOADED state)
+// OR an error item (ERROR state). Never throws - always resolves.
 async function loadWebSourceCards(metadata) {
-  if (!metadata?.runId || !metadata.citationCount) return '';
+  if (!metadata?.runId || !metadata.citationCount) return null;
+
   try {
     const params = new URLSearchParams({ runId: metadata.runId, userId: 'local-user' });
-    const response = await fetch(hazyServerEndpoint(`/hazy/sources?${params.toString()}`));
-    if (!response.ok) return '';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let response;
+    try {
+      response = await fetch(hazyServerEndpoint(`/hazy/sources?${params.toString()}`), { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const citations = Array.isArray(data.citations) ? data.citations : [];
-    if (!citations.length) return '';
+    if (!citations.length) return null; // no citations - leave placeholder removed, no Done item
+
+    const decision = data.decision || {};
+    const queries = Array.isArray(data.queries) ? data.queries : [];
+    const confidence = (data.confidence || metadata.confidence || 'low').toLowerCase();
+
+    const sourceCards = citations.map((citation, index) => {
+      let host = citation.domain;
+      if (!host) { try { host = new URL(citation.url).hostname; } catch { host = citation.url; } }
+      return `
+        <a class="tl-source-card" href="${escapeHtml(citation.url)}" target="_blank" rel="noopener noreferrer"
+           aria-label="Source ${index + 1}: ${escapeHtml(citation.title || host)}">
+          <span class="tl-source-num">${citation.sourceNumber || index + 1}</span>
+          <span class="tl-source-copy">
+            <strong>${escapeHtml(citation.title || 'Web source')}</strong>
+            <small>${escapeHtml(host)}${citation.publishedAt ? ` · ${String(citation.publishedAt).slice(0, 10)}` : ''}</small>
+          </span>
+        </a>`;
+    }).join('');
+
+    const queryChips = queries.length
+      ? `<div class="tl-search-queries">${queries.map(q => `<code>${escapeHtml(q.query || q)}</code>`).join('')}</div>`
+      : '';
+
     return `
-      <section class="web-source-panel" aria-label="Web sources">
-        <div class="web-source-heading">
-          <strong>Sources</strong>
-          ${metadata.confidence ? `<span>${escapeHtml(metadata.confidence)} confidence</span>` : ''}
-        </div>
-        <div class="web-source-list">
-          ${citations.map((citation, index) => `
-            <a class="web-source-card" href="${escapeHtml(citation.url)}" target="_blank" rel="noopener noreferrer">
-              <span class="web-source-number">${index + 1}</span>
-              <span>
-                <strong>${escapeHtml(citation.title || 'Web source')}</strong>
-                <small>${escapeHtml((() => { try { return new URL(citation.url).hostname; } catch { return citation.url; } })())}</small>
-              </span>
-            </a>
-          `).join('')}
-        </div>
-      </section>`;
-  } catch {
-    return '';
+      <div class="tl-label">Web search</div>
+      <div class="tl-confidence ${confidence}" role="status" aria-live="polite">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+        ${escapeHtml(decision.mode || metadata.mode || 'web')} · ${escapeHtml(confidence)} confidence
+      </div>
+      ${decision.reason ? `<div class="tl-text" style="margin-bottom:4px">${escapeHtml(decision.reason)}</div>` : ''}
+      ${queryChips}
+      <div class="tl-source-grid">${sourceCards}</div>
+      <div class="tl-meta-row">
+        <span><b>${citations.length}</b> cited</span>
+      </div>`;
+
+  } catch (err) {
+    const reason = err.name === 'AbortError' ? 'Request timed out.' : 'Could not load results.';
+    return `__ERROR__:${reason}`;
   }
+}
+
+// Inject web search result (or error) into the timeline placeholder.
+// Called after the stream resolves. Returns the timeline-list container so
+// the caller can append the Done item when ready.
+function finalizeTimelineSearch(contentDiv, metadata, searchResultHtml) {
+  if (!metadata?.runId) return null;
+  const placeholder = contentDiv.querySelector(`#tl-search-placeholder-${CSS.escape(metadata.runId)}`);
+  if (!placeholder) return null;
+
+  const timelineList = placeholder.closest('.timeline-list');
+
+  /* Globe with crosshair for web search results */
+  const searchSvgSm = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><line x1="12" y1="2" x2="12" y2="22"/></svg>`;
+  /* Triangle alert for errors */
+  const warnSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r=".5"/></svg>`;
+  /* Circle checkmark for success */
+  const checkSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`;
+
+  if (!searchResultHtml) {
+    placeholder.className = 'timeline-item';
+    placeholder.setAttribute('role', 'listitem');
+    placeholder.innerHTML = `
+      <div class="tl-icon search" aria-hidden="true">${searchSvgSm}</div>
+      <div class="tl-content">
+        <div class="tl-label">Web search</div>
+        <div class="tl-text">No relevant web sources found.</div>
+      </div>`;
+    return timelineList;
+  }
+
+  if (searchResultHtml.startsWith('__ERROR__:')) {
+    const reason = searchResultHtml.slice(10);
+    placeholder.className = 'timeline-item timeline-item--error';
+    placeholder.setAttribute('role', 'listitem');
+    placeholder.innerHTML = `
+      <div class="tl-icon error" aria-hidden="true">${warnSvg}</div>
+      <div class="tl-content">
+        <div class="tl-label">Web search</div>
+        <div class="tl-text">Web search failed. ${escapeHtml(reason)} Showing model knowledge only.</div>
+      </div>`;
+    return timelineList;
+  }
+
+  placeholder.className = 'timeline-item';
+  placeholder.setAttribute('role', 'listitem');
+  placeholder.innerHTML = `
+    <div class="tl-icon search" aria-hidden="true">${searchSvgSm}</div>
+    <div class="tl-content">${searchResultHtml}</div>`;
+  return timelineList;
+}
+
+// Append the final Done item once both stream + search are settled.
+function appendTimelineDone(timelineList) {
+  if (!timelineList) return;
+  /* Circle checkmark for done - clean enclosed check */
+  const doneSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`;
+  const done = document.createElement('div');
+  done.className = 'timeline-item';
+  done.setAttribute('role', 'listitem');
+  done.innerHTML = `
+    <div class="tl-icon done" aria-hidden="true">${doneSvg}</div>
+    <div class="tl-content">
+      <div class="tl-done-badge">Done</div>
+    </div>`;
+  timelineList.appendChild(done);
 }
 
 function appendHazyDecisionTrace(trace) {
@@ -1160,8 +1422,8 @@ function renderRawThinking(thinking, streaming = false) {
     : '';
 }
 
-function renderAssistantContent(content, trace = null, thinking = '') {
-  return `${renderHazyDecisionTrace(trace)}${renderRawThinking(thinking)}${renderMarkdown(content || '')}`;
+function renderAssistantContent(content, trace = null, thinking = '', webSearchMetadata = null) {
+  return `${renderHazyDecisionTrace(trace, webSearchMetadata)}${renderRawThinking(thinking)}${renderMarkdown(content || '')}`;
 }
 
 function getThinkingToken(json) {
@@ -1169,7 +1431,7 @@ function getThinkingToken(json) {
     json?.message?.reasoning_content || json?.reasoning_content || '';
 }
 
-// ── Generate the first message automatically when starting a persona chat ─
+// -- Generate the first message automatically when starting a persona chat -
 async function injectPersonaOpener() {
   if (!STATE.personaEnabled) return;
   const conv = STATE.conversations[STATE.activeConvId];
@@ -1177,25 +1439,25 @@ async function injectPersonaOpener() {
 
   // Send a hidden trigger to make the AI open the scene
   const triggerMsg = STATE.scenarioOpener
-    ? '[START SCENE — deliver your opening line as described]'
-    : '[START SCENE — open naturally, set the mood, you go first]';
+    ? '[START SCENE - deliver your opening line as described]'
+    : '[START SCENE - open naturally, set the mood, you go first]';
 
   setStreamingState(true);
   appendTypingIndicator();
 
   try {
     STATE.abortController = new AbortController();
-    const savedModel   = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
+    const savedModel = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+    const isCloud = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
 
     const personaChatEndpoint = window.location.protocol === 'file:'
       ? `${STATE.ollamaUrl}/api/chat`
       : hazyServerEndpoint('/hazy/chat');
 
     const personaBody = window.location.protocol === 'file:'
-      ? { model: STATE.model, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens } }
-      : { model: savedModel, messages: [{ role: 'system', content: buildPersonaPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens, max_tokens: STATE.maxTokens } };
+      ? { model: STATE.model, messages: [{ role: 'system', content: getActiveSystemPrompt() }, { role: 'user', content: triggerMsg }], stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens } }
+      : { model: savedModel, messages: [{ role: 'system', content: getActiveSystemPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens, max_tokens: STATE.maxTokens } };
 
     const response = await fetch(personaChatEndpoint, {
       method: 'POST',
@@ -1211,7 +1473,11 @@ async function injectPersonaOpener() {
     removeTypingIndicator();
     if (hazyTrace) appendHazyDecisionTrace(hazyTrace);
     const aiTs = Date.now();
-    const { contentDiv } = appendMessage('assistant', '', true, aiTs);
+    const { contentDiv, mascotImg } = appendMessage('assistant', '', true, aiTs);
+    // Attach mascot emotion controller to this message
+    const _mascotCtrl = mascotImg && window.HazyMascotController ? new window.HazyMascotController(mascotImg) : null;
+    if (_mascotCtrl) window.HAZY_MASCOT_CONTROLLER = _mascotCtrl;
+    let _rawEmoBuf = '';
     let fullContent = '';
     let fullThinking = '';
     const reader = response.body.getReader();
@@ -1230,21 +1496,32 @@ async function injectPersonaOpener() {
             scrollToBottom();
           }
           if (json.message?.content) {
-            fullContent += json.message.content;
+            const _t1 = json.message.content;
+            _rawEmoBuf += _t1;
+            if (_mascotCtrl) _mascotCtrl.scanBuffer(_rawEmoBuf);
+            const _clean1 = window.hazyStripEmotionTags ? window.hazyStripEmotionTags(_t1) : _t1.replace(/\[\[(happy|annoyed|flustered)\]\]/g, '');
+            fullContent += _clean1;
             contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`;
             scrollToBottom();
           }
           if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
-        } catch {}
+        } catch { }
       }
     }
 
-    conv.messages.push({ role: 'assistant', content: fullContent, thinking: fullThinking, ts: aiTs });
+    if (_mascotCtrl) { _mascotCtrl.onStreamEnd(fullContent); window.HAZY_MASCOT_CONTROLLER = null; }
+    conv.messages.push({
+      role: 'assistant',
+      content: fullContent,
+      thinking: fullThinking,
+      ts: aiTs,
+      emotion: _mascotCtrl ? (_mascotCtrl._currentEmotion || 'happy') : 'happy'
+    });
     saveConversations();
     contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking);
     highlightCodeBlocks(contentDiv);
 
-  } catch(e) {
+  } catch (e) {
     removeTypingIndicator();
     if (e.name !== 'AbortError') appendErrorMessage(`Could not start scene: ${e.message}`);
   } finally {
@@ -1295,13 +1572,13 @@ function renderPresetScenarioGrid() {
 
       // Fill in all fields from preset
       const charName = STATE.personaName || 'Alex';
-      if (el.personaNameInput)     el.personaNameInput.value     = charName;
-      if (el.personaGender)        el.personaGender.value        = preset.gender;
-      if (el.personaLanguage)      el.personaLanguage.value      = preset.language;
-      if (el.scenarioDesc)         el.scenarioDesc.value         = preset.scenarioDesc.replace(/\{name\}/g, charName);
-      if (el.scenarioOpener)       el.scenarioOpener.value       = preset.opener.replace(/\{name\}/g, charName);
-      if (el.scenarioUserRole)     el.scenarioUserRole.value     = preset.userRole;
-      if (el.scenarioCharRole)     el.scenarioCharRole.value     = preset.charRole;
+      if (el.personaNameInput) el.personaNameInput.value = charName;
+      if (el.personaGender) el.personaGender.value = preset.gender;
+      if (el.personaLanguage) el.personaLanguage.value = preset.language;
+      if (el.scenarioDesc) el.scenarioDesc.value = preset.scenarioDesc.replace(/\{name\}/g, charName);
+      if (el.scenarioOpener) el.scenarioOpener.value = preset.opener.replace(/\{name\}/g, charName);
+      if (el.scenarioUserRole) el.scenarioUserRole.value = preset.userRole;
+      if (el.scenarioCharRole) el.scenarioCharRole.value = preset.charRole;
 
       // Select relation card
       document.querySelectorAll('.persona-card').forEach(c => {
@@ -1313,7 +1590,7 @@ function renderPresetScenarioGrid() {
         pill.classList.toggle('selected', preset.traits.includes(pill.dataset.trait));
       });
 
-      showToast(`"${preset.title}" loaded — customize or hit Start Scenario!`, 'success');
+      showToast(`"${preset.title}" loaded - customize or hit Start Scenario!`, 'success');
     });
   });
 }
@@ -1324,7 +1601,7 @@ function renderScenarioSettingGrid() {
   if (!grid) return;
   grid.innerHTML = SCENARIO_SETTINGS.map(s => `
     <button class="scenario-setting-btn ${STATE.scenarioSetting === s.id ? 'selected' : ''}" data-setting="${s.id}">
-      ${s.emoji} ${s.label}
+      ${getIconSvg(s.icon || 'icon-sparkles')} ${s.label}
     </button>`).join('');
 
   grid.querySelectorAll('.scenario-setting-btn').forEach(btn => {
@@ -1346,38 +1623,38 @@ function switchPersonaTab(tabId) {
   if (tabId === 'preview') updatePersonaPreview();
 }
 
-function updatePersonaPreview() {
+async function updatePersonaPreview() {
   if (!el.personaPreviewBox) return;
-  // Temporarily read current form values
-  const savedName  = STATE.personaName;
-  const savedDesc  = STATE.scenarioDesc;
-  const savedOpen  = STATE.scenarioOpener;
-  const savedUser  = STATE.scenarioUserRole;
-  const savedChar  = STATE.scenarioCharRole;
-  const savedLang  = STATE.personaLanguage;
-  const savedRel   = STATE.personaRelation;
-  const savedTrait = STATE.personaTraits;
 
-  STATE.personaName      = el.personaNameInput?.value.trim()     || 'Alex';
-  STATE.scenarioDesc     = el.scenarioDesc?.value.trim()         || '';
-  STATE.scenarioOpener   = el.scenarioOpener?.value.trim()       || '';
-  STATE.scenarioUserRole = el.scenarioUserRole?.value.trim()     || '';
-  STATE.scenarioCharRole = el.scenarioCharRole?.value.trim()     || '';
-  STATE.personaLanguage  = el.personaLanguage?.value             || 'casual';
-  STATE.personaRelation  = document.querySelector('.persona-card.selected')?.dataset.relation || 'friend';
-  STATE.personaTraits    = Array.from(document.querySelectorAll('.trait-pill.selected')).map(p => p.dataset.trait);
+  const currentSettings = {
+    personaRelation: document.querySelector('.persona-card.selected')?.dataset.relation || 'friend',
+    personaName: el.personaNameInput?.value.trim() || 'Alex',
+    personaUserName: el.personaUserNameInput?.value.trim() || '',
+    personaGender: el.personaGender?.value || 'neutral',
+    personaLanguage: el.personaLanguage?.value || 'casual',
+    personaTraits: Array.from(document.querySelectorAll('.trait-pill.selected')).map(p => p.dataset.trait),
+    scenarioDesc: el.scenarioDesc?.value.trim() || '',
+    scenarioOpener: el.scenarioOpener?.value.trim() || '',
+    scenarioUserRole: el.scenarioUserRole?.value.trim() || '',
+    scenarioCharRole: el.scenarioCharRole?.value.trim() || '',
+    scenarioSetting: document.querySelector('.scenario-setting-btn.selected')?.dataset.setting || ''
+  };
 
-  el.personaPreviewBox.textContent = buildPersonaPrompt();
+  el.personaPreviewBox.textContent = 'Generating preview...';
 
-  // Restore
-  STATE.personaName      = savedName;
-  STATE.scenarioDesc     = savedDesc;
-  STATE.scenarioOpener   = savedOpen;
-  STATE.scenarioUserRole = savedUser;
-  STATE.scenarioCharRole = savedChar;
-  STATE.personaLanguage  = savedLang;
-  STATE.personaRelation  = savedRel;
-  STATE.personaTraits    = savedTrait;
+  try {
+    if (window.location.protocol === 'file:') throw new Error('standalone');
+    const response = await fetch(hazyServerEndpoint('/hazy/persona-prompt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentSettings)
+    });
+    if (!response.ok) throw new Error();
+    const data = await response.json();
+    el.personaPreviewBox.textContent = data.prompt;
+  } catch (e) {
+    el.personaPreviewBox.textContent = buildPersonaPromptOffline(currentSettings);
+  }
 }
 
 // ========================
@@ -1387,10 +1664,11 @@ async function loadConversations() {
   let legacyConversations = {};
   try {
     legacyConversations = JSON.parse(localStorage.getItem('hazy_conversations') || '{}');
-  } catch {}
+  } catch { }
 
   if (window.location.protocol === 'file:') {
     STATE.conversations = legacyConversations;
+    normalizeStoredConversations();
     return;
   }
 
@@ -1406,8 +1684,10 @@ async function loadConversations() {
       await persistConversations();
     }
     localStorage.removeItem('hazy_conversations');
+    normalizeStoredConversations();
   } catch {
     STATE.conversations = legacyConversations;
+    normalizeStoredConversations();
   }
 }
 
@@ -1442,86 +1722,158 @@ async function persistConversations() {
   localStorage.removeItem('hazy_conversations');
 }
 
-function createConversation(firstMessage) {
-  const id = 'conv_' + Date.now();
+function createConversation(firstMessage, page = STATE.activePage) {
+  const normalizedPage = normalizePage(page);
+  const id = `conv_${normalizedPage}_${Date.now()}`;
   STATE.conversations[id] = {
-    title: '…',   // placeholder — will be replaced by generateChatTitle
+    title: '...',   // placeholder - will be replaced by generateChatTitle
     messages: [],
     createdAt: Date.now(),
+    page: normalizedPage,
+    agentEnabled: normalizedPage === 'agent',
+    agent: normalizedPage === 'agent' ? { maxIterations: getAgentMaxIterations() } : undefined,
   };
+  STATE.activePage = normalizedPage;
   STATE.activeConvId = id;
+  STATE.pageConversations[normalizedPage] = id;
   saveConversations();
   renderChatHistory();
+  updatePageChrome();
   return id;
 }
 
-// ── Auto-generate a smart title from the first exchange ───────────────────
+// -- Auto-generate a smart title from the first exchange -------------------
 // Runs as a background call after the first AI reply is received.
 // Uses a tiny max_tokens budget so it's fast and doesn't compete with RAM.
 async function generateChatTitle(convId, userMsg, aiReply) {
   if (!convId || !STATE.conversations[convId]) return;
+
+  const userName = (STATE.personaUserName || '').trim();
+  const savedModel = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
+
   try {
-    const prompt = `In 4 words or less, give this conversation a short descriptive title. No quotes, no punctuation, just the title words.
+    if (window.location.protocol === 'file:') throw new Error('standalone');
 
-User said: "${userMsg.slice(0, 200)}"
-AI replied: "${aiReply.slice(0, 200)}"
-
-Title:`;
-
-    const savedModel    = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
-    const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud       = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
-    const titleEndpoint = window.location.protocol === 'file:' ? `${STATE.ollamaUrl}/api/chat` : hazyServerEndpoint('/hazy/chat');
-    const titleBody     = window.location.protocol === 'file:'
-      ? { model: STATE.model, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.5, num_predict: 16 } }
-      : { model: savedModel, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.5, num_predict: 16, max_tokens: 16 } };
-
-    const res = await fetch(titleEndpoint, {
+    const response = await fetch(hazyServerEndpoint('/hazy/generate-title'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(titleBody),
+      body: JSON.stringify({
+        userMsg,
+        aiReply,
+        userName,
+        model: savedModel
+      })
     });
+    if (!response.ok) throw new Error();
+    const data = await response.json();
+    let title = (data.title || '').trim();
 
-    if (!res.ok) throw new Error();
-    const data = await res.json();
-    let title = (data.message?.content || '').trim();
-
-    // Sanitize — strip quotes, newlines, extra punctuation
-    title = title.replace(/^["'`]+|["'`]+$/g, '').replace(/\n.*/s, '').trim();
-    // Capitalize first letter
-    title = title.charAt(0).toUpperCase() + title.slice(1);
-    // Fallback if empty or too long
     if (!title || title.length > 60) throw new Error('bad title');
 
     if (STATE.conversations[convId]) {
       STATE.conversations[convId].title = title;
       saveConversations();
       renderChatHistory();
+      if (convId === STATE.activeConvId) {
+        updateWorkspaceChrome();
+      }
     }
-  } catch {
-    // Fallback: make a clean title from first few words of user message
-    if (STATE.conversations[convId] && STATE.conversations[convId].title === '…') {
-      const words = userMsg.trim().split(/\s+/).slice(0, 5).join(' ');
-      STATE.conversations[convId].title = words + (userMsg.split(/\s+/).length > 5 ? '…' : '');
-      saveConversations();
-      renderChatHistory();
+  } catch (err) {
+    // Standalone fallback: build prompt and query Ollama directly, or use first few words of userMsg
+    try {
+      const displayUserName = userName && userName.toLowerCase() !== 'you' ? userName : 'Not specified';
+      const prompt = `In 4 words or less, give this conversation a short descriptive title. No quotes, no punctuation, just the title words.
+
+User Name: ${displayUserName}
+AI Name: Hazy
+
+Rules for greetings:
+- If the user's message is just a simple greeting (like "hi", "hello", "hey", "hola", "sup", "yo"), title the conversation exactly as:
+  * If User Name is specified: "${userName}'s Greetings"
+  * If User Name is Not specified: "Hazy's Hi Responses"
+
+User said: "${userMsg.slice(0, 200)}"
+AI replied: "${aiReply.slice(0, 200)}"
+
+Title:`;
+
+      const titleEndpoint = `${STATE.ollamaUrl}/api/chat`;
+      const titleBody = { model: STATE.model, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.5, num_predict: 16 } };
+
+      const res = await fetch(titleEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(titleBody),
+      });
+
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      let title = (data.message?.content || '').trim();
+
+      // Sanitize - strip quotes, newlines, extra punctuation
+      title = title.replace(/^["'`]+|["'`]+$/g, '').replace(/\n.*/s, '').trim();
+      // Capitalize first letter
+      title = title.charAt(0).toUpperCase() + title.slice(1);
+      // Fallback if empty or too long
+      if (!title || title.length > 60) throw new Error('bad title');
+
+      if (STATE.conversations[convId]) {
+        STATE.conversations[convId].title = title;
+        saveConversations();
+        renderChatHistory();
+        if (convId === STATE.activeConvId) {
+          updateWorkspaceChrome();
+        }
+      }
+    } catch (fallbackErr) {
+      // Fallback: make a clean title from user message or greeting rules
+      if (STATE.conversations[convId] && (STATE.conversations[convId].title === '...' || STATE.conversations[convId].title === '.')) {
+        let title = 'Conversation';
+        const cleanMsg = userMsg.trim().toLowerCase();
+        if (/^(hi|hello|hey|hola|sup|yo)\b/i.test(cleanMsg)) {
+          title = userName && userName.toLowerCase() !== 'you' ? `${userName}'s Greetings` : "Hazy's Hi Responses";
+        } else {
+          title = userMsg.slice(0, 30) + (userMsg.length > 30 ? '...' : '');
+        }
+        STATE.conversations[convId].title = title;
+        saveConversations();
+        renderChatHistory();
+        if (convId === STATE.activeConvId) {
+          updateWorkspaceChrome();
+        }
+      }
     }
   }
 }
 
-function switchConversation(id) {
-  STATE.activeConvId = id;
+function switchConversation(id, options = {}) {
   const conv = STATE.conversations[id];
   if (!conv) return;
+  const convPage = getConversationPage(conv);
+  if (!options.preservePage && convPage !== STATE.activePage) {
+    STATE.activePage = convPage;
+    document.body.dataset.hazyPage = convPage;
+    persistActivePage();
+  }
+  STATE.activeConvId = id;
+  STATE.pageConversations[convPage] = id;
   document.getElementById('historyDrawer')?.classList.remove('open');
   document.getElementById('moreMenu')?.classList.remove('open');
   document.getElementById('appScrim')?.classList.remove('active');
   el.welcomeScreen.style.display = 'none';
   el.messagesArea.classList.add('visible');
   el.messagesArea.innerHTML = '';
+
+  // Isolate project context to this conversation only - clear any lingering
+  // build state from a different chat so files never bleed across sessions.
+  window._lastBuild = null;
+  STATE.builderFiles = [];
+  STATE.builderActive = false;
+
   conv.messages.forEach(msg => {
+
     if (msg.role === 'system') return;
-    const { group } = appendMessage(msg.role, msg.content, false, msg.ts);
+    const { group } = appendMessage(msg.role, msg.content, false, msg.ts, msg.emotion);
     // Restore file attachments thumbnail if stored
     if (msg.files && msg.files.length) {
       const attachmentsHtml = renderAttachedFilesInMessage(msg.files);
@@ -1539,9 +1891,16 @@ function switchConversation(id) {
 }
 
 function deleteConversation(id) {
+  const deletedPage = getConversationPage(STATE.conversations[id] || {});
   delete STATE.conversations[id];
+  if (STATE.pageConversations.chat === id) STATE.pageConversations.chat = findLatestConversationForPage('chat');
+  if (STATE.pageConversations.agent === id) STATE.pageConversations.agent = findLatestConversationForPage('agent');
   saveConversations();
-  if (STATE.activeConvId === id) { STATE.activeConvId = null; showWelcomeScreen(); }
+  if (STATE.activeConvId === id) {
+    STATE.activeConvId = STATE.pageConversations[deletedPage] || null;
+    if (STATE.activeConvId) switchConversation(STATE.activeConvId, { preservePage: true });
+    else showWelcomeScreen();
+  }
   renderChatHistory();
 }
 
@@ -1556,6 +1915,10 @@ function showWelcomeScreen() {
   el.messagesArea.classList.remove('visible');
   el.messagesArea.innerHTML = '';
   el.scrollBottomBtn.style.display = 'none';
+  // Clear any cross-chat build state - new chat = fresh slate
+  window._lastBuild = null;
+  STATE.builderFiles = [];
+  STATE.builderActive = false;
   updateWorkspaceChrome();
 }
 
@@ -1564,32 +1927,39 @@ function showWelcomeScreen() {
 // ========================
 function renderChatHistory(filterText) {
   const query = (filterText || el.historySearch.value || '').toLowerCase().trim();
+  const activePage = normalizePage(STATE.activePage);
   let convs = Object.entries(STATE.conversations)
-    .sort(([,a],[,b]) => (b.createdAt||0) - (a.createdAt||0));
-  if (query) convs = convs.filter(([,c]) => (c.title||'').toLowerCase().includes(query));
+    .filter(([, conv]) => getConversationPage(conv) === activePage)
+    .sort(([, a], [, b]) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (query) convs = convs.filter(([, c]) => (c.title || '').toLowerCase().includes(query));
   const shortcuts = document.getElementById('recentShortcutList');
 
   if (!convs.length) {
     el.chatHistory.innerHTML = query
       ? `<div class="empty-history">No chats match "${escapeHtml(query)}"</div>`
-      : `<div class="empty-history">Your conversations will appear here</div>`;
+      : `<div class="empty-history">Your ${activePage === 'agent' ? 'agentic sessions' : 'conversations'} will appear here</div>`;
     if (shortcuts) {
-      shortcuts.innerHTML = `<div class="empty-history">Your recent conversations will appear here.</div>`;
+      shortcuts.innerHTML = `<div class="empty-history">Your recent ${activePage === 'agent' ? 'agentic sessions' : 'conversations'} will appear here.</div>`;
     }
     updateWorkspaceChrome();
     return;
   }
 
   el.chatHistory.innerHTML = convs.map(([id, conv]) => {
-    const isLoading = conv.title === '…';
+    const isLoading = conv.title === '...';
     const titleHtml = isLoading
       ? `<span class="history-title-loading"></span>`
       : `<span class="history-title">${escapeHtml(conv.title || 'New Chat')}</span>`;
     return `
     <div class="history-item ${id === STATE.activeConvId ? 'active' : ''}" data-id="${id}">
+      <div class="history-icon" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </div>
       <div class="history-item-body">
         ${titleHtml}
-        <span class="history-time">${conv.createdAt ? formatRelativeTime(conv.createdAt) : ''}</span>
+        <span class="history-time">${activePage === 'agent' ? 'Agentic · ' : ''}${conv.createdAt ? formatRelativeTime(conv.createdAt) : ''}</span>
       </div>
       <div class="history-actions">
         <button class="history-rename" data-id="${id}" title="Rename">
@@ -1598,7 +1968,7 @@ function renderChatHistory(filterText) {
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
         </button>
-        <button class="history-delete" data-id="${id}" title="Delete">✕</button>
+        <button class="history-delete" data-id="${id}" title="Delete">✖</button>
       </div>
     </div>`;
   }).join('');
@@ -1647,7 +2017,7 @@ function renderChatHistory(filterText) {
 // Helpers: time
 // ========================
 function formatRelativeTime(ts) {
-  const d = Date.now() - ts, m = Math.floor(d/60000), h = Math.floor(d/3600000), dy = Math.floor(d/86400000);
+  const d = Date.now() - ts, m = Math.floor(d / 60000), h = Math.floor(d / 3600000), dy = Math.floor(d / 86400000);
   if (m < 1) return 'just now';
   if (m < 60) return `${m}m ago`;
   if (h < 24) return `${h}h ago`;
@@ -1663,20 +2033,34 @@ function updateWorkspaceChrome() {
   const titleEl = document.getElementById('currentThreadTitle');
   const metaEl = document.getElementById('currentThreadMeta');
   const hasActive = !!STATE.activeConvId && !!STATE.conversations[STATE.activeConvId];
+  const page = normalizePage(STATE.activePage);
 
   document.body.classList.toggle('chat-active', hasActive);
 
   if (titleEl) {
     titleEl.textContent = hasActive
-      ? (STATE.conversations[STATE.activeConvId]?.title || 'New Chat')
-      : 'Start with one clear prompt';
+      ? (STATE.conversations[STATE.activeConvId]?.title || (page === 'agent' ? 'New Agentic Session' : 'New Chat'))
+      : (page === 'agent' ? 'Start an agentic run' : 'Start with one clear prompt');
   }
 
   if (metaEl) {
     metaEl.textContent = hasActive
-      ? 'Everything stays in this thread: chat, build output, and code previews.'
-      : 'Ask a question, build a site, generate code, or reopen a recent thread.';
+      ? (page === 'agent'
+        ? 'This session can call backend tools, validate arguments, and continue until the tool loop finishes.'
+        : 'Everything stays in this thread: chat, build output, and code previews.')
+      : (page === 'agent'
+        ? 'Use this page when you want Hazy to research, calculate, or call safe backend tools.'
+        : 'Ask a question, build a site, generate code, or reopen a recent thread.');
   }
+
+  const heroSubtitle = document.querySelector('.hero-subtitle');
+  if (heroSubtitle) {
+    heroSubtitle.textContent = page === 'agent'
+      ? 'Agentic mode is a separate web-chat page that routes through Hazyâ€™s backend tool loop.'
+      : 'Your local companion for support, coding, and building full websites.';
+  }
+
+  updatePageChrome();
 }
 
 // ========================
@@ -1691,10 +2075,10 @@ async function checkOllamaConnection() {
     setStatus('online', 'Online');
     populateModels(data.models || []);
   } catch {
-    // Ollama offline — but cloud models may still be available
-    const hasCloudKey = ['anthropic','openai','groq','gemini','nvidia']
+    // Ollama offline - but cloud models may still be available
+    const hasCloudKey = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia']
       .some(p => _providerStatuses[p]?.hasKey &&
-                 localStorage.getItem('hazyVerified_' + p) === 'true');
+        localStorage.getItem('hazyVerified_' + p) === 'true');
 
     if (hasCloudKey) {
       setStatus('online', 'Cloud Active');
@@ -1702,25 +2086,25 @@ async function checkOllamaConnection() {
       populateModels([]);
     } else {
       setStatus('error', 'Ollama offline');
-      el.modelList.innerHTML = `<div class="model-item loading-models" style="color:var(--danger);flex-direction:column;gap:4px;padding:12px 14px;"><span>⚠️ Cannot connect to Ollama</span><span style="font-size:11px;opacity:.7">Run: <code>ollama serve</code></span></div>`;
+      el.modelList.innerHTML = `<div class="model-item loading-models" style="color:var(--danger);flex-direction:column;gap:4px;padding:12px 14px;"><span>âš ï¸ Cannot connect to Ollama</span><span style="font-size:11px;opacity:.7">Run: <code>ollama serve</code></span></div>`;
       el.currentModelName.textContent = 'Not connected';
     }
   }
 }
 
 function populateModels(models) {
-  // ── Build cloud model entries for any provider with a saved key ────────────
+  // -- Build cloud model entries for any provider with a saved key ------------
   const CLOUD_PROVIDERS = [
-    { key: 'anthropic', label: '✦ Anthropic',  icon: '☁' },
-    { key: 'openai',    label: '✦ OpenAI',      icon: '☁' },
-    { key: 'groq',      label: '✦ Groq',         icon: '☁' },
-    { key: 'gemini',    label: '✦ Gemini',        icon: '☁' },
-    { key: 'nvidia',    label: '✦ NVIDIA',        icon: '☁' },
+    { key: 'anthropic', label: 'âœ¦ Anthropic', icon: 'â˜' },
+    { key: 'openai', label: 'âœ¦ OpenAI', icon: 'â˜' },
+    { key: 'groq', label: 'âœ¦ Groq', icon: 'â˜' },
+    { key: 'gemini', label: 'âœ¦ Gemini', icon: 'â˜' },
+    { key: 'nvidia', label: 'âœ¦ NVIDIA', icon: 'â˜' },
   ];
 
   const activeCloud = [];
   CLOUD_PROVIDERS.forEach(p => {
-    const hasKey   = Boolean(_providerStatuses[p.key]?.hasKey);
+    const hasKey = Boolean(_providerStatuses[p.key]?.hasKey);
     const verified = localStorage.getItem('hazyVerified_' + p.key) === 'true';
     // Only show in dropdown if key exists AND has been verified via Test button
     if (hasKey && verified) {
@@ -1731,12 +2115,12 @@ function populateModels(models) {
     }
   });
 
-  // ── Restore the currently active model from localStorage ─────────────────
-  const savedModel    = localStorage.getItem('hazyActiveModel') || '';
+  // -- Restore the currently active model from localStorage -----------------
+  const savedModel = localStorage.getItem('hazyActiveModel') || '';
   const savedProvider = savedModel.split('/')[0] || 'ollama';
-  const isCloudActive = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+  const isCloudActive = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
 
-  // ── Build HTML ────────────────────────────────────────────────────────────
+  // -- Build HTML ------------------------------------------------------------
   let html = '';
 
   // Cloud section (if any active)
@@ -1760,8 +2144,8 @@ function populateModels(models) {
     </div>`;
   } else {
     html += models.map(m => {
-      const mb = m.size ? Math.round(m.size/1024/1024) : null;
-      const sz = mb ? (mb > 1000 ? `${(mb/1024).toFixed(1)}GB` : `${mb}MB`) : '';
+      const mb = m.size ? Math.round(m.size / 1024 / 1024) : null;
+      const sz = mb ? (mb > 1000 ? `${(mb / 1024).toFixed(1)}GB` : `${mb}MB`) : '';
       const currentName = isCloudActive ? savedModel : STATE.model;
       return `<div class="model-item ${m.name === currentName ? 'selected' : ''}" data-name="${m.name}" data-provider="ollama">
         <span>${m.name}</span>${sz ? `<span class="model-size">${sz}</span>` : ''}
@@ -1771,7 +2155,7 @@ function populateModels(models) {
 
   el.modelList.innerHTML = html;
 
-  // ── Update display name in sidebar ────────────────────────────────────────
+  // -- Update display name in sidebar ----------------------------------------
   if (isCloudActive && savedModel) {
     const cloudEntry = activeCloud.find(m => m.fullId === savedModel);
     el.currentModelName.textContent = cloudEntry ? cloudEntry.label : savedModel.split('/')[1] || savedModel;
@@ -1779,7 +2163,7 @@ function populateModels(models) {
     // Pick a good default Ollama model if current STATE.model isn't in the list
     const names = models.map(m => m.name);
     if (!names.includes(STATE.model)) {
-      const preferred = ['qwen3.5','qwen3','qwen2.5','qwen2','mistral','llama3','llama3.2','llama2','gemma','phi3'];
+      const preferred = ['qwen3.5', 'qwen3', 'qwen2.5', 'qwen2', 'mistral', 'llama3', 'llama3.2', 'llama2', 'gemma', 'phi3'];
       STATE.model = preferred.find(p => names.some(n => n.includes(p))) || names[0];
       localStorage.setItem('hazyActiveModel', 'ollama/' + STATE.model);
       localStorage.setItem('hazyProvider', 'ollama');
@@ -1787,10 +2171,10 @@ function populateModels(models) {
     el.currentModelName.textContent = STATE.model;
   }
 
-  // ── Click handler for all items ───────────────────────────────────────────
+  // -- Click handler for all items -------------------------------------------
   el.modelList.querySelectorAll('.model-item').forEach(item => {
     item.addEventListener('click', () => {
-      const name     = item.dataset.name;
+      const name = item.dataset.name;
       const provider = item.dataset.provider || 'ollama';
 
       el.modelList.querySelectorAll('.model-item').forEach(i => i.classList.remove('selected'));
@@ -1799,13 +2183,13 @@ function populateModels(models) {
       el.modelSelector.classList.remove('open');
 
       if (provider === 'ollama') {
-        // Local model — bare name for Ollama API
+        // Local model - bare name for Ollama API
         STATE.model = name;
         el.currentModelName.textContent = name;
         localStorage.setItem('hazyActiveModel', 'ollama/' + name);
         localStorage.setItem('hazyProvider', 'ollama');
       } else {
-        // Cloud model — full 'provider/model' string
+        // Cloud model - full 'provider/model' string
         STATE.model = name;
         el.currentModelName.textContent = name.split('/')[1] || name;
         localStorage.setItem('hazyActiveModel', name);
@@ -1825,25 +2209,29 @@ function setStatus(s, t) { el.statusDot.className = 'status-dot ' + s; el.status
 // ========================
 function setMode(mode) {
   STATE.mode = mode;
-  el.modeChatBtn.classList.toggle('active', mode === 'chat');
-  el.modeBuildBtn.classList.toggle('active', mode === 'build');
-  el.modeCodeBtn.classList.toggle('active', mode === 'code');
+  el.modeChatBtn?.classList.toggle('active', mode === 'chat');
+  el.modeBuildBtn?.classList.toggle('active', mode === 'build');
+  el.modeCodeBtn?.classList.toggle('active', mode === 'code');
   const langWrap = document.getElementById('codeLangWrap');
   if (langWrap) langWrap.style.display = mode === 'code' ? 'flex' : 'none';
-  el.modeIndicator.innerHTML = mode === 'build' ? `${getIconSvg('icon-globe')}Website Builder mode`
-    : mode === 'code' ? `${getIconSvg('icon-grid')}Code Builder mode`
-    : `${getIconSvg('icon-chat')}Chat mode`;
-  el.chatInput.placeholder = mode === 'build'
-    ? 'Describe the website you want to build…'
-    : mode === 'code'
-    ? 'Describe the program or script you want to build…'
-    : 'Message Hazy…';
+  if (el.modeIndicator) {
+    el.modeIndicator.innerHTML = mode === 'build' ? `${getIconSvg('icon-globe')}Website Builder mode`
+      : mode === 'code' ? `${getIconSvg('icon-grid')}Code Builder mode`
+        : `${getIconSvg('icon-chat')}Chat mode`;
+  }
+  if (el.chatInput) {
+    el.chatInput.placeholder = mode === 'build'
+      ? 'Describe the website you want to build...'
+      : mode === 'code'
+        ? 'Describe the program or script you want to build...'
+        : 'Message Hazy...';
+  }
 }
 
 // ========================
 // Message rendering
 // ========================
-function appendMessage(role, content, animate = true, ts) {
+function appendMessage(role, content, animate = true, ts, emotion) {
   const group = document.createElement('div');
   group.className = 'message-group';
   if (!animate) group.style.animation = 'none';
@@ -1871,8 +2259,8 @@ function appendMessage(role, content, animate = true, ts) {
   // Look up conv message to check if edited
   const convMsg = STATE.activeConvId
     ? (STATE.conversations[STATE.activeConvId]?.messages || []).find(
-        m => m.role === role && m.content === content && m.ts === ts
-      )
+      m => m.role === role && m.content === content && m.ts === ts
+    )
     : null;
   if (convMsg?.edited) {
     const editedBadge = document.createElement('span');
@@ -1882,42 +2270,53 @@ function appendMessage(role, content, animate = true, ts) {
   }
   group.appendChild(meta);
 
-    if (role === 'assistant') {
+  if (role === 'assistant') {
     // Check if this message was originally a build/code result
     const convMsg2 = STATE.activeConvId
       ? (STATE.conversations[STATE.activeConvId]?.messages || []).find(
-          m => m.role === role && m.ts === ts
-        )
+        m => m.role === role && m.ts === ts
+      )
       : null;
     if (convMsg2?.buildMode && content) {
-      // Re-parse and show the build result card
-      const projectData = parseFinalResponseFiles(content);
+      // Prefer the stored structured projectData (exact files from when it was generated).
+      // Fall back to re-parsing the raw content only if missing (older stored convs).
+      const projectData = (convMsg2.projectData && Array.isArray(convMsg2.projectData.files) && convMsg2.projectData.files.length > 0)
+        ? convMsg2.projectData
+        : parseFinalResponseFiles(content);
       if (projectData && projectData.files.length > 0) {
-        contentDiv.innerHTML = `
+        const cleanContent = stripCodeBlocksAndDelimiters(content);
+        let bubbleHtml = '';
+        bubbleHtml += renderAssistantContent(cleanContent, convMsg2?.trace || null, convMsg2?.thinking || '');
+
+        const isPartial = !content.includes('===NOTES===') && !content.includes('===SETUP===');
+        bubbleHtml += `
           <div class="build-success">
             <div class="build-success-header">
               <span class="build-success-icon">✅</span>
-              <strong>${escapeHtml(projectData.project || (convMsg2.buildMode === 'code' ? 'Code' : 'Website'))} built!</strong>
+              <strong>${escapeHtml(projectData.project || (convMsg2.buildMode === 'code' ? 'Code' : 'Website'))} saved!</strong>
             </div>
             ${projectData.description ? `<p class="build-success-desc">${escapeHtml(projectData.description)}</p>` : ''}
             ${renderGeneratedFileCards(projectData)}
             ${projectData.setup ? `<div class="build-setup"><strong>Run:</strong> <code>${escapeHtml(projectData.setup)}</code></div>` : ''}
             ${projectData.notes ? `<p class="build-notes">${escapeHtml(projectData.notes)}</p>` : ''}
             <div class="build-actions">
-              <button class="build-open-btn" onclick="window._lastBuild=${JSON.stringify(projectData).replace(/</g,'&lt;').replace(/>/g,'&gt;')};openBuilderPanel(window._lastBuild)">
+              <button class="build-open-btn" onclick="window._lastBuild=${JSON.stringify(projectData).replace(/</g, '&lt;').replace(/>/g, '&gt;')};openBuilderPanel(window._lastBuild)">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 Open in Builder
               </button>
             </div>
           </div>`;
+        contentDiv.innerHTML = bubbleHtml;
+
         // Store for re-opening
         window[`_build_${ts}`] = projectData;
         // Fix the onclick to use the stored ref
         const openBtn = contentDiv.querySelector('.build-open-btn');
         if (openBtn) openBtn.onclick = () => { window._lastBuild = projectData; openBuilderPanel(projectData); };
         bindGeneratedFileCards(contentDiv, projectData);
+        highlightCodeBlocks(contentDiv);
       } else {
-        // Couldn't re-parse — show as markdown (best effort)
+        // Couldn't re-parse - show as markdown (best effort)
         contentDiv.innerHTML = renderAssistantContent(content, convMsg2?.trace || null, convMsg2?.thinking || '');
         highlightCodeBlocks(contentDiv);
       }
@@ -1928,9 +2327,38 @@ function appendMessage(role, content, animate = true, ts) {
   } else {
     contentDiv.textContent = content;
   }
-  bubble.appendChild(contentDiv);
-  msgDiv.appendChild(bubble);
-  group.appendChild(msgDiv);
+
+  // -- Mascot layout for assistant messages ----------------------------------
+  let mascotImg = null;
+  if (role === 'assistant') {
+    // Build: [mascot frame] | [message content]
+    const hazyLayout = document.createElement('div');
+    hazyLayout.className = 'hazy-message-layout';
+
+    const mascotFrame = document.createElement('div');
+    mascotFrame.className = 'hazy-mascot-frame';
+    mascotImg = document.createElement('img');
+    mascotImg.className = 'hazy-mascot-image';
+    mascotImg.alt = 'Hazy';
+    // Resolve emotion for this specific message
+    const resolvedEmotion = emotion || (window.HAZY_MASCOT_STATE && window.HAZY_MASCOT_STATE.currentEmotion) || 'happy';
+    const src = window.HAZY_MASCOTS ? window.HAZY_MASCOTS[resolvedEmotion] : `assets/mascot/hazy_ai_${resolvedEmotion}.png`;
+    mascotImg.src = src;
+    mascotImg.dataset.emotion = resolvedEmotion;
+    mascotFrame.appendChild(mascotImg);
+    hazyLayout.appendChild(mascotFrame);
+
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'hazy-message-content';
+    bubble.appendChild(contentDiv);
+    contentWrapper.appendChild(bubble);
+    hazyLayout.appendChild(contentWrapper);
+
+    msgDiv.appendChild(hazyLayout);
+  } else {
+    bubble.appendChild(contentDiv);
+    msgDiv.appendChild(bubble);
+  }
 
   const actions = document.createElement('div');
   actions.className = 'message-actions';
@@ -1948,6 +2376,13 @@ function appendMessage(role, content, animate = true, ts) {
       Edit
     </button>` : ''}
     ${role === 'assistant' ? `
+    <span class="message-voice-controls">
+      <button class="msg-action-btn voice-play-btn" title="Play voice">Play</button>
+      <button class="msg-action-btn voice-pause-btn" title="Pause voice">Pause</button>
+      <button class="msg-action-btn voice-resume-btn" title="Resume voice">Resume</button>
+      <button class="msg-action-btn voice-stop-btn" title="Stop voice">Stop</button>
+      <button class="msg-action-btn voice-regenerate-btn" title="Regenerate voice">Regenerate voice</button>
+    </span>
     <button class="msg-action-btn regen-btn" title="Regenerate">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20.5 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       Regenerate
@@ -1958,7 +2393,7 @@ function appendMessage(role, content, animate = true, ts) {
   actions.querySelector('.copy-btn').addEventListener('click', () => {
     navigator.clipboard.writeText(content).then(() => {
       const btn = actions.querySelector('.copy-btn');
-      btn.classList.add('copied'); btn.textContent = '✓ Copied';
+      btn.classList.add('copied'); btn.textContent = 'âœ“ Copied';
       setTimeout(() => {
         btn.classList.remove('copied');
         btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/></svg> Copy';
@@ -1976,13 +2411,19 @@ function appendMessage(role, content, animate = true, ts) {
   // Regenerate (Hazy messages only)
   if (role === 'assistant') {
     actions.querySelector('.regen-btn')?.addEventListener('click', regenerateLast);
+    const textForVoice = () => stripMarkdown(contentDiv.textContent || content || '');
+    actions.querySelector('.voice-play-btn')?.addEventListener('click', () => speakText(textForVoice()));
+    actions.querySelector('.voice-pause-btn')?.addEventListener('click', () => window.HAZY_AUDIO_QUEUE_MANAGER?.pause());
+    actions.querySelector('.voice-resume-btn')?.addEventListener('click', () => window.HAZY_AUDIO_QUEUE_MANAGER?.resume());
+    actions.querySelector('.voice-stop-btn')?.addEventListener('click', () => window.HAZY_STREAMING_TTS?.stop());
+    actions.querySelector('.voice-regenerate-btn')?.addEventListener('click', () => speakText(textForVoice()));
   }
 
   // Place action buttons inside the message container so they align to the bubble
   msgDiv.appendChild(actions);
   group.appendChild(msgDiv);
   el.messagesArea.appendChild(group);
-  return { group, contentDiv };
+  return { group, contentDiv, mascotImg };
 }
 
 // ========================
@@ -2070,7 +2511,7 @@ function enterEditMode(group, bubble, contentDiv, originalText) {
 
     // Update the message text
     conv.messages[msgIndex].content = newText;
-    conv.messages[msgIndex].edited  = true;
+    conv.messages[msgIndex].edited = true;
     conv.messages[msgIndex].editedAt = Date.now();
 
     // Remove everything AFTER this message (AI replies + follow-ups)
@@ -2081,7 +2522,7 @@ function enterEditMode(group, bubble, contentDiv, originalText) {
     el.messagesArea.innerHTML = '';
     conv.messages.forEach(msg => {
       if (msg.role === 'system') return;
-      const { group: g } = appendMessage(msg.role, msg.content, false, msg.ts);
+      const { group: g } = appendMessage(msg.role, msg.content, false, msg.ts, msg.emotion);
       // Re-attach file thumbnails if any
       if (msg.files && msg.files.length) {
         const html = renderAttachedFilesInMessage(msg.files);
@@ -2112,7 +2553,7 @@ function appendTypingIndicator() {
   div.innerHTML = `<div class="message-meta"><span class="message-role">Hazy</span></div>
     <div class="typing-indicator">
       <div class="typing-dots"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
-      <span class="typing-label" id="typingLabel">${STATE.mode === 'build' ? 'Building your website…' : STATE.mode === 'code' ? 'Building your code…' : 'Thinking…'}</span>
+      <span class="typing-label" id="typingLabel">${STATE.mode === 'build' ? 'Building your website...' : STATE.mode === 'code' ? 'Building your code...' : 'Thinking...'}</span>
     </div>`;
   el.messagesArea.appendChild(div);
   scrollToBottom(true);
@@ -2124,11 +2565,11 @@ function removeTypingIndicator() { $('typingIndicator')?.remove(); }
 function normalizeCompanionResponse(text) {
   let revised = String(text || '');
   revised = revised.replace(
-    /\b(?:I(?:'| a)m|I am)\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
+    /\b(?:I(?:'| a)m|I am)\s+(?:an?\s+)?(?:AI companion|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
     "I'm Hazy"
   );
   revised = revised.replace(
-    /\bas\s+(?:an?\s+)?(?:AI assistant|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
+    /\bas\s+(?:an?\s+)?(?:AI companion|AI|artificial intelligence|language model|chatbot|bot|robot)\b/gi,
     'as Hazy'
   );
   revised = revised.replace(
@@ -2146,44 +2587,126 @@ function normalizeCompanionResponse(text) {
 // Syntax highlighting
 // ========================
 function highlightCodeBlocks(container) {
-  if (typeof hljs === 'undefined') return;
-  container.querySelectorAll('pre code').forEach(b => {
-    if (b.dataset.highlighted) return; // already highlighted — skip to preserve structure
-    hljs.highlightElement(b);
-  });
+  if (typeof hljs !== 'undefined') {
+    container.querySelectorAll('pre code').forEach(b => {
+      if (b.dataset.highlighted) return; // already highlighted - skip to preserve structure
+      hljs.highlightElement(b);
+    });
+  }
+  // Render KaTeX math in the container after code highlighting.
+  // renderMathInElement is provided by katex/contrib/auto-render loaded in index.html.
+  renderMathInContent(container);
+}
+
+// Safely call KaTeX's renderMathInElement if the library is ready.
+// Tolerant mode: throwOnError=false means invalid LaTeX shows a red token
+// instead of crashing the whole render.
+function renderMathInContent(container) {
+  if (typeof window.renderMathInElement !== 'function') return;
+  try {
+    window.renderMathInElement(container, {
+      delimiters: [
+        { left: '$$',  right: '$$',  display: true  },
+        { left: '\\[', right: '\\]', display: true  },
+        { left: '$',   right: '$',   display: false },
+        { left: '\\(', right: '\\)', display: false },
+      ],
+      throwOnError: false,
+      errorColor: '#e06c75',
+    });
+  } catch (e) {
+    console.warn('[Hazy] KaTeX render error:', e);
+  }
 }
 
 // ========================
 // Markdown renderer
 // ========================
 function renderMarkdown(text) {
-  let html = escapeHtml(text);
+  // --- Math protection pass ---------------------------------------------------
+  // Extract all math expressions BEFORE escapeHtml() so that backslashes, dollar
+  // signs, and braces inside LaTeX are never mangled by the HTML escaper or the
+  // markdown transforms below. They are stored as null-byte placeholders and
+  // restored verbatim at the very end so KaTeX can parse them.
+  const mathBlocks = [];
+  function protectMath(src) {
+    // Order matters: match $$ before $ to avoid partial matches.
+    return src
+      // Display math: $$...$$
+      .replace(/\$\$([\s\S]+?)\$\$/g, (_, inner) => {
+        const ph = `\x00MATH${mathBlocks.length}\x00`;
+        mathBlocks.push(`$$${inner}$$`);
+        return ph;
+      })
+      // Display math: \[...\]
+      .replace(/\\\[([\s\S]+?)\\\]/g, (_, inner) => {
+        const ph = `\x00MATH${mathBlocks.length}\x00`;
+        mathBlocks.push(`\\[${inner}\\]`);
+        return ph;
+      })
+      // Inline math: \(...\)
+      .replace(/\\\(([\s\S]+?)\\\)/g, (_, inner) => {
+        const ph = `\x00MATH${mathBlocks.length}\x00`;
+        mathBlocks.push(`\\(${inner}\\)`);
+        return ph;
+      })
+      // Inline math: $...$ (single dollar — skip if touching digits to avoid
+      // false positives like "costs $5 and $10")
+      .replace(/(?<![\d])\$(?!\s)([^$\n]+?)(?<!\s)\$/g, (_, inner) => {
+        const ph = `\x00MATH${mathBlocks.length}\x00`;
+        mathBlocks.push(`$${inner}$`);
+        return ph;
+      });
+  }
+  let html = escapeHtml(protectMath(text));
   const codeBlocks = [];
   const linkBlocks = [];
-  html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+
+  // 1. Support Hazy ===FILE: filename=== format natively in chat UI
+  html = html.replace(/===FILE:\s*([^\s=][^=]*?)===\r?\n?([\s\S]*?)(?=\r?\n===(?:FILE:|SETUP|NOTES|PROJECT|DESCRIPTION|$)|$)/gi, (_, filename, code) => {
+    const ph = `\x00CODE${codeBlocks.length}\x00`;
+    const langLabel = filename.trim();
+    const ext = langLabel.split('.').pop().toLowerCase();
+    const langClass = ext ? `language-${ext}` : '';
+    const cleanCode = code.replace(/^\r?\n/, '').replace(/\r/g, '').replace(/[\s\u200B\uFEFF]+$/, '');
+    codeBlocks.push(
+      `<div class="msg-code-block" lang="${langLabel}">
+  <div class="code-header">
+    <span class="code-lang-badge">${langLabel}</span>
+    <div class="code-actions">
+      <button class="code-action-btn code-explain-btn" onclick="explainCode(this)" title="Ask Hazy to explain this code">Explain</button>
+      <button class="code-action-btn code-improve-btn" onclick="improveCode(this)" title="Ask Hazy to improve this code">Improve</button>
+      <button class="code-action-btn code-copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+  </div>
+  <div class="code-content">
+    <pre><code class="hljs ${langClass}">${cleanCode}</code></pre>
+  </div>
+</div>`
+    );
+    return ph;
+  });
+
+  // 2. Support Standard markdown fences
+  html = html.replace(/```(\w*)\r?\n?([\s\S]*?)```/g, (_, lang, code) => {
     const ph = `\x00CODE${codeBlocks.length}\x00`;
     const langLabel = lang || 'code';
     const langClass = lang ? `language-${lang}` : '';
-    const lines = code.trimEnd().split('\n');
-    const lineNumbers = lines.map((_, i) => `<span class="code-line-num">${i + 1}</span>`).join('\n');
-    const langColorClass = `lang-color-${langLabel.toLowerCase()}`;
-    const escapedCode = code.trimEnd().replace(/'/g, "\\'").replace(/\n/g, '\\n');
+    const cleanCode = code.replace(/^\r?\n/, '').replace(/\r/g, '').replace(/[\s\u200B\uFEFF]+$/, '');
     codeBlocks.push(
-      `<pre class="hazy-code-block">` +
-      `<div class="code-header">` +
-        `<span class="code-lang-badge ${langColorClass}">${langLabel}</span>` +
-        `<div class="code-header-actions">` +
-          `<span class="code-line-count">${lines.length} line${lines.length !== 1 ? 's' : ''}</span>` +
-          `<button class="code-action-btn code-explain-btn" onclick="explainCode(this)" title="Ask Hazy to explain this code">Explain</button>` +
-          `<button class="code-action-btn code-improve-btn" onclick="improveCode(this)" title="Ask Hazy to improve this code">Improve</button>` +
-          `<button class="code-copy-btn" onclick="copyCode(this)">&#x2398; Copy</button>` +
-        `</div>` +
-      `</div>` +
-      `<div class="code-scroll-wrap">` +
-        `<div class="code-line-nums" aria-hidden="true">${lineNumbers}</div>` +
-        `<code class="${langClass}">${code.trimEnd()}</code>` +
-      `</div>` +
-      `</pre>`
+      `<div class="msg-code-block" lang="${langLabel}">
+  <div class="code-header">
+    <span class="code-lang-badge">${langLabel}</span>
+    <div class="code-actions">
+      <button class="code-action-btn code-explain-btn" onclick="explainCode(this)" title="Ask Hazy to explain this code">Explain</button>
+      <button class="code-action-btn code-improve-btn" onclick="improveCode(this)" title="Ask Hazy to improve this code">Improve</button>
+      <button class="code-action-btn code-copy-btn" onclick="copyCode(this)">Copy</button>
+    </div>
+  </div>
+  <div class="code-content">
+    <pre><code class="hljs ${langClass}">${cleanCode}</code></pre>
+  </div>
+</div>`
     );
     return ph;
   });
@@ -2231,6 +2754,8 @@ function renderMarkdown(text) {
   html = result.join('\n');
   codeBlocks.forEach((b, i) => { html = html.replace(`\x00CODE${i}\x00`, b); });
   linkBlocks.forEach((b, i) => { html = html.replace(`\x00LINK${i}\x00`, b); });
+  // Restore protected math blocks (verbatim — KaTeX will parse them from the DOM)
+  mathBlocks.forEach((b, i) => { html = html.replace(`\x00MATH${i}\x00`, b); });
   return html;
 }
 
@@ -2241,20 +2766,20 @@ function processMarkdownTables(html) {
   while (i < lines.length) {
     const line = lines[i];
     if (/^\|(.+)\|$/.test(line.trim())) {
-      const next = lines[i+1] || '';
+      const next = lines[i + 1] || '';
       if (/^\|[\s\-:|]+\|$/.test(next.trim())) {
-        const headers = line.trim().slice(1,-1).split('|').map(c => c.trim());
+        const headers = line.trim().slice(1, -1).split('|').map(c => c.trim());
         const hRow = '<tr>' + headers.map(c => `<th>${c}</th>`).join('') + '</tr>';
         i += 2;
         const rows = [];
         while (i < lines.length && /^\|(.+)\|$/.test(lines[i].trim())) {
-          rows.push('<tr>' + lines[i].trim().slice(1,-1).split('|').map(c => `<td>${c.trim()}</td>`).join('') + '</tr>');
+          rows.push('<tr>' + lines[i].trim().slice(1, -1).split('|').map(c => `<td>${c.trim()}</td>`).join('') + '</tr>');
           i++;
         }
         out.push(`<table>${hRow}${rows.join('')}</table>`);
         continue;
       } else {
-        const cells = line.trim().slice(1,-1).split('|').map(c => c.trim());
+        const cells = line.trim().slice(1, -1).split('|').map(c => c.trim());
         out.push('<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>');
         i++; continue;
       }
@@ -2268,26 +2793,26 @@ function processMarkdownTables(html) {
 }
 
 function stripMarkdown(text) {
-  return text.replace(/```[\s\S]*?```/g,'').replace(/`[^`]+`/g,'').replace(/\*\*\*(.+?)\*\*\*/g,'$1').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/__(.+?)__/g,'$1').replace(/_(.+?)_/g,'$1').replace(/^#{1,6} /gm,'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/^[-*+] /gm,'').replace(/^\d+\. /gm,'').replace(/^> /gm,'').trim();
+  return text.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').replace(/\*\*\*(.+?)\*\*\*/g, '$1').replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1').replace(/__(.+?)__/g, '$1').replace(/_(.+?)_/g, '$1').replace(/^#{1,6} /gm, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/^[-*+] /gm, '').replace(/^\d+\. /gm, '').replace(/^> /gm, '').trim();
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-window.copyCode = function(btn) {
+window.copyCode = function (btn) {
   const code = btn.closest('pre').querySelector('code');
-  navigator.clipboard.writeText(code.textContent||'').then(() => {
-    btn.textContent = '✓ COPIED';
+  navigator.clipboard.writeText(code.textContent || '').then(() => {
+    btn.textContent = 'âœ“ COPIED';
     btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = '⎘ COPY'; btn.classList.remove('copied'); }, 1800);
+    setTimeout(() => { btn.textContent = 'âŽ˜ COPY'; btn.classList.remove('copied'); }, 1800);
   }).catch(() => {
-    btn.textContent = '✗ FAILED';
-    setTimeout(() => { btn.textContent = '⎘ COPY'; }, 1800);
+    btn.textContent = 'âœ- FAILED';
+    setTimeout(() => { btn.textContent = 'âŽ˜ COPY'; }, 1800);
   });
 };
 
-window.explainCode = function(btn) {
+window.explainCode = function (btn) {
   const code = btn.closest('pre').querySelector('code');
   const codeText = code.textContent || '';
   const lang = btn.closest('pre').querySelector('.code-lang-badge')?.textContent?.trim() || 'code';
@@ -2303,7 +2828,7 @@ window.explainCode = function(btn) {
   el.chatInput.value = '';
 };
 
-window.improveCode = function(btn) {
+window.improveCode = function (btn) {
   const code = btn.closest('pre').querySelector('code');
   const codeText = code.textContent || '';
   const lang = btn.closest('pre').querySelector('.code-lang-badge')?.textContent?.trim() || 'code';
@@ -2319,22 +2844,99 @@ window.improveCode = function(btn) {
 // Website Builder Engine
 // ========================
 function isWebsiteBuildRequest(text) {
-  if (STATE.mode === 'build') return true;
+  if (!text) return false;
   const lower = text.toLowerCase();
-  const hasKeyword = WEBSITE_KEYWORDS.some(k => lower.includes(k));
-  const hasBuildVerb = /\b(build|create|make|generate|design)\b/.test(lower);
-  const hasWebTarget = /\b(website|webpage|page|site|dashboard|portfolio|form|app)\b/.test(lower);
-  return hasBuildVerb && hasWebTarget && hasKeyword;
+  
+  const webTech = ['html', 'css', 'javascript', 'typescript', 'js', 'ts', 'react', 'vue', 'angular', 'next.js', 'svelte', 'tailwind'];
+  const hasWebTech = webTech.some(tech => new RegExp(`\\b${tech}\\b`).test(lower));
+  
+  const buildVerbs = ['build', 'create', 'make', 'generate', 'design', 'write', 'code', 'develop', 'program'];
+  const hasBuildVerb = buildVerbs.some(verb => new RegExp(`\\b${verb}\\b`).test(lower));
+  
+  const webTargets = ['website', 'webpage', 'page', 'site', 'dashboard', 'portfolio', 'form', 'app', 'ui', 'frontend', 'game', 'calculator', 'component'];
+  const hasWebTarget = webTargets.some(target => new RegExp(`\\b${target}\\b`).test(lower));
+  
+  return hasBuildVerb && (hasWebTech || hasWebTarget);
 }
 
-function isCodeBuildRequest() {
-  return STATE.mode === 'code';
+function isCodeBuildRequest(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  
+  const buildVerbs = ['build', 'create', 'make', 'generate', 'write', 'program', 'code', 'implement', 'script', 'develop'];
+  const hasBuildVerb = buildVerbs.some(verb => new RegExp(`\\b${verb}\\b`).test(lower));
+  
+  const codeLanguages = [
+    'python', 'py', 'java', 'c\\+\\+', 'cpp', 'c#', 'csharp', 'rust', 'golang', 'go',
+    'php', 'ruby', 'bash', 'shell', 'powershell', 'sql', 'kotlin', 'swift', 'dart'
+  ];
+  const hasCodeLang = codeLanguages.some(lang => new RegExp(`\\b${lang}\\b`).test(lower));
+  
+  const codeKeywords = [
+    'program', 'script', 'function', 'class', 'method', 'api', 'algorithm', 'app'
+  ];
+  const hasCodeKeyword = codeKeywords.some(kw => new RegExp(`\\b${kw}\\b`).test(lower));
+  
+  return hasBuildVerb && (hasCodeLang || hasCodeKeyword);
+}
+
+/**
+ * Returns the currently active project snapshot for follow-up edit context.
+ * Prefers the live Builder Output panel state (what the user sees and can click into).
+ * Falls back to the most recent buildMode assistant message in the current conversation.
+ * This is the key mechanism that makes "fix the code in the panel" and "click previous code then ask to fix" reliable.
+ */
+function getActiveProjectForContext() {
+  // 1. Live panel state (highest priority - user explicitly opened/clicked a version into the Builder)
+  if (STATE.builderActive && Array.isArray(STATE.builderFiles) && STATE.builderFiles.length > 0) {
+    return {
+      project: (el && el.builderProjectName && el.builderProjectName.textContent) || 'Project',
+      files: STATE.builderFiles.map(f => ({
+        filename: f.filename,
+        language: f.language || detectLang(f.filename || ''),
+        content: f.content || ''
+      }))
+    };
+  }
+
+  // 2. Fallback: last build result stored in THIS conversation's history only
+  const conv = STATE.activeConvId ? STATE.conversations[STATE.activeConvId] : null;
+  if (conv && Array.isArray(conv.messages)) {
+    for (let i = conv.messages.length - 1; i >= 0; i--) {
+      const m = conv.messages[i];
+      if (m && m.role === 'assistant' && m.buildMode && typeof m.content === 'string' && m.content.length > 0) {
+        // Prefer stored structured projectData if we saved it (more reliable than re-parsing)
+        if (m.projectData && Array.isArray(m.projectData.files) && m.projectData.files.length > 0) {
+          return {
+            project: m.projectData.project || 'Project',
+            files: m.projectData.files.map(f => ({
+              filename: f.filename,
+              language: f.language || detectLang(f.filename || ''),
+              content: f.content || ''
+            }))
+          };
+        }
+        const parsed = parseFinalResponseFiles(m.content);
+        if (parsed && Array.isArray(parsed.files) && parsed.files.length > 0) {
+          return {
+            project: parsed.project || 'Project',
+            files: parsed.files.map(f => ({
+              filename: f.filename,
+              language: f.language || detectLang(f.filename || ''),
+              content: f.content || ''
+            }))
+          };
+        }
+      }
+    }
+  }
+  return null;
 }
 
 // ========================
 // Delimiter-based output parser
 // Much more reliable than JSON for local LLMs.
-// Also handles partial/cut-off output — extracts
+// Also handles partial/cut-off output - extracts
 // whatever files were completed before truncation.
 // ========================
 const LANG_MAP = {
@@ -2385,6 +2987,14 @@ const LANG_MAP = {
   txt: 'plaintext',
 };
 
+function cleanFileContent(content) {
+  if (typeof content !== 'string') return '';
+  let cleaned = content.trim();
+  cleaned = cleaned.replace(/^(```|~~~)[a-zA-Z0-9+#.-]*\r?\n/, '');
+  cleaned = cleaned.replace(/\r?\n(```|~~~)$/, '');
+  return cleaned.trim();
+}
+
 function detectLang(filename) {
   const ext = filename.split('.').pop().toLowerCase();
   return LANG_MAP[ext] || 'plaintext';
@@ -2400,23 +3010,23 @@ function parseDelimitedOutput(raw) {
   };
 
   // Extract metadata sections
-  const projectMatch  = raw.match(/===PROJECT===\s*([\s\S]*?)(?===|$)/);
-  const descMatch     = raw.match(/===DESCRIPTION===\s*([\s\S]*?)(?===|$)/);
-  const setupMatch    = raw.match(/===SETUP===\s*([\s\S]*?)(?===|$)/);
-  const notesMatch    = raw.match(/===NOTES===\s*([\s\S]*?)(?===|$)/);
+  const projectMatch = raw.match(/===PROJECT===\s*([\s\S]*?)(?===|$)/);
+  const descMatch = raw.match(/===DESCRIPTION===\s*([\s\S]*?)(?===|$)/);
+  const setupMatch = raw.match(/===SETUP===\s*([\s\S]*?)(?===|$)/);
+  const notesMatch = raw.match(/===NOTES===\s*([\s\S]*?)(?===|$)/);
 
-  if (projectMatch) result.project     = projectMatch[1].trim();
-  if (descMatch)    result.description = descMatch[1].trim();
-  if (setupMatch)   result.setup       = setupMatch[1].trim();
-  if (notesMatch)   result.notes       = notesMatch[1].trim();
+  if (projectMatch) result.project = projectMatch[1].trim();
+  if (descMatch) result.description = descMatch[1].trim();
+  if (setupMatch) result.setup = setupMatch[1].trim();
+  if (notesMatch) result.notes = notesMatch[1].trim();
 
-  // Extract all FILE blocks — works even on partial output
+  // Extract all FILE blocks - works even on partial output
   // A file block starts at ===FILE: name=== and ends at the next === or EOF
-  const filePattern = /===FILE:\s*([^\s=][^=]*?)===\s*([\s\S]*?)(?=\n===|$)/g;
+  const filePattern = /===FILE:\s*([^\s=][^=]*?)===\s*([\s\S]*?)(?=\r?\n===(?:FILE:|SETUP|NOTES|PROJECT|DESCRIPTION|$))/gi;
   let match;
   while ((match = filePattern.exec(raw)) !== null) {
     const filename = match[1].trim();
-    const content  = match[2].trimEnd();
+    const content = cleanFileContent(match[2]);
     if (filename && content) {
       result.files.push({
         filename,
@@ -2430,14 +3040,14 @@ function parseDelimitedOutput(raw) {
 }
 
 // Fallback: if the model still produced markdown code fences,
-// extract them as individual files — last-resort recovery.
+// extract them as individual files - last-resort recovery.
 function parseCodeBlockFallback(raw) {
   const files = [];
   const pattern = /(```|~~~)\s*([\w+#.-]*)\s*\n([\s\S]*?)\1/g;
   let match;
   const counters = {};
 
-  // Map lang → default filename
+  // Map lang â†’ default filename
   const langFileMap = {
     html: 'index.html', css: 'style.css',
     js: 'script.js', javascript: 'script.js',
@@ -2469,12 +3079,12 @@ function parseCodeBlockFallback(raw) {
   };
 
   while ((match = pattern.exec(raw)) !== null) {
-    const lang    = (match[2] || '').toLowerCase();
+    const lang = (match[2] || '').toLowerCase();
     const content = match[3].trimEnd();
     if (!content) continue;
 
     const base = langFileMap[lang] || `file.${lang || 'txt'}`;
-    const key  = lang || 'txt';
+    const key = lang || 'txt';
     counters[key] = (counters[key] || 0);
     const prefix = raw.slice(Math.max(0, match.index - 240), match.index);
     const namedFile = inferFilenameBeforeFence(prefix, lang);
@@ -2510,8 +3120,54 @@ function inferFilenameBeforeFence(prefix, lang) {
   return '';
 }
 
+function stripCodeBlocksAndDelimiters(text) {
+  if (!text) return '';
+  let clean = text;
+
+  // 1. Remove all ===PROJECT===, ===DESCRIPTION===, ===SETUP===, ===NOTES=== sections
+  clean = clean.replace(/===PROJECT===\s*([\s\S]*?)(?===|$)/g, '');
+  clean = clean.replace(/===DESCRIPTION===\s*([\s\S]*?)(?===|$)/g, '');
+  clean = clean.replace(/===SETUP===\s*([\s\S]*?)(?===|$)/g, '');
+  clean = clean.replace(/===NOTES===\s*([\s\S]*?)(?===|$)/g, '');
+
+  // 2. Remove all ===FILE: name=== blocks
+  clean = clean.replace(/===FILE:\s*([^\s=][^=]*?)===\s*([\s\S]*?)(?=\n===|$)/g, '');
+
+  // Remove any remaining trailing delimiters or separators
+  clean = clean.replace(/===\s*$/g, '');
+
+  // 3. Remove standard markdown fenced code blocks (``` or ~~~)
+  clean = clean.replace(/(```|~~~)\s*([\w+#.-]*)\s*\n([\s\S]*?)\1/g, '');
+
+  return clean.trim();
+}
+
 function parseFinalResponseFiles(raw) {
   return parseDelimitedOutput(raw) || parseCodeBlockFallback(raw);
+}
+
+// mergeProjectFiles is defined below (near line 3158) - only one definition kept.
+
+function normalizeArtifactProject(project) {
+  if (!project || !Array.isArray(project.files) || !project.files.length) return null;
+  const files = project.files
+    .filter(file => file && file.filename && typeof file.content === 'string')
+    .map(file => ({
+      filename: file.filename,
+      language: file.language || detectLang(file.filename),
+      content: file.content,
+      path: file.path || ''
+    }));
+  if (!files.length) return null;
+  return {
+    project: project.project || 'Agent Artifacts',
+    description: project.description || 'Files written by the agent tool loop.',
+    files,
+    setup: project.setup || '',
+    notes: project.notes || 'Generated by Agentic Mode and saved in Hazy artifacts.',
+    source: project.source || 'agent_artifacts',
+    chatId: project.chatId || ''
+  };
 }
 
 function renderGeneratedFileCards(projectData) {
@@ -2540,11 +3196,62 @@ function bindGeneratedFileCards(container, projectData) {
       showBuilderFile(index);
       setBuilderView('files');
       renderBuilderTabs();
+      // IMPORTANT: populating STATE.builder* here means the *next* sendMessage()
+      // will see this snapshot via getActiveProjectForContext() and forward it
+      // as hazy.currentProject so the model edits *this* version, not a new invention.
+    });
+  });
+
+  // Attach the correct projectData to all builder-open buttons in this block
+  container.querySelectorAll('.build-open-btn').forEach(btn => {
+    btn.removeAttribute('onclick'); // override any inline _lastBuild mapping
+    btn.addEventListener('click', () => {
+      window._lastBuild = projectData;
+      openBuilderPanel(projectData);
     });
   });
 }
 
+/**
+ * mergeProjectFiles - core fix for "AI overwrites entire project on iteration".
+ *
+ * When the AI fixes a bug it typically only emits the files it changed.
+ * This function merges the AI's returned files (newProject) with the current
+ * project that was in the builder before the request (existingProject):
+ *   - Files in newProject REPLACE the matching filename in existing files.
+ *   - Files NOT mentioned by the AI are KEPT from existing unchanged.
+ *   - Brand-new files are ADDED to the merged result.
+ */
+function mergeProjectFiles(existingProject, newProject) {
+  if (!existingProject || !Array.isArray(existingProject.files) || existingProject.files.length === 0) {
+    return newProject;
+  }
+  if (!newProject || !Array.isArray(newProject.files) || newProject.files.length === 0) {
+    return existingProject;
+  }
+  const newByFilename = new Map();
+  for (const f of newProject.files) {
+    newByFilename.set((f.filename || '').toLowerCase().trim(), f);
+  }
+  const merged = existingProject.files.map(f => {
+    const key = (f.filename || '').toLowerCase().trim();
+    return newByFilename.has(key) ? newByFilename.get(key) : f;
+  });
+  const existingKeys = new Set(existingProject.files.map(f => (f.filename || '').toLowerCase().trim()));
+  for (const [key, f] of newByFilename.entries()) {
+    if (!existingKeys.has(key)) merged.push(f);
+  }
+  return {
+    project: newProject.project || existingProject.project || 'Project',
+    description: newProject.description || existingProject.description || '',
+    setup: newProject.setup || existingProject.setup || '',
+    notes: newProject.notes || existingProject.notes || '',
+    files: merged
+  };
+}
+
 function openBuilderPanel(projectData) {
+
   STATE.builderFiles = projectData.files || [];
   STATE.builderActive = true;
   STATE.builderActiveFile = 0;
@@ -2558,42 +3265,46 @@ function openBuilderPanel(projectData) {
   showBuilderFile(0);
   updateBuilderStatus(`${STATE.builderFiles.length} files generated`, projectData.project);
 
+  // By setting the live builder state here we ensure that any subsequent user message
+  // (even after clicking a *previous* generation's card from chat history) will target
+  // exactly these files via getActiveProjectForContext + hazy.currentProject.
+
   setBuilderView(STATE.builderView);
 }
 
 function renderBuilderTabs() {
   const iconMap = {
-    html: '🌐', css: '🎨',
-    javascript: '⚡', js: '⚡', typescript: '🔷', ts: '🔷',
-    json: '📦', markdown: '📝', md: '📝', txt: '📄', xml: '📋', yaml: '📋', yml: '📋',
-    python: '🐍', py: '🐍',
-    java: '☕',
-    cpp: '⚙️', c: '🔧',
-    csharp: '🎯', cs: '🎯',
-    go: '🐹',
-    rust: '🦀',
-    swift: '🍎',
-    kotlin: '🟣', kt: '🟣',
-    ruby: '💎', rb: '💎',
-    php: '🐘',
-    r: '📊',
-    dart: '🎯',
-    lua: '🌙',
-    perl: '🐪', pl: '🐪',
-    scala: '🔴',
-    haskell: '🔵', hs: '🔵',
-    elixir: '💧', ex: '💧',
-    bash: '💻', sh: '💻',
-    powershell: '🖥️', ps1: '🖥️',
-    sql: '🗄️',
-    asm: '⚙️',
-    matlab: '📐', m: '📐',
-    fortran: '🏛️',
-    cobol: '📟',
+    html: 'ðŸŒ', css: 'ðŸŽ¨',
+    javascript: 'âš¡', js: 'âš¡', typescript: 'ðŸ”·', ts: 'ðŸ”·',
+    json: 'ðŸ“¦', markdown: 'ðŸ“', md: 'ðŸ“', txt: 'ðŸ“„', xml: 'ðŸ“‹', yaml: 'ðŸ“‹', yml: 'ðŸ“‹',
+    python: 'ðŸ', py: 'ðŸ',
+    java: 'â˜•',
+    cpp: 'âš™ï¸', c: 'ðŸ”§',
+    csharp: 'ðŸŽ¯', cs: 'ðŸŽ¯',
+    go: 'ðŸ¹',
+    rust: 'ðŸ¦€',
+    swift: 'ðŸŽ',
+    kotlin: 'ðŸŸ£', kt: 'ðŸŸ£',
+    ruby: 'ðŸ’Ž', rb: 'ðŸ’Ž',
+    php: 'ðŸ˜',
+    r: 'ðŸ“Š',
+    dart: 'ðŸŽ¯',
+    lua: 'ðŸŒ™',
+    perl: 'ðŸª', pl: 'ðŸª',
+    scala: 'ðŸ”´',
+    haskell: 'ðŸ”µ', hs: 'ðŸ”µ',
+    elixir: 'ðŸ’§', ex: 'ðŸ’§',
+    bash: 'ðŸ’»', sh: 'ðŸ’»',
+    powershell: 'ðŸ–¥ï¸', ps1: 'ðŸ–¥ï¸',
+    sql: 'ðŸ-„ï¸',
+    asm: 'âš™ï¸',
+    matlab: 'ðŸ“', m: 'ðŸ“',
+    fortran: 'ðŸ›ï¸',
+    cobol: 'ðŸ“Ÿ',
   };
   el.builderTabs.innerHTML = STATE.builderFiles.map((f, i) => {
     const ext = f.filename.split('.').pop().toLowerCase();
-    const icon = iconMap[f.language] || iconMap[ext] || '📄';
+    const icon = iconMap[f.language] || iconMap[ext] || 'ðŸ“„';
     return `<button class="builder-tab ${i === STATE.builderActiveFile ? 'active' : ''}" data-index="${i}">
       <span>${icon}</span><span>${f.filename}</span>
     </button>`;
@@ -2635,8 +3346,8 @@ function setBuilderView(view) {
 
 function refreshPreview() {
   const htmlFile = STATE.builderFiles.find(f => f.filename === 'index.html' || f.filename.endsWith('.html'));
-  const cssFile  = STATE.builderFiles.find(f => f.language === 'css' || f.filename.endsWith('.css'));
-  const jsFile   = STATE.builderFiles.find(f => (f.language === 'javascript' || f.filename.endsWith('.js')) && !f.filename.includes('server') && !f.filename.includes('node'));
+  const cssFile = STATE.builderFiles.find(f => f.language === 'css' || f.filename.endsWith('.css'));
+  const jsFile = STATE.builderFiles.find(f => (f.language === 'javascript' || f.filename.endsWith('.js')) && !f.filename.includes('server') && !f.filename.includes('node'));
 
   if (!htmlFile) { el.builderStatus.textContent = 'No HTML file found for preview'; return; }
 
@@ -2688,7 +3399,7 @@ async function downloadBuilderZip() {
   // Add README
   const htmlFile = STATE.builderFiles.find(f => f.filename.endsWith('.html'));
   const hasBackend = STATE.builderFiles.some(f => f.filename === 'server.js' || f.filename === 'package.json');
-  const readme = `# ${el.builderProjectName.textContent}\n\nGenerated by Hazy — by Dream On\n\n## Files\n${STATE.builderFiles.map(f => `- \`${f.filename}\``).join('\n')}\n\n## How to Run\n${hasBackend ? '```\nnpm install\nnode server.js\n```\nThen open http://localhost:3000' : 'Open `index.html` in your browser'}\n`;
+  const readme = `# ${el.builderProjectName.textContent}\n\nGenerated by Hazy - Hazy AI\n\n## Files\n${STATE.builderFiles.map(f => `- \`${f.filename}\``).join('\n')}\n\n## How to Run\n${hasBackend ? '```\nnpm install\nnode server.js\n```\nThen open http://localhost:3000' : 'Open `index.html` in your browser'}\n`;
   folder.file('README.md', readme);
 
   const blob = await zip.generateAsync({ type: 'blob' });
@@ -2697,6 +3408,33 @@ async function downloadBuilderZip() {
   a.download = `${projectName}.zip`;
   a.click();
   showToast('ZIP downloaded!', 'success');
+}
+
+async function exportGeneratedFilesToWorkspace(fullContent) {
+  const projectData = parseFinalResponseFiles(fullContent);
+  if (!projectData || !Array.isArray(projectData.files) || projectData.files.length === 0) {
+    return null;
+  }
+
+  try {
+    const endpoint = hazyServerEndpoint('/hazy/write-workspace-files');
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: projectData.files.map(f => ({ filename: f.filename, content: f.content })) })
+    });
+
+    if (response.ok) {
+      const resJson = await response.json();
+      if (resJson.ok && resJson.savedFiles && resJson.savedFiles.length > 0) {
+        showToast(`Saved to hazy_outputs/`, 'success');
+        return resJson.savedFiles;
+      }
+    }
+  } catch (err) {
+    console.warn('[Hazy] Failed to save generated files to workspace:', err);
+  }
+  return null;
 }
 
 // ========================
@@ -2711,18 +3449,18 @@ if (typeof pdfjsLib !== 'undefined') {
 }
 
 const FILE_ACCEPT = {
-  image:  ['image/jpeg','image/png','image/gif','image/webp','image/svg+xml'],
-  pdf:    ['application/pdf'],
-  text:   ['text/plain','text/markdown','text/csv','text/html','text/css',
-           'text/javascript','application/json','application/xml',
-           'text/x-python','text/x-java','text/x-c','text/x-sh',
-           'application/x-yaml','text/yaml'],
+  image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'],
+  pdf: ['application/pdf'],
+  text: ['text/plain', 'text/markdown', 'text/csv', 'text/html', 'text/css',
+    'text/javascript', 'application/json', 'application/xml',
+    'text/x-python', 'text/x-java', 'text/x-c', 'text/x-sh',
+    'application/x-yaml', 'text/yaml'],
 };
 
 const CODE_EXTS = new Set([
-  'js','ts','jsx','tsx','html','css','py','java','cpp','c','h',
-  'sh','bash','json','yaml','yml','xml','md','txt','csv','env',
-  'log','sql','php','rb','go','rs','swift','kt','vue','svelte','zip',
+  'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'py', 'java', 'cpp', 'c', 'h',
+  'sh', 'bash', 'json', 'yaml', 'yml', 'xml', 'md', 'txt', 'csv', 'env',
+  'log', 'sql', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'vue', 'svelte', 'zip',
 ]);
 
 function renderCodeLanguageOptions() {
@@ -2736,7 +3474,7 @@ function renderCodeLanguageOptions() {
 
 function categorizeFile(file) {
   if (FILE_ACCEPT.image.includes(file.type)) return 'image';
-  if (FILE_ACCEPT.pdf.includes(file.type))   return 'pdf';
+  if (FILE_ACCEPT.pdf.includes(file.type)) return 'pdf';
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') return 'zip';
   if (CODE_EXTS.has(ext) || FILE_ACCEPT.text.includes(file.type)) return 'text';
@@ -2745,15 +3483,15 @@ function categorizeFile(file) {
 
 function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes/1024).toFixed(1)} KB`;
-  return `${(bytes/1048576).toFixed(1)} MB`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
 // Read image as base64
 function readAsBase64(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
-    r.onload  = () => res(r.result.split(',')[1]);
+    r.onload = () => res(r.result.split(',')[1]);
     r.onerror = () => rej(r.error);
     r.readAsDataURL(file);
   });
@@ -2763,7 +3501,7 @@ function readAsBase64(file) {
 function readAsDataURL(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
-    r.onload  = () => res(r.result);
+    r.onload = () => res(r.result);
     r.onerror = () => rej(r.error);
     r.readAsDataURL(file);
   });
@@ -2773,7 +3511,7 @@ function readAsDataURL(file) {
 function readAsText(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
-    r.onload  = () => res(r.result);
+    r.onload = () => res(r.result);
     r.onerror = () => rej(r.error);
     r.readAsText(file);
   });
@@ -2797,7 +3535,7 @@ async function extractZipProjectSummary(file) {
       try {
         const text = await entry.async('string');
         previews.push(`--- ${entry.name} ---\n${text.slice(0, 2500)}`);
-      } catch {}
+      } catch { }
     }
 
     return [
@@ -2814,33 +3552,33 @@ async function extractZipProjectSummary(file) {
 // Extract text from PDF using PDF.js
 async function extractPDFText(file) {
   if (typeof pdfjsLib === 'undefined') {
-    return `[PDF: ${file.name} — PDF.js not loaded, cannot extract text]`;
+    return `[PDF: ${file.name} - PDF.js not loaded, cannot extract text]`;
   }
   try {
     const arrayBuffer = await file.arrayBuffer();
-    const pdf    = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const total  = pdf.numPages;
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const total = pdf.numPages;
     const chunks = [];
     const maxPages = Math.min(total, 20); // cap at 20 pages to avoid RAM issues
     for (let i = 1; i <= maxPages; i++) {
-      const page    = await pdf.getPage(i);
+      const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const text    = content.items.map(s => s.str).join(' ').trim();
+      const text = content.items.map(s => s.str).join(' ').trim();
       if (text) chunks.push(`--- Page ${i} ---\n${text}`);
     }
     const result = chunks.join('\n\n');
-    const note   = total > maxPages ? `\n\n[Note: Only first ${maxPages} of ${total} pages extracted]` : '';
-    return result + note || '[PDF appears to have no extractable text — may be scanned/image-based]';
+    const note = total > maxPages ? `\n\n[Note: Only first ${maxPages} of ${total} pages extracted]` : '';
+    return result + note || '[PDF appears to have no extractable text - may be scanned/image-based]';
   } catch (e) {
     return `[PDF extraction failed: ${e.message}]`;
   }
 }
 
-// Process all selected files → populate STATE.uploadedFiles
+// Process all selected files â†’ populate STATE.uploadedFiles
 async function processFiles(fileList) {
   const MAX_SIZE = 10 * 1024 * 1024; // 10 MB per file
   const toProcess = Array.from(fileList).slice(0, 8); // max 8 files at once
-  const results   = [];
+  const results = [];
 
   for (const file of toProcess) {
     if (file.size > MAX_SIZE) {
@@ -2858,20 +3596,20 @@ async function processFiles(fileList) {
       const entry = { name: file.name, type: file.type, size: file.size, category };
 
       if (category === 'image') {
-        entry.base64     = await readAsBase64(file);
+        entry.base64 = await readAsBase64(file);
         entry.previewUrl = await readAsDataURL(file);
-        entry.mimeType   = file.type;
+        entry.mimeType = file.type;
       } else if (category === 'pdf') {
-        entry.content    = await extractPDFText(file);
+        entry.content = await extractPDFText(file);
         entry.previewUrl = null;
       } else if (category === 'zip') {
-        entry.content    = await extractZipProjectSummary(file);
+        entry.content = await extractZipProjectSummary(file);
         entry.previewUrl = null;
-        entry.ext        = 'zip';
+        entry.ext = 'zip';
       } else {
-        entry.content    = await readAsText(file);
+        entry.content = await readAsText(file);
         entry.previewUrl = null;
-        entry.ext        = file.name.split('.').pop().toLowerCase();
+        entry.ext = file.name.split('.').pop().toLowerCase();
       }
 
       results.push(entry);
@@ -2893,7 +3631,7 @@ function renderFilePreviewStrip() {
 
   el.filePreviewStrip.style.display = 'flex';
   el.filePreviewStrip.innerHTML = files.map((f, i) => {
-    const icon = f.category === 'image' ? '' : f.category === 'pdf' ? '📄' : '📎';
+    const icon = f.category === 'image' ? '' : f.category === 'pdf' ? 'ðŸ“„' : 'ðŸ“Ž';
     const thumb = f.category === 'image'
       ? `<img src="${f.previewUrl}" alt="${escapeHtml(f.name)}" class="file-thumb-img" />`
       : `<span class="file-thumb-icon">${icon}</span>`;
@@ -2905,7 +3643,7 @@ function renderFilePreviewStrip() {
           <span class="file-chip-name">${escapeHtml(f.name)}</span>
           <span class="file-chip-meta">${f.category} · ${formatFileSize(f.size)}</span>
         </div>
-        <button class="file-chip-remove" data-index="${i}" title="Remove">✕</button>
+        <button class="file-chip-remove" data-index="${i}" title="Remove">✖</button>
       </div>`;
   }).join('');
 
@@ -2931,7 +3669,7 @@ function renderAttachedFilesInMessage(files) {
         <span class="msg-attachment-name">${escapeHtml(f.name)}</span>
       </div>`;
     }
-    const icon = f.category === 'pdf' ? '📄' : '📎';
+    const icon = f.category === 'pdf' ? 'ðŸ“„' : 'ðŸ“Ž';
     return `<div class="msg-attachment">
       <span class="msg-attachment-icon">${icon}</span>
       <span class="msg-attachment-name">${escapeHtml(f.name)}</span>
@@ -2942,7 +3680,7 @@ function renderAttachedFilesInMessage(files) {
 
 // Build the Ollama message content including file context
 function buildMessageWithFiles(userText, files) {
-  // No files → plain string content (original behavior)
+  // No files â†’ plain string content (original behavior)
   if (!files || !files.length) return userText;
 
   const hasImages = files.some(f => f.category === 'image');
@@ -2985,7 +3723,7 @@ function buildMessageWithFiles(userText, files) {
     return contentParts;
   }
 
-  // Text/PDF only — plain string with context injected
+  // Text/PDF only - plain string with context injected
   return fullText;
 }
 
@@ -2995,13 +3733,43 @@ function buildMessageWithFiles(userText, files) {
 async function sendMessage(userText) {
   userText = (userText || '').trim();
   const files = [...STATE.uploadedFiles];
+  let agentRunInfo = null;
+  let agentArtifactProject = null;
 
   // Allow send with files even if no text
   if (!userText && !files.length) return;
   if (STATE.isStreaming) return;
 
-  const isBuild = isWebsiteBuildRequest(userText);
-  const isCode  = !isBuild && isCodeBuildRequest();
+  let isBuild = isWebsiteBuildRequest(userText);
+  let isCode = !isBuild && isCodeBuildRequest(userText);
+
+  // === KEY FIX for "AI ignores existing Builder code and makes new project" ===
+  // Compute the active project snapshot (Builder panel > last build in history).
+  // This snapshot (exact files the user can see/click) is passed through hazy.currentProject
+  // so the backend can inject it as "CURRENT PROJECT FILES" for edit turns.
+  const activeProject = getActiveProjectForContext();
+  const looksLikeEdit = /\b(fix|debug|error|issue|broken|not working|doesn't work|improve|update|change|refactor|modify|add to|extend|make the .* work)\b/i.test(userText);
+
+  // If it's a continuation / edit, inherit the mode of the active project
+  if (activeProject && !isBuild && !isCode) {
+    const hasHtml = activeProject.files.some(f => f.filename.endsWith('.html'));
+    if (hasHtml) {
+      isBuild = true;
+    } else {
+      isCode = true;
+    }
+  }
+
+  // Update STATE.mode and UI components dynamically
+  if (isBuild) {
+    setMode('build');
+  } else if (isCode) {
+    setMode('code');
+  } else {
+    setMode('chat');
+  }
+
+  const isContinuation = !!(activeProject && (isCode || isBuild || looksLikeEdit));
 
   if (!STATE.activeConvId) {
     createConversation(userText || files.map(f => f.name).join(', '));
@@ -3010,10 +3778,17 @@ async function sendMessage(userText) {
   }
 
   const conv = STATE.conversations[STATE.activeConvId];
-  const now  = Date.now();
+  const now = Date.now();
 
-  // Build the message content for Ollama
-  const ollamaContent = buildMessageWithFiles(userText, files);
+  // Build the message content for Ollama.
+  // For strong edit iterations we also append a short "Current builder context" note to the user turn
+  // (this helps the direct file:// Ollama fallback path and gives an extra hint even when hazy is used).
+  let ollamaContent = buildMessageWithFiles(userText, files);
+  if (isContinuation && activeProject && activeProject.files && activeProject.files.length > 0) {
+    const projNote = `\n\n[Current project in Builder Output - treat the files below as the source of truth to edit. Project: ${activeProject.project}. Only modify what is necessary for the request; keep file names and non-mentioned logic stable.]\n` +
+      activeProject.files.slice(0, 6).map(f => `===FILE: ${f.filename}===\n${(f.content || '').slice(0, 8000)}${(f.content || '').length > 8000 ? '\n// [content truncated for this note; full version travels in hazy.currentProject]' : ''}\n===`).join('\n');
+    ollamaContent = ollamaContent + projNote;
+  }
 
   // Store in conversation (text only for history display)
   const textForHistory = userText + (files.length
@@ -3043,10 +3818,19 @@ async function sendMessage(userText) {
 
   appendTypingIndicator();
   setStreamingState(true);
+  window.HAZY_STREAMING_TTS?.stop();
+  window.HAZY_STREAMING_TTS?.start(getVoiceSettings({
+    enabled: STATE.voiceEnabled && STATE.voiceAutoplay !== false
+  }));
+  // server path: set provisional loading; actual device label comes from checkKokoroHealth() polling /hazy/*
+  if (STATE.voiceEnabled && STATE.voiceAutoplay !== false) {
+    updateKokoroStatus('loading', 'Kokoro TTS active (server)...');
+  }
+  let partialGeneratedContent = '';
 
   try {
     const sysPrompt = getActiveSystemPrompt(isBuild, isCode);
-    const messages  = [
+    const messages = [
       { role: 'system', content: sysPrompt },
       // All previous messages (text only) + current message with file content
       ...conv.messages.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
@@ -3055,7 +3839,7 @@ async function sendMessage(userText) {
 
     STATE.abortController = new AbortController();
 
-    // ── Route ALL chat through the Hazy server ─────────────────────────────
+    // -- Route ALL chat through the Hazy server -----------------------------
     // The server (server.js) handles provider routing, API keys, and format
     // conversion. The frontend just sends to /hazy/chat with the model field
     // set to 'provider/model-id' and always gets back Ollama NDJSON format.
@@ -3068,33 +3852,33 @@ async function sendMessage(userText) {
 
     const savedModel = localStorage.getItem('hazyActiveModel') || '';
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+    const isCloud = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
 
-    // Build the model field — server expects 'provider/modelid' format
+    // Build the model field - server expects 'provider/modelid' format
     const modelField = savedModel || ('ollama/' + STATE.model);
 
     const chatBody = {
-      model:    modelField,
+      model: modelField,
       messages,
-      stream:   true,
+      stream: true,
       conversationId: STATE.activeConvId,
       userId: 'local-user',
-      hazy:     buildHazyMetadata({ files, isBuild, isCode }),
+      hazy: buildHazyMetadata({ files, isBuild, isCode, currentProject: activeProject }),
       options: {
-        // Inference parameters — ref: Claude Technical Reference §2.4
-        temperature:    STATE.temperature,   // 0.0 deterministic → 1.0 creative
-        top_p:          STATE.topP,          // nucleus sampling (0.9–0.99)
-        top_k:          STATE.topK,          // top-K token candidates (10–100)
+        // Inference parameters - ref: Claude Technical Reference §2.4
+        temperature: STATE.temperature,   // 0.0 deterministic → 1.0 creative
+        top_p: STATE.topP,          // nucleus sampling (0.9–0.99)
+        top_k: STATE.topK,          // top-K token candidates (10–100)
         repeat_penalty: STATE.repeatPenalty, // penalise repetition
-        num_predict:    STATE.maxTokens,
-        num_ctx:        STATE.contextSize,
-        max_tokens:     STATE.maxTokens,
+        num_predict: STATE.maxTokens,
+        num_ctx: STATE.contextSize,
+        max_tokens: STATE.maxTokens,
       },
     };
 
     // Try the Hazy server first (/hazy/chat), fall back to direct Ollama
-    let chatEndpoint = hazyServerEndpoint('/hazy/chat');
-    let chatHeaders  = { 'Content-Type': 'application/json' };
+    let chatEndpoint = hazyServerEndpoint(STATE.activePage === 'agent' ? '/hazy/agent' : '/hazy/chat');
+    let chatHeaders = { 'Content-Type': 'application/json' };
 
     // If running direct from filesystem (file:// protocol), use Ollama directly
     if (window.location.protocol === 'file:') {
@@ -3105,40 +3889,45 @@ async function sendMessage(userText) {
     }
 
     const response = await fetch(chatEndpoint, {
-      method:  'POST',
+      method: 'POST',
       headers: chatHeaders,
-      signal:  STATE.abortController.signal,
-      body:    JSON.stringify(chatBody),
+      signal: STATE.abortController.signal,
+      body: JSON.stringify(chatBody),
     });
 
     if (!response.ok) {
       const errText = await response.text().catch(() => response.statusText);
       let errMsg = errText;
-      try { errMsg = JSON.parse(errText).error || errText; } catch {}
+      try { errMsg = JSON.parse(errText).error || errText; } catch { }
 
-      // If it's a cloud provider, never fall back to Ollama — show the real error
+      // If it's a cloud provider, never fall back to Ollama - show the real error
       if (isCloud) {
         throw new Error(errMsg);
       }
 
       // Ollama: if /hazy/chat failed (server not running), try direct Ollama
-      if (chatEndpoint.endsWith('/hazy/chat')) {
+      if (chatEndpoint.endsWith('/hazy/chat') || chatEndpoint.endsWith('/hazy/agent')) {
         const ollamaModel = STATE.model.includes('/') ? STATE.model.split('/').pop() : STATE.model;
         const fallbackRes = await fetch(`${STATE.ollamaUrl}/api/chat`, {
-          method:  'POST',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          signal:  STATE.abortController.signal,
-          body:    JSON.stringify({ model: ollamaModel, messages, stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: STATE.temperature, num_predict: STATE.maxTokens, num_ctx: 16384 } }),
+          signal: STATE.abortController.signal,
+          body: JSON.stringify({ model: ollamaModel, messages, stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: STATE.temperature, num_predict: STATE.maxTokens, num_ctx: 16384 } }),
         });
         if (!fallbackRes.ok) throw new Error(`Ollama error ${fallbackRes.status}: ${await fallbackRes.text()}`);
 
-        // Use fallback response stream directly — don't patch the original response
+        // Use fallback response stream directly - don't patch the original response
         removeTypingIndicator();
         const aiTs = Date.now();
-        const { contentDiv } = appendMessage('assistant', '', true, aiTs);
+        const { contentDiv, mascotImg } = appendMessage('assistant', '', true, aiTs);
+        let webSearchMetadata = null;
+        // Attach mascot emotion controller to this message
+        const _mascotCtrl = mascotImg && window.HazyMascotController ? new window.HazyMascotController(mascotImg) : null;
+        if (_mascotCtrl) window.HAZY_MASCOT_CONTROLLER = _mascotCtrl;
+        let _rawEmoBuf = '';
         let fullContent = '';
         let fullThinking = '';
-        const reader  = fallbackRes.body.getReader();
+        const reader = fallbackRes.body.getReader();
         const decoder = new TextDecoder();
         let streamBuffer = '';
         while (true) {
@@ -3159,38 +3948,185 @@ async function sendMessage(userText) {
                 scrollToBottom();
               }
               const token = json.message?.content || '';
-              if (token) { fullContent += token; contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`; scrollToBottom(); }
+              if (token) { _rawEmoBuf += token; if (_mascotCtrl) _mascotCtrl.scanBuffer(_rawEmoBuf); const _ct2 = window.hazyStripEmotionTags ? window.hazyStripEmotionTags(token) : token.replace(/\[\[(happy|annoyed|flustered)\]\]/g, ''); fullContent += _ct2; partialGeneratedContent = fullContent; contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`; scrollToBottom(); }
+              if (token && !isBuild && !isCode) window.HAZY_STREAMING_TTS?.push(token);
               if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
-            } catch {}
+            } catch { }
           }
         }
         contentDiv.querySelector('.stream-cursor')?.remove();
         fullContent = normalizeCompanionResponse(fullContent);
-        conv.messages.push({ role: 'assistant', content: fullContent, ts: aiTs });
+        if (_mascotCtrl) {
+          _mascotCtrl.onStreamEnd(fullContent);
+          window.HAZY_MASCOT_CONTROLLER = null;
+        }
+
+        let persistedProjectData = undefined;
+        let savedBuildMode = (isBuild || isCode || agentArtifactProject) ? (isCode ? 'code' : 'website') : undefined;
+
+        let parsedForStore = parseFinalResponseFiles(fullContent);
+        if (parsedForStore && Array.isArray(parsedForStore.files) && parsedForStore.files.length > 0) {
+          if (activeProject) {
+            parsedForStore = mergeProjectFiles(activeProject, parsedForStore);
+          }
+          persistedProjectData = parsedForStore;
+          if (!savedBuildMode) {
+            savedBuildMode = 'code';
+          }
+        }
+
+        conv.messages.push({
+          role: 'assistant',
+          content: fullContent,
+          ts: aiTs,
+          emotion: _mascotCtrl ? (_mascotCtrl._currentEmotion || 'happy') : 'happy',
+          buildMode: savedBuildMode,
+          projectData: persistedProjectData
+        });
         saveConversations();
-        if (conv.messages.filter(m => m.role === 'user').length === 1) generateChatTitle(STATE.activeConvId, userText, fullContent);
-        contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking);
-        highlightCodeBlocks(contentDiv);
-        if (STATE.ttsEnabled && fullContent) speakText(stripMarkdown(fullContent));
-        return; // done — skip the main stream block below
+
+        if (conv.messages.filter(m => m.role === 'user').length === 1) {
+          generateChatTitle(STATE.activeConvId, userText, fullContent);
+        }
+
+        if (isBuild || isCode) {
+          let projectData = parseFinalResponseFiles(fullContent);
+          if (projectData && activeProject) {
+            projectData = mergeProjectFiles(activeProject, projectData);
+          }
+
+          if (projectData && projectData.files.length > 0) {
+            const isPartial = !fullContent.includes('===NOTES===') && !fullContent.includes('===SETUP===');
+            const modeLabel = isCode ? 'Code' : 'Website';
+
+            contentDiv.innerHTML = `${renderRawThinking(fullThinking)}
+              <div class="build-success">
+                <div class="build-success-header">
+                  <span class="build-success-icon">${isPartial ? '⚠️' : '✅'}</span>
+                  <strong>${escapeHtml(projectData.project || modeLabel)} ${isPartial ? 'partially' : ''} built!</strong>
+                </div>
+                ${isPartial ? `<p class="build-partial-warn">⚠️ Output was cut off - showing what was generated.</p>` : ''}
+                ${projectData.description ? `<p class="build-success-desc">${escapeHtml(projectData.description)}</p>` : ''}
+                ${renderGeneratedFileCards(projectData)}
+                ${projectData.setup ? `<div class="build-setup"><strong>Run:</strong> <code>${escapeHtml(projectData.setup)}</code></div>` : ''}
+                ${projectData.notes ? `<p class="build-notes">${escapeHtml(projectData.notes)}</p>` : ''}
+                <div class="build-actions">
+                  <button class="build-open-btn">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    Open in Builder
+                  </button>
+                  <button class="build-dl-btn" onclick="downloadBuilderZip()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    Download ZIP
+                  </button>
+                </div>
+              </div>`;
+
+            const existingProject = getActiveProjectForContext();
+            const finalProject = mergeProjectFiles(existingProject, projectData);
+
+            window._lastBuild = finalProject;
+            bindGeneratedFileCards(contentDiv, finalProject);
+            openBuilderPanel(finalProject);
+            const changedCount = projectData.files.length;
+            const totalCount = finalProject.files.length;
+            const isEdit = existingProject && existingProject.files && existingProject.files.length > 0;
+            showToast(
+              isEdit
+                ? `${changedCount} file${changedCount > 1 ? 's' : ''} updated (${totalCount} total in project)`
+                : `${totalCount} file${totalCount > 1 ? 's' : ''} generated!`,
+              'success'
+            );
+          } else {
+            contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}`;
+            highlightCodeBlocks(contentDiv);
+          }
+        } else {
+          // Standard chat mode OR agent mode
+          let projectData = parseFinalResponseFiles(fullContent);
+          if (projectData && projectData.files.length > 0) {
+            exportGeneratedFilesToWorkspace(fullContent);
+
+            const existingProject = getActiveProjectForContext();
+            const finalProject = mergeProjectFiles(existingProject, projectData);
+            window._lastBuild = finalProject;
+
+            const cleanContent = stripCodeBlocksAndDelimiters(fullContent);
+            let html = renderRawThinking(fullThinking);
+            if (cleanContent) {
+              html += renderAssistantContent(cleanContent, null, '', webSearchMetadata);
+            } else {
+              html += renderRawThinking(fullThinking);
+            }
+
+            const isPartial = !fullContent.includes('===NOTES===') && !fullContent.includes('===SETUP===');
+            const modeLabel = 'Code Project';
+
+            html += `
+              <div class="build-success">
+                <div class="build-success-header">
+                  <span class="build-success-icon">✅</span>
+                  <strong>${escapeHtml(projectData.project || modeLabel)} ${isPartial ? 'partially' : ''} saved!</strong>
+                </div>
+                ${isPartial ? `<p class="build-partial-warn">⚠️ Output was cut off - showing what was generated.</p>` : ''}
+                ${projectData.description ? `<p class="build-success-desc">${escapeHtml(projectData.description)}</p>` : ''}
+                ${renderGeneratedFileCards(projectData)}
+                ${projectData.setup ? `<div class="build-setup"><strong>Run:</strong> <code>${escapeHtml(projectData.setup)}</code></div>` : ''}
+                ${projectData.notes ? `<p class="build-notes">${escapeHtml(projectData.notes)}</p>` : ''}
+                <div class="build-actions">
+                  <button class="build-open-btn">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    Open in Builder
+                  </button>
+                  <button class="build-dl-btn" onclick="downloadBuilderZip()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    Download ZIP
+                  </button>
+                </div>
+              </div>`;
+
+            contentDiv.innerHTML = html;
+            highlightCodeBlocks(contentDiv);
+            bindGeneratedFileCards(contentDiv, finalProject);
+
+            const changedCount = projectData.files.length;
+            const totalCount = finalProject.files.length;
+            const isEdit = existingProject && existingProject.files && existingProject.files.length > 0;
+            showToast(
+              isEdit
+                ? `${changedCount} file${changedCount > 1 ? 's' : ''} updated (${totalCount} total in project)`
+                : `${totalCount} file${totalCount > 1 ? 's' : ''} generated!`,
+              'success'
+            );
+          } else {
+            contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking, webSearchMetadata);
+            highlightCodeBlocks(contentDiv);
+            exportGeneratedFilesToWorkspace(fullContent);
+          }
+        }
+        return; // done - skip the main stream block below
       } else {
         throw new Error(`Server error ${response.status}: ${errMsg}`);
       }
     }
 
     const hazyTrace = decodeHazyTraceHeader(response);
-    const webSearchMetadata = getWebSearchMetadata(response);
+    webSearchMetadata = getWebSearchMetadata(response);
 
     removeTypingIndicator();
     const aiTs = Date.now();
-    const { contentDiv } = appendMessage('assistant', '', true, aiTs);
+    const { contentDiv, mascotImg } = appendMessage('assistant', '', true, aiTs);
+    // Attach mascot emotion controller to this message
+    const _mascotCtrl = mascotImg && window.HazyMascotController ? new window.HazyMascotController(mascotImg) : null;
+    if (_mascotCtrl) window.HAZY_MASCOT_CONTROLLER = _mascotCtrl;
+    let _rawEmoBuf = '';
     let fullContent = '';
     let fullThinking = '';
 
-    const reader  = response.body.getReader();
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
-    // ── Stream reader — always Ollama NDJSON format ───────────────────────
+    // -- Stream reader - always Ollama NDJSON format -----------------------
     // The server normalises ALL provider responses to Ollama format:
     //   { message: { content: "token" }, done: false }
     //   { done: true }
@@ -3208,6 +4144,9 @@ async function sendMessage(userText) {
         if (!trimmed) continue;
         try {
           const json = JSON.parse(trimmed);
+          if (json.agent) agentRunInfo = json.agent;
+          if (json.artifactProject) agentArtifactProject = normalizeArtifactProject(json.artifactProject);
+          if (json.agent?.artifactProject) agentArtifactProject = normalizeArtifactProject(json.agent.artifactProject);
           const thinkingToken = getThinkingToken(json);
           if (thinkingToken) {
             fullThinking += thinkingToken;
@@ -3217,50 +4156,90 @@ async function sendMessage(userText) {
           const token = json.message?.content || '';
 
           if (token) {
-            fullContent += token;
+            _rawEmoBuf += token;
+            if (_mascotCtrl) _mascotCtrl.scanBuffer(_rawEmoBuf);
+            const _ct3 = window.hazyStripEmotionTags ? window.hazyStripEmotionTags(token) : token.replace(/\[\[(happy|annoyed|flustered)\]\]/g, '');
+            fullContent += _ct3;
+            partialGeneratedContent = fullContent;
 
-            if (isBuild || isCode) {
-              const liveProject    = parseFinalResponseFiles(fullContent);
-              const filesFound     = liveProject?.files.length || 0;
+            const liveProject = parseFinalResponseFiles(fullContent);
+            const filesFound = liveProject?.files.length || 0;
+
+            if (isBuild || isCode || filesFound > 0) {
+              const isCodeResponse = isCode || (filesFound > 0 && !isBuild && !liveProject.files.some(f => f.filename.endsWith('.html')));
               const linesGenerated = fullContent.split('\n').length;
-              const modeVerb       = isCode ? 'Building your code…' : 'Building your website…';
+              const modeVerb = isCodeResponse ? 'Building your code...' : 'Building your website...';
               if (STATE.showLiveCode) {
                 contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderLiveBuildProgress(fullContent, filesFound, linesGenerated)}`;
               } else {
-                const filesInfo = filesFound > 0 ? (filesFound + ' file' + (filesFound > 1 ? 's' : '') + ' detected') : 'Generating…';
+                const filesInfo = filesFound > 0 ? (filesFound + ' file' + (filesFound > 1 ? 's' : '') + ' detected') : 'Generating...';
                 contentDiv.innerHTML = `${renderRawThinking(fullThinking)}
                   <div class="build-progress">
                     <span class="build-spinner"></span>
                     <div class="build-progress-info">
                       <span>${modeVerb}</span>
-                      <span class="build-stats">${filesInfo} · ${linesGenerated} lines · ${(fullContent.length/1024).toFixed(1)} KB</span>
+                      <span class="build-stats">${filesInfo} · ${linesGenerated} lines · ${(fullContent.length / 1024).toFixed(1)} KB</span>
                     </div>
                   </div>`;
               }
             } else {
               contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking) + '<span class="stream-cursor"></span>';
             }
+            if (!isBuild && !isCode && filesFound === 0) window.HAZY_STREAMING_TTS?.push(token);
             scrollToBottom();
           }
 
           if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
-        } catch {}
+        } catch { }
       }
     }
     // Remove cursor after stream ends
     contentDiv.querySelector('.stream-cursor')?.remove();
+    window.HAZY_STREAMING_TTS?.finish()?.catch(() => { });
+    if (_mascotCtrl) {
+      _mascotCtrl.onStreamEnd(fullContent);
+      window.HAZY_MASCOT_CONTROLLER = null;
+    }
 
     if (!fullContent.trim()) {
       fullContent = 'The model finished without returning an answer. Its response budget may have been used entirely for reasoning. Increase Max Tokens or set Reasoning to Off and try again.';
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking);
+      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
     }
     if (!isBuild && !isCode) {
       fullContent = normalizeCompanionResponse(fullContent);
     }
 
-    // Final flush to IndexedDB before parsing
+    // Final flush to IndexedDB before parsing.
+    // For build/code responses we also persist the *parsed* projectData (structured files)
+    // so that getActiveProjectForContext() and history replay can use the exact snapshot
+    // without relying on fragile re-parsing of the (potentially huge) raw content string.
+    // This is a major part of making "click previous code" + follow-up fix target the right version.
+    let persistedProjectData = undefined;
+    let savedBuildMode = (isBuild || isCode || agentArtifactProject) ? (isCode ? 'code' : 'website') : undefined;
 
-    conv.messages.push({ role: 'assistant', content: fullContent, ts: aiTs, buildMode: (isBuild || isCode) ? (isCode ? 'code' : 'website') : undefined, trace: hazyTrace || undefined });
+    let parsedForStore = parseFinalResponseFiles(fullContent);
+    if (parsedForStore && Array.isArray(parsedForStore.files) && parsedForStore.files.length > 0) {
+      if (activeProject) {
+        parsedForStore = mergeProjectFiles(activeProject, parsedForStore);
+      }
+      persistedProjectData = parsedForStore;
+      if (!savedBuildMode) {
+        savedBuildMode = parsedForStore.files.some(f => f.filename.endsWith('.html')) ? 'website' : 'code';
+      }
+    } else if (agentArtifactProject) {
+      persistedProjectData = mergeProjectFiles(activeProject, agentArtifactProject);
+    }
+
+    conv.messages.push({
+      role: 'assistant',
+      content: fullContent,
+      ts: aiTs,
+      emotion: _mascotCtrl ? (_mascotCtrl._currentEmotion || 'happy') : 'happy',
+      buildMode: savedBuildMode,
+      projectData: persistedProjectData,
+      trace: hazyTrace || undefined,
+      agent: agentRunInfo || undefined
+    });
     saveConversations();
 
     // Generate a smart title after the very first exchange
@@ -3268,18 +4247,32 @@ async function sendMessage(userText) {
       generateChatTitle(STATE.activeConvId, userText, fullContent);
     }
 
-    if (isBuild || isCode) {
-      // — Parse attempt 1: delimiter format (most reliable) —
-      let projectData = parseFinalResponseFiles(fullContent);
+    let projectData = parseFinalResponseFiles(fullContent);
+    const hasFiles = projectData && projectData.files.length > 0;
 
-      // — Parse attempt 2: code block fallback (if model used markdown fences) —
+    if (isBuild || isCode || hasFiles) {
+      if (hasFiles && !isBuild && !isCode) {
+        const isHtml = projectData.files.some(f => f.filename.endsWith('.html'));
+        if (isHtml) {
+          isBuild = true;
+          STATE.mode = 'build';
+        } else {
+          isCode = true;
+          STATE.mode = 'code';
+        }
+      }
+      if (projectData && activeProject) {
+        projectData = mergeProjectFiles(activeProject, projectData);
+      }
+
+      // - Parse attempt 2: code block fallback (if model used markdown fences) -
       // parseFinalResponseFiles already handles both delimiter and fenced formats.
 
 
       if (projectData && projectData.files.length > 0) {
         const isPartial = !fullContent.includes('===NOTES===') && !fullContent.includes('===SETUP===');
         const modeLabel = isCode ? 'Code' : 'Website';
-        const modeIcon  = isCode ? '💻' : '🌐';
+        const modeIcon = isCode ? '💻' : '🌐';
 
 
         contentDiv.innerHTML = `${renderRawThinking(fullThinking)}
@@ -3288,13 +4281,13 @@ async function sendMessage(userText) {
               <span class="build-success-icon">${isPartial ? '⚠️' : '✅'}</span>
               <strong>${escapeHtml(projectData.project || modeLabel)} ${isPartial ? 'partially' : ''} built!</strong>
             </div>
-            ${isPartial ? `<p class="build-partial-warn">⚠️ Output was cut off — showing what was generated.</p>` : ''}
+            ${isPartial ? `<p class="build-partial-warn">⚠️ Output was cut off - showing what was generated.</p>` : ''}
             ${projectData.description ? `<p class="build-success-desc">${escapeHtml(projectData.description)}</p>` : ''}
             ${renderGeneratedFileCards(projectData)}
             ${projectData.setup ? `<div class="build-setup"><strong>Run:</strong> <code>${escapeHtml(projectData.setup)}</code></div>` : ''}
             ${projectData.notes ? `<p class="build-notes">${escapeHtml(projectData.notes)}</p>` : ''}
             <div class="build-actions">
-              <button class="build-open-btn" onclick="openBuilderPanel(window._lastBuild)">
+              <button class="build-open-btn">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 Open in Builder
               </button>
@@ -3305,10 +4298,25 @@ async function sendMessage(userText) {
             </div>
           </div>`;
 
-        window._lastBuild = projectData;
-        bindGeneratedFileCards(contentDiv, projectData);
-        openBuilderPanel(projectData);
-        showToast(`${projectData.files.length} file${projectData.files.length > 1 ? 's' : ''} generated!`, 'success');
+        // Merge AI's returned files with any existing project in the builder.
+        // If the AI only fixed one file, all other project files are preserved.
+        // If this is a fresh generation (no existing project), merge is a no-op.
+        const existingProject = getActiveProjectForContext();
+        const finalProject = mergeProjectFiles(existingProject, projectData);
+
+        window._lastBuild = finalProject;
+        bindGeneratedFileCards(contentDiv, finalProject);
+        openBuilderPanel(finalProject);
+        const changedCount = projectData.files.length;
+        const totalCount = finalProject.files.length;
+        const isEdit = existingProject && existingProject.files && existingProject.files.length > 0;
+        showToast(
+          isEdit
+            ? `${changedCount} file${changedCount > 1 ? 's' : ''} updated (${totalCount} total in project)`
+            : `${totalCount} file${totalCount > 1 ? 's' : ''} generated!`,
+          'success'
+        );
+
       } else {
         contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}`;
         highlightCodeBlocks(contentDiv);
@@ -3327,32 +4335,154 @@ async function sendMessage(userText) {
             </ul>
           </div>`;
         contentDiv.appendChild(warnDiv);
-        showToast('Could not extract files — see suggestions below', '');
+        showToast('Could not extract files - see suggestions below', '');
       }
-    } else {
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking);
+    } else if (agentArtifactProject && Array.isArray(agentArtifactProject.files) && agentArtifactProject.files.length > 0) {
+      // Agent mode wrote files via artifact.write tool - open them in the builder panel.
+      // isBuild/isCode are false in agent mode (they reflect the chat-mode UI toggle, not agent intent),
+      // so this branch handles the case the agent produced real artifacts that the builder block above never sees.
+      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
       highlightCodeBlocks(contentDiv);
+
+      const agentFileCount = agentArtifactProject.files.length;
+      const agentSuccessDiv = document.createElement('div');
+      agentSuccessDiv.className = 'build-success';
+      agentSuccessDiv.innerHTML = `
+        <div class="build-success-header">
+          <span class="build-success-icon">✅</span>
+          <strong>${escapeHtml(agentArtifactProject.project || 'Agent Output')} ready!</strong>
+        </div>
+        ${agentArtifactProject.description ? `<p class="build-success-desc">${escapeHtml(agentArtifactProject.description)}</p>` : ''}
+        ${renderGeneratedFileCards(agentArtifactProject)}
+        <div class="build-actions">
+          <button class="build-open-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Open in Builder
+          </button>
+          <button class="build-dl-btn" onclick="downloadBuilderZip()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Download ZIP
+          </button>
+        </div>`;
+      contentDiv.appendChild(agentSuccessDiv);
+      const existingAgentProject = getActiveProjectForContext();
+      const finalAgentProject = mergeProjectFiles(existingAgentProject, agentArtifactProject);
+      window._lastBuild = finalAgentProject;
+      bindGeneratedFileCards(contentDiv, finalAgentProject);
+      showToast(`${agentFileCount} file${agentFileCount > 1 ? 's' : ''} ${existingAgentProject ? 'updated' : 'generated'} by agent!`, 'success');
+
+    } else {
+      // Standard chat mode OR agent mode where agentArtifactProject wasn't created.
+      let projectData = parseFinalResponseFiles(fullContent);
+      if (projectData && projectData.files.length > 0) {
+        // Save files to workspace (async)
+        exportGeneratedFilesToWorkspace(fullContent);
+
+        const existingProject = getActiveProjectForContext();
+        const finalProject = mergeProjectFiles(existingProject, projectData);
+        window._lastBuild = finalProject;
+
+        // Strip the raw code blocks and delimiters from the markdown content
+        const cleanContent = stripCodeBlocksAndDelimiters(fullContent);
+
+        // Render the thinking and the assistant's text
+        let html = renderRawThinking(fullThinking);
+        if (cleanContent) {
+          html += renderAssistantContent(cleanContent, hazyTrace, '', webSearchMetadata);
+        } else {
+          html += renderRawThinking(fullThinking);
+        }
+
+        // Render the build-success layout (the "folder" container)
+        const isPartial = !fullContent.includes('===NOTES===') && !fullContent.includes('===SETUP===');
+        const modeLabel = 'Code Project';
+
+        html += `
+          <div class="build-success">
+            <div class="build-success-header">
+              <span class="build-success-icon">✅</span>
+              <strong>${escapeHtml(projectData.project || modeLabel)} ${isPartial ? 'partially' : ''} saved!</strong>
+            </div>
+            ${isPartial ? `<p class="build-partial-warn">⚠️ Output was cut off - showing what was generated.</p>` : ''}
+            ${projectData.description ? `<p class="build-success-desc">${escapeHtml(projectData.description)}</p>` : ''}
+            ${renderGeneratedFileCards(projectData)}
+            ${projectData.setup ? `<div class="build-setup"><strong>Run:</strong> <code>${escapeHtml(projectData.setup)}</code></div>` : ''}
+            ${projectData.notes ? `<p class="build-notes">${escapeHtml(projectData.notes)}</p>` : ''}
+            <div class="build-actions">
+              <button class="build-open-btn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                Open in Builder
+              </button>
+              <button class="build-dl-btn" onclick="downloadBuilderZip()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                Download ZIP
+              </button>
+            </div>
+          </div>`;
+
+        contentDiv.innerHTML = html;
+        highlightCodeBlocks(contentDiv);
+        bindGeneratedFileCards(contentDiv, finalProject);
+
+        const changedCount = projectData.files.length;
+        const totalCount = finalProject.files.length;
+        const isEdit = existingProject && existingProject.files && existingProject.files.length > 0;
+        showToast(
+          isEdit
+            ? `${changedCount} file${changedCount > 1 ? 's' : ''} updated (${totalCount} total in project)`
+            : `${totalCount} file${totalCount > 1 ? 's' : ''} generated!`,
+          'success'
+        );
+      } else {
+        // -- SOURCES_PENDING: render content + inject skeleton placeholder synchronously --
+        contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
+        highlightCodeBlocks(contentDiv);
+        await exportGeneratedFilesToWorkspace(fullContent);
+      }
+    }
+    // -- Async fetch: SOURCES_PENDING â†’ SOURCES_LOADED or ERROR -------------------------
+    // Start the fetch immediately (no await) so it runs while the DOM is already updating.
+    const searchFetchPromise = loadWebSourceCards(webSearchMetadata);
+
+    // Only wait if there is actually a pending placeholder in the DOM.
+    const pendingPlaceholder = webSearchMetadata?.runId
+      ? contentDiv.querySelector(`#tl-search-placeholder-${CSS.escape(webSearchMetadata.runId)}`)
+      : null;
+
+    if (pendingPlaceholder) {
+      // Block until fetch resolves, then swap placeholder
+      const searchResult = await searchFetchPromise;
+      const timelineList = finalizeTimelineSearch(contentDiv, webSearchMetadata, searchResult);
+      // -- DONE: only fire after search is fully settled --
+      appendTimelineDone(timelineList);
+      scrollToBottom(true);
+    } else if (webSearchMetadata?.runId) {
+      // No placeholder (non-trace path) - legacy fallback: wait and insert raw HTML
+      const webSourceCards = await searchFetchPromise;
+      if (webSourceCards && !webSourceCards.startsWith('__ERROR__:')) {
+        contentDiv.insertAdjacentHTML('beforeend', `
+          <section class="web-source-panel" aria-label="Web search sources">
+            <div class="tl-source-grid">${webSourceCards}</div>
+          </section>`);
+      }
     }
 
-    const webSourceCards = await loadWebSourceCards(webSearchMetadata);
-    if (webSourceCards) contentDiv.insertAdjacentHTML('beforeend', webSourceCards);
 
-    if (STATE.ttsEnabled && fullContent && !isBuild && !isCode) {
-      speakText(stripMarkdown(fullContent));
-    }
-
-  } catch(err) {
+  } catch (err) {
+    window.HAZY_STREAMING_TTS?.stop();
     removeTypingIndicator();
     if (err.name === 'AbortError') {
-      // On abort during build — try to parse whatever was collected
-      if ((isBuild || isCode) && typeof fullContent === 'string' && fullContent.length > 100) {
-        const partial = parseFinalResponseFiles(fullContent);
+      // On abort during build - try to parse whatever was collected
+      if ((isBuild || isCode) && partialGeneratedContent.length > 100) {
+        const partial = parseFinalResponseFiles(partialGeneratedContent);
         if (partial?.files.length > 0) {
           window._lastBuild = partial;
           openBuilderPanel(partial);
-          showToast(`Stopped — recovered ${partial.files.length} partial file(s)`, '');
+          showToast(`Stopped - recovered ${partial.files.length} partial file(s)`, '');
           return;
         }
+      } else if (partialGeneratedContent.length > 100) {
+        await exportGeneratedFilesToWorkspace(partialGeneratedContent);
       }
       showToast('Generation stopped', '');
     } else {
@@ -3370,7 +4500,7 @@ async function sendMessage(userText) {
 function appendErrorMessage(html) {
   const div = document.createElement('div');
   div.className = 'error-msg';
-  div.innerHTML = `<span class="error-icon">⚠️</span><span>${html}</span>`;
+  div.innerHTML = `<span class="error-icon">âš ï¸</span><span>${html}</span>`;
   el.messagesArea.appendChild(div);
 }
 
@@ -3381,55 +4511,55 @@ function renderLiveBuildProgress(rawContent, filesFound, linesGenerated) {
   // Parse the content to show live code preview
   const projectMatch = rawContent.match(/===PROJECT===\s*([\s\S]*?)(?===|$)/);
   const descMatch = rawContent.match(/===DESCRIPTION===\s*([\s\S]*?)(?===|$)/);
-  
+
   let html = '<div class="build-live-preview">';
-  
+
   // Header with stats
   html += `
     <div class="build-live-header">
       <span class="build-spinner"></span>
       <div>
         <strong>Building: ${projectMatch ? escapeHtml(projectMatch[1].trim()) : 'Website Project'}</strong>
-        <span class="build-stats">${filesFound} file${filesFound>1?'s':''} · ${linesGenerated} lines · ${(rawContent.length/1024).toFixed(1)} KB</span>
+        <span class="build-stats">${filesFound} file${filesFound > 1 ? 's' : ''} · ${linesGenerated} lines · ${(rawContent.length / 1024).toFixed(1)} KB</span>
       </div>
     </div>`;
-  
+
   if (descMatch) {
     html += `<p class="build-live-desc">${escapeHtml(descMatch[1].trim())}</p>`;
   }
-  
+
   // Extract and display each file as it's being written
-  const filePattern = /===FILE:\s*([^\s=][^=]*?)===\s*([\s\S]*?)(?=\n===|$)/g;
+  const filePattern = /===FILE:\s*([^\s=][^=]*?)===\s*([\s\S]*?)(?=\r?\n===(?:FILE:|SETUP|NOTES|PROJECT|DESCRIPTION|$))/gi;
   let match;
   const files = [];
-  
+
   while ((match = filePattern.exec(rawContent)) !== null) {
     const filename = match[1].trim();
-    const content = match[2].trimEnd();
+    const content = cleanFileContent(match[2]);
     if (filename) {
       files.push({ filename, content });
     }
   }
-  
+
   if (files.length > 0) {
     html += '<div class="build-live-files">';
     files.forEach((file, idx) => {
       const lang = detectLang(file.filename);
       const isIncomplete = idx === files.length - 1 && !rawContent.endsWith('===');
-      
+
       html += `
         <div class="build-live-file ${isIncomplete ? 'building' : 'complete'}">
           <div class="build-live-file-header">
             <span class="file-icon">${getFileIcon(lang)}</span>
             <code>${escapeHtml(file.filename)}</code>
-            ${isIncomplete ? '<span class="writing-indicator">✍️ Writing...</span>' : '<span class="complete-indicator">✓</span>'}
+            ${isIncomplete ? '<span class="writing-indicator">âœï¸ Writing...</span>' : '<span class="complete-indicator">âœ“</span>'}
           </div>
-          <pre class="build-live-code"><code class="language-${lang}">${escapeHtml(file.content)}${isIncomplete ? '<span class="cursor-blink">│</span>' : ''}</code></pre>
+          <pre class="build-live-code"><code class="language-${lang}">${escapeHtml(file.content)}${isIncomplete ? '<span class="cursor-blink">â”‚</span>' : ''}</code></pre>
         </div>`;
     });
     html += '</div>';
   }
-  
+
   html += '</div>';
   return html;
 }
@@ -3459,7 +4589,7 @@ async function regenerateLast() {
   conv.messages.splice(lastAIIdx, 1);
   saveConversations();
   el.messagesArea.innerHTML = '';
-  conv.messages.forEach(msg => { if (msg.role !== 'system') appendMessage(msg.role, msg.content, false, msg.ts); });
+  conv.messages.forEach(msg => { if (msg.role !== 'system') appendMessage(msg.role, msg.content, false, msg.ts, msg.emotion); });
   let lastUser = null;
   for (let i = conv.messages.length - 1; i >= 0; i--) {
     if (conv.messages[i].role === 'user') { lastUser = conv.messages[i]; break; }
@@ -3476,13 +4606,13 @@ async function regenerateLast() {
 function setStreamingState(streaming) {
   STATE.isStreaming = streaming;
   el.chatInput.disabled = streaming;
-  el.sendBtn.disabled = streaming || !el.chatInput.value.trim();
+  el.sendBtn.disabled = streaming || (!el.chatInput.value.trim() && !STATE.uploadedFiles.length);
   el.stopBtn.style.display = streaming ? 'flex' : 'none';
   if (el.reasoningInstantBtn) el.reasoningInstantBtn.disabled = streaming;
   if (el.reasoningDeepBtn) el.reasoningDeepBtn.disabled = streaming;
 }
 
-// ── Scroll management ────────────────────────────────────────────────────
+// -- Scroll management ----------------------------------------------------
 // userScrolledUp is set to true the moment the user scrolls up manually.
 // It is only cleared when the user scrolls back to the bottom themselves,
 // or when a new message is sent. This prevents streaming from ever
@@ -3499,7 +4629,7 @@ function isNearBottom() {
 
 function scrollToBottom(force = false) {
   if (force) {
-    // Always scroll — user just sent a message or a new chat started
+    // Always scroll - user just sent a message or a new chat started
     userScrolledUp = false;
     updateScrollBottomBtn();
   }
@@ -3507,7 +4637,7 @@ function scrollToBottom(force = false) {
   liveScrollFrame = requestAnimationFrame(() => {
     liveScrollFrame = 0;
     if (!userScrolledUp) {
-    // Streaming chunk — only scroll if user hasn't scrolled up
+      // Streaming chunk - only scroll if user hasn't scrolled up
       el.chatContainer.scrollTop = el.chatContainer.scrollHeight;
     }
   });
@@ -3532,7 +4662,7 @@ function showToast(msg, type = '') {
   const t = document.createElement('div');
   t.className = `toast ${type}`; t.textContent = msg;
   el.toastContainer.appendChild(t);
-  setTimeout(() => { t.style.opacity='0'; t.style.transform='translateY(10px)'; t.style.transition='all .25s'; setTimeout(() => t.remove(), 300); }, 2200);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(10px)'; t.style.transition = 'all .25s'; setTimeout(() => t.remove(), 300); }, 2200);
 }
 
 function openModal(id) { $(id).classList.add('open'); }
@@ -3551,45 +4681,47 @@ function setProfileMenuOpen(open) {
 }
 
 // ========================
-// Piper TTS Engine
-// Uses @mintplex-labs/piper-tts-web via jsDelivr +esm
-// window.PiperTTS is set by the module script in index.html BEFORE app.js loads
-// Voice models download from HuggingFace once, cached in browser OPFS permanently
+// Legacy / Classic TTS (Piper + Browser SpeechSynthesis)
+// Kept for power users / backward compatibility (plan Agent F + audit "consolidate or clearly separate").
+// The primary/recommended path is the Kokoro Voice system (voice* STATE + HAZY_TTS_MANAGER + streamingTTS + audioQueue).
+// speakBrowser / speakPiper / _ttsAudioCtx + PIPER_VOICES are isolated here.
+// tts* STATE fields and this modal are treated as "Classic/Legacy" in UI labels.
+// speakText + streaming + per-message voice buttons route *only* to Kokoro (no cross-talk).
 // ========================
 
 const PIPER_VOICES = [
-  { id: 'en_US-lessac-medium',              label: 'Lessac ⭐ (US Female)',       group: '🇺🇸 English US' },
-  { id: 'en_US-amy-medium',                 label: 'Amy (US Female)',              group: '🇺🇸 English US' },
-  { id: 'en_US-hfc_female-medium',          label: 'HFC Female (US)',              group: '🇺🇸 English US' },
-  { id: 'en_US-hfc_male-medium',            label: 'HFC Male (US)',                group: '🇺🇸 English US' },
-  { id: 'en_US-joe-medium',                 label: 'Joe (US Male)',                group: '🇺🇸 English US' },
-  { id: 'en_US-ryan-medium',                label: 'Ryan (US Male)',               group: '🇺🇸 English US' },
-  { id: 'en_US-danny-low',                  label: 'Danny (US Male)',              group: '🇺🇸 English US' },
-  { id: 'en_US-kathleen-low',               label: 'Kathleen (US Female)',         group: '🇺🇸 English US' },
-  { id: 'en_US-kusal-medium',               label: 'Kusal (US Male)',              group: '🇺🇸 English US' },
-  { id: 'en_US-libritts-high',              label: 'LibriTTS (US Female, HQ)',     group: '🇺🇸 English US' },
-  { id: 'en_GB-alan-medium',                label: 'Alan (GB Male)',               group: '🇬🇧 English GB' },
-  { id: 'en_GB-cori-high',                  label: 'Cori (GB Female, HQ)',         group: '🇬🇧 English GB' },
-  { id: 'en_GB-jenny_dioco-medium',         label: 'Jenny (GB Female)',            group: '🇬🇧 English GB' },
-  { id: 'en_GB-northern_english_male-medium', label: 'Northern Male',              group: '🇬🇧 English GB' },
-  { id: 'de_DE-thorsten-medium',            label: 'Thorsten (Male)',              group: '🇩🇪 German' },
-  { id: 'de_DE-eva_k-x_low',               label: 'Eva (Female)',                 group: '🇩🇪 German' },
-  { id: 'fr_FR-siwis-medium',               label: 'Siwis (Female)',               group: '🇫🇷 French' },
-  { id: 'fr_FR-tom-medium',                 label: 'Tom (Male)',                   group: '🇫🇷 French' },
-  { id: 'es_ES-davefx-medium',              label: 'Dave (Male)',                  group: '🇪🇸 Spanish' },
-  { id: 'it_IT-paola-medium',               label: 'Paola (Female)',               group: '🇮🇹 Italian' },
-  { id: 'pt_BR-faber-medium',               label: 'Faber (BR Male)',              group: '🇧🇷 Portuguese' },
-  { id: 'nl_NL-mls-medium',                 label: 'MLS (Female)',                 group: '🇳🇱 Dutch' },
-  { id: 'ru_RU-ruslan-medium',              label: 'Ruslan (Male)',                group: '🇷🇺 Russian' },
-  { id: 'zh_CN-huayan-medium',              label: 'Huayan (Female)',              group: '🇨🇳 Chinese' },
+  { id: 'en_US-lessac-medium', label: 'Lessac â­ (US Female)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_US-amy-medium', label: 'Amy (US Female)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_US-hfc_female-medium', label: 'HFC Female (US)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_US-hfc_male-medium', label: 'HFC Male (US)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_US-joe-medium', label: 'Joe (US Male)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_US-ryan-medium', label: 'Ryan (US Male)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_US-danny-low', label: 'Danny (US Male)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_US-kathleen-low', label: 'Kathleen (US Female)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_US-kusal-medium', label: 'Kusal (US Male)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_US-libritts-high', label: 'LibriTTS (US Female, HQ)', group: 'ðŸ‡ºðŸ‡¸ English US' },
+  { id: 'en_GB-alan-medium', label: 'Alan (GB Male)', group: 'ðŸ‡¬ðŸ‡§ English GB' },
+  { id: 'en_GB-cori-high', label: 'Cori (GB Female, HQ)', group: 'ðŸ‡¬ðŸ‡§ English GB' },
+  { id: 'en_GB-jenny_dioco-medium', label: 'Jenny (GB Female)', group: 'ðŸ‡¬ðŸ‡§ English GB' },
+  { id: 'en_GB-northern_english_male-medium', label: 'Northern Male', group: 'ðŸ‡¬ðŸ‡§ English GB' },
+  { id: 'de_DE-thorsten-medium', label: 'Thorsten (Male)', group: 'ðŸ‡©ðŸ‡ª German' },
+  { id: 'de_DE-eva_k-x_low', label: 'Eva (Female)', group: 'ðŸ‡©ðŸ‡ª German' },
+  { id: 'fr_FR-siwis-medium', label: 'Siwis (Female)', group: 'ðŸ‡«ðŸ‡· French' },
+  { id: 'fr_FR-tom-medium', label: 'Tom (Male)', group: 'ðŸ‡«ðŸ‡· French' },
+  { id: 'es_ES-davefx-medium', label: 'Dave (Male)', group: 'ðŸ‡ªðŸ‡¸ Spanish' },
+  { id: 'it_IT-paola-medium', label: 'Paola (Female)', group: 'ðŸ‡®ðŸ‡¹ Italian' },
+  { id: 'pt_BR-faber-medium', label: 'Faber (BR Male)', group: 'ðŸ‡§ðŸ‡· Portuguese' },
+  { id: 'nl_NL-mls-medium', label: 'MLS (Female)', group: 'ðŸ‡³ðŸ‡± Dutch' },
+  { id: 'ru_RU-ruslan-medium', label: 'Ruslan (Male)', group: 'ðŸ‡·ðŸ‡º Russian' },
+  { id: 'zh_CN-huayan-medium', label: 'Huayan (Female)', group: 'ðŸ‡¨ðŸ‡³ Chinese' },
 ];
 
-// ── Piper runtime state ──────────────────────────────────────────────────
-let _ttsAudioCtx      = null;
+// -- Piper runtime state --------------------------------------------------
+let _ttsAudioCtx = null;
 let _ttsCurrentSource = null;
-let _piperSession     = null;   // active TtsSession
+let _piperSession = null;   // active TtsSession
 let _piperLoadedVoice = null;
-let _piperLoading     = false;
+let _piperLoading = false;
 
 function updatePiperStatus(status, text, pct = null) {
   const el = document.getElementById('ttsPiperStatus');
@@ -3597,13 +4729,50 @@ function updatePiperStatus(status, text, pct = null) {
   el.textContent = text;
   el.className = 'tts-model-status';
   if (status === 'loading') el.classList.add('status-loading');
-  if (status === 'ready')   el.classList.add('status-ready');
-  if (status === 'error')   el.classList.add('status-error');
+  if (status === 'ready') el.classList.add('status-ready');
+  if (status === 'error') el.classList.add('status-error');
   const wrap = document.getElementById('ttsPiperProgressWrap');
-  const bar  = document.getElementById('ttsPiperProgressBar');
+  const bar = document.getElementById('ttsPiperProgressBar');
   if (wrap) wrap.style.display = (status === 'loading' && pct != null) ? 'block' : 'none';
-  if (bar  && pct != null) bar.style.width = Math.min(100, pct) + '%';
+  if (bar && pct != null) bar.style.width = Math.min(100, pct) + '%';
 }
+
+// plan Agent E: Kokoro ready status UI cloned from Piper pattern (updatePiperStatus + tts-model-status + status-*- classes)
+// placed for the Voice (kokoro) settings area (sVoice stab), not the old ttsModal. Listens for event emitted from ttsManager load.
+function updateKokoroStatus(status, text) {
+  const el = document.getElementById('kokoroStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'tts-model-status';
+  if (status === 'loading') el.classList.add('status-loading');
+  if (status === 'ready') el.classList.add('status-ready');
+  if (status === 'error') el.classList.add('status-error');
+}
+
+// Refactor: replaced 'hazy-kokoro-ready' WASM event listener with server health + hardware poll
+// (Kokoro now runs in external kokoro-fastapi; no in-browser load event.)
+async function checkKokoroHealth() {
+  try {
+    const res = await fetch('/hazy/tts/health');
+    if (res.ok) {
+      // Use ttsManager.detectHardware() (plan placement) if available, else direct (health poll still central)
+      let hw;
+      if (window.HAZY_TTS_MANAGER && typeof window.HAZY_TTS_MANAGER.detectHardware === 'function') {
+        hw = await window.HAZY_TTS_MANAGER.detectHardware();
+      } else {
+        hw = await fetch('/hazy/hardware').then(r => r.json());
+      }
+      const deviceLabel = hw.gpu ? `GPU · ${hw.gpu}` : `CPU · ${hw.cpuModel || 'Unknown'}`;
+      updateKokoroStatus('ready', `Kokoro ready - ${deviceLabel}`);
+    } else {
+      updateKokoroStatus('error', 'Kokoro server not responding');
+    }
+  } catch {
+    updateKokoroStatus('idle', 'Kokoro server offline - run kokoro-fastapi');
+  }
+}
+
+// Old WASM ready listener removed (no longer emitted by ttsManager). Use checkKokoroHealth() instead.
 
 // Load Piper only when the user enables it, so a missing optional TTS bundle
 // cannot break normal chat startup.
@@ -3630,46 +4799,46 @@ async function loadPiperModel(voiceId) {
   _piperLoading = true;
   _piperSession = null;
 
-  updatePiperStatus('loading', 'Initializing Piper TTS…');
+  updatePiperStatus('loading', 'Initializing Piper TTS...');
 
   const tts = await waitForPiperLib();
   if (!tts) {
     _piperLoading = false;
-    updatePiperStatus('error', '❌ Piper library failed to load. Check internet connection.');
+    updatePiperStatus('error', 'âŒ Piper library failed to load. Check internet connection.');
     return false;
   }
 
   try {
-    updatePiperStatus('loading', 'Downloading voice model…', 0);
+    updatePiperStatus('loading', 'Downloading voice model...', 0);
 
     _piperSession = await tts.TtsSession.create({
       voiceId,
       progress: (p) => {
         if (p.total > 0) {
           const pct = Math.round((p.loaded / p.total) * 100);
-          const mb  = (p.loaded  / 1048576).toFixed(1);
-          const tot = (p.total   / 1048576).toFixed(1);
-          updatePiperStatus('loading', `Downloading… ${mb} / ${tot} MB`, pct);
+          const mb = (p.loaded / 1048576).toFixed(1);
+          const tot = (p.total / 1048576).toFixed(1);
+          updatePiperStatus('loading', `Downloading... ${mb} / ${tot} MB`, pct);
         } else {
-          updatePiperStatus('loading', 'Downloading voice model…');
+          updatePiperStatus('loading', 'Downloading voice model...');
         }
       },
     });
 
-    _piperLoadedVoice     = voiceId;
-    _piperLoading         = false;
-    STATE.tpsPiperReady   = true;
+    _piperLoadedVoice = voiceId;
+    _piperLoading = false;
+    STATE.tpsPiperReady = true;
     STATE.ttsPiperLoading = false;
-    updatePiperStatus('ready', '✅ Piper TTS ready');
-    showToast('🎤 Piper TTS ready!', 'success');
+    updatePiperStatus('ready', 'âœ... Piper TTS ready');
+    showToast('ðŸŽ¤ Piper TTS ready!', 'success');
     return true;
   } catch (err) {
-    _piperLoading         = false;
-    STATE.tpsPiperReady   = false;
+    _piperLoading = false;
+    STATE.tpsPiperReady = false;
     STATE.ttsPiperLoading = false;
     const msg = err.message || String(err);
-    updatePiperStatus('error', '❌ ' + msg);
-    showToast('Piper failed — check console (F12)', 'error');
+    updatePiperStatus('error', 'âŒ ' + msg);
+    showToast('Piper failed - check console (F12)', 'error');
     console.error('[Piper load error]', err);
     return false;
   }
@@ -3681,6 +4850,55 @@ function formatBytes(bytes) {
   return (bytes / 1048576).toFixed(1) + ' MB';
 }
 
+function getVoiceSettings(overrides = {}) {
+  return {
+    enabled: STATE.voiceEnabled !== false,
+    voice: STATE.voiceVoice || 'af_heart',
+    speed: Number(STATE.voiceSpeed || 1),
+    volume: Number(STATE.voiceVolume ?? 100),
+    autoplay: STATE.voiceAutoplay !== false,
+    preferGPU: STATE.voicePreferGPU !== false,
+    voiceDevice: STATE.voiceDevice || 'auto',
+    ...overrides
+  };
+}
+
+function syncVoiceSettingsUI() {
+  const voice = getVoiceSettings();
+  const enabledEl = document.getElementById('voiceEnabled');
+  const voiceSelect = document.getElementById('voiceSelect');
+  const speedEl = document.getElementById('voiceSpeed');
+  const volumeEl = document.getElementById('voiceVolume');
+  const autoplayEl = document.getElementById('voiceAutoplay');
+  const preferGPUEl = document.getElementById('voicePreferGPU');
+  const speedLabel = document.getElementById('voiceSpeedLabel');
+  const volumeLabel = document.getElementById('voiceVolumeLabel');
+  if (enabledEl) enabledEl.checked = voice.enabled;
+  if (voiceSelect) voiceSelect.value = voice.voice;
+  if (speedEl) speedEl.value = String(voice.speed);
+  if (volumeEl) volumeEl.value = String(voice.volume);
+  if (autoplayEl) autoplayEl.checked = voice.autoplay;
+  if (preferGPUEl) preferGPUEl.checked = voice.preferGPU !== false;
+  if (speedLabel) speedLabel.textContent = `${Number(voice.speed).toFixed(2).replace(/0$/, '').replace(/\.$/, '')}Ã-`;
+  if (volumeLabel) volumeLabel.textContent = String(Math.round(voice.volume));
+}
+
+async function populateVoiceList() {
+  const select = document.getElementById('voiceSelect');
+  if (!select || !window.HAZY_TTS_MANAGER) return;
+  const voices = window.HAZY_TTS_MANAGER.refreshVoices
+    ? await window.HAZY_TTS_MANAGER.refreshVoices()
+    : window.HAZY_TTS_MANAGER.getVoices();
+  select.innerHTML = voices.map(v => `<option value="${v.id}">${v.id}</option>`).join('');
+  select.value = STATE.voiceVoice || voices[0]?.id || 'af_heart';
+}
+
+function persistVoiceSettings() {
+  if (window.HAZY_VOICE_SETTINGS_STORE) {
+    window.HAZY_VOICE_SETTINGS_STORE.write(getVoiceSettings());
+  }
+}
+
 function stopTTS() {
   try {
     if (_ttsCurrentSource) {
@@ -3688,23 +4906,36 @@ function stopTTS() {
       _ttsCurrentSource.disconnect();
       _ttsCurrentSource = null;
     }
-  } catch {}
+  } catch { }
   speechSynthesis.cancel();
 }
 
-async function speakText(text) {
+async function speakText(text, force = false) {
   if (!text.trim()) return;
-  stopTTS();
-  if (STATE.ttsEngine === 'piper') {
-    await speakPiper(text);
-  } else {
-    speakBrowser(text);
+  if (!force && !STATE.voiceEnabled) return;
+
+  try {
+    const blob = await window.HAZY_TTS_MANAGER.synthesize(text, {
+      voice: STATE.voiceVoice || 'af_heart',
+      speed: STATE.voiceSpeed || 1.0
+    });
+    await window.HAZY_AUDIO_QUEUE_MANAGER.enqueueBlob(blob, {
+      speed: STATE.voiceSpeed || 1.0,
+      volume: STATE.voiceVolume ?? 100
+    });
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      return; // silent on explicit abort (e.g. stop button during fetch)
+    }
+    console.warn('[Hazy Voice] unavailable:', error.message);
+    if (force) throw error; // rethrow in force/preview mode so caller can show proper error
+    showToast('Voice generation unavailable', '');
   }
 }
 
 function speakBrowser(text) {
   const utt = new SpeechSynthesisUtterance(text);
-  utt.rate  = STATE.ttsSpeed;
+  utt.rate = STATE.ttsSpeed;
   utt.pitch = 1;
   speechSynthesis.speak(utt);
 }
@@ -3713,7 +4944,7 @@ async function speakPiper(text) {
   const voiceId = STATE.ttsVoice;
 
   if (!STATE.tpsPiperReady || _piperLoadedVoice !== voiceId) {
-    if (_piperLoading) { showToast('Piper is still loading — please wait…', ''); return; }
+    if (_piperLoading) { showToast('Piper is still loading - please wait...', ''); return; }
     const ok = await loadPiperModel(voiceId);
     if (!ok) return;
   }
@@ -3731,11 +4962,11 @@ async function speakPiper(text) {
     for (const chunk of chunks) {
       if (!STATE.ttsEnabled) break;
       // predict() returns a WAV Blob
-      const wavBlob   = await _piperSession.predict(chunk);
-      const arrayBuf  = await wavBlob.arrayBuffer();
-      const audioBuf  = await _ttsAudioCtx.decodeAudioData(arrayBuf);
-      const source    = _ttsAudioCtx.createBufferSource();
-      source.buffer   = audioBuf;
+      const wavBlob = await _piperSession.predict(chunk);
+      const arrayBuf = await wavBlob.arrayBuffer();
+      const audioBuf = await _ttsAudioCtx.decodeAudioData(arrayBuf);
+      const source = _ttsAudioCtx.createBufferSource();
+      source.buffer = audioBuf;
       source.playbackRate.value = STATE.ttsSpeed;
       source.connect(_ttsAudioCtx.destination);
       source.start(startTime);
@@ -3769,6 +5000,15 @@ function splitIntoChunks(text, maxLen) {
 // Event Listeners
 // ========================
 function setupEventListeners() {
+  el.navChatBtn?.addEventListener('click', () => {
+    setActivePage('chat');
+    closeSidebarMobile();
+  });
+  el.navAgentBtn?.addEventListener('click', () => {
+    setActivePage('agent');
+    closeSidebarMobile();
+  });
+
   el.chatInput.addEventListener('input', () => {
     updateSendBtn(); autoResizeTextarea();
     const len = el.chatInput.value.length;
@@ -3782,12 +5022,12 @@ function setupEventListeners() {
   el.sendBtn.addEventListener('click', () => sendMessage(el.chatInput.value));
   el.stopBtn.addEventListener('click', () => STATE.abortController?.abort());
 
-  // ── File upload ──────────────────────────────────
+  // -- File upload ----------------------------------
   el.uploadBtn.addEventListener('click', () => el.fileInput.click());
 
   el.fileInput.addEventListener('change', async () => {
     if (!el.fileInput.files.length) return;
-    showToast('Reading files…', '');
+    showToast('Reading files...', '');
     const newFiles = await processFiles(el.fileInput.files);
     STATE.uploadedFiles.push(...newFiles);
     renderFilePreviewStrip();
@@ -3803,7 +5043,7 @@ function setupEventListeners() {
     inputArea.classList.remove('drag-over');
     const dropped = e.dataTransfer.files;
     if (!dropped.length) return;
-    showToast('Reading files…', '');
+    showToast('Reading files...', '');
     const newFiles = await processFiles(dropped);
     STATE.uploadedFiles.push(...newFiles);
     renderFilePreviewStrip();
@@ -3824,8 +5064,8 @@ function setupEventListeners() {
   });
 
   // Mode buttons
-  el.modeChatBtn.addEventListener('click', () => setMode('chat'));
-  el.modeBuildBtn.addEventListener('click', () => setMode('build'));
+  el.modeChatBtn?.addEventListener('click', () => setMode('chat'));
+  el.modeBuildBtn?.addEventListener('click', () => setMode('build'));
   el.modeCodeBtn?.addEventListener('click', () => setMode('code'));
   document.getElementById('codeLangSelect')?.addEventListener('change', e => {
     STATE.codeLang = e.target.value;
@@ -3864,10 +5104,10 @@ function setupEventListeners() {
     lastScrollTop = currentScrollTop;
 
     if (scrolledUp && !isNearBottom()) {
-      // User intentionally scrolled up — lock scroll
+      // User intentionally scrolled up - lock scroll
       userScrolledUp = true;
     } else if (isNearBottom()) {
-      // User scrolled back to the bottom — unlock
+      // User scrolled back to the bottom - unlock
       userScrolledUp = false;
     }
 
@@ -3882,13 +5122,23 @@ function setupEventListeners() {
   });
 
   // New / Clear chat
-  el.newChatBtn.addEventListener('click', () => { STATE.activeConvId = null; showWelcomeScreen(); renderChatHistory(); closeSidebarMobile(); });
+  el.newChatBtn.addEventListener('click', () => {
+    STATE.pageConversations[STATE.activePage] = null;
+    STATE.activeConvId = null;
+    showWelcomeScreen();
+    renderChatHistory();
+    closeSidebarMobile();
+  });
   el.clearChatBtn.addEventListener('click', () => {
-    if (!STATE.activeConvId) { showToast('No active chat', ''); return; }
+    const page = normalizePage(STATE.activePage);
+    if (!STATE.activeConvId) { showToast(page === 'agent' ? 'No active agentic session' : 'No active chat', ''); return; }
     if (!confirm('Clear this conversation?')) return;
     const conv = STATE.conversations[STATE.activeConvId];
     if (conv) { conv.messages = []; saveConversations(); }
-    showWelcomeScreen(); showToast('Chat cleared', 'success');
+    showWelcomeScreen();
+    renderChatHistory();
+    updateWorkspaceChrome();
+    showToast(page === 'agent' ? 'Agentic session cleared' : 'Chat cleared', 'success');
   });
 
   // Suggestion cards
@@ -3907,7 +5157,7 @@ function setupEventListeners() {
     setProfileMenuOpen(shouldOpen);
   });
 
-  // Model selector — fixed-position dropdown that escapes sidebar overflow
+  // Model selector - fixed-position dropdown that escapes sidebar overflow
   el.modelSelector.addEventListener('click', e => {
     e.stopPropagation();
     const isOpen = el.modelDropdown.classList.contains('open');
@@ -3938,8 +5188,8 @@ function setupEventListeners() {
       el.modelDropdown.classList.remove('open'); el.modelSelector.classList.remove('open');
     }
     if (el.profileMenu?.classList.contains('open') &&
-        !el.profileMenu.contains(e.target) &&
-        !el.profileMenuBtn?.contains(e.target)) {
+      !el.profileMenu.contains(e.target) &&
+      !el.profileMenuBtn?.contains(e.target)) {
       setProfileMenuOpen(false);
     }
   });
@@ -3957,20 +5207,21 @@ function setupEventListeners() {
     document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === STATE.theme));
 
     // Populate Appearance tab controls from STATE
-    const fsEl  = document.getElementById('settingsFontSize');
-    const dEl   = document.getElementById('settingsDensity');
-    const chEl  = document.getElementById('settingsCodeHighlight');
-    const mdEl  = document.getElementById('settingsMarkdown');
-    const rpEl  = document.getElementById('settingsRepeatPenalty');
-    const tpEl  = document.getElementById('settingsTopP');
-    const csEl  = document.getElementById('settingsContextSize');
+    const fsEl = document.getElementById('settingsFontSize');
+    const dEl = document.getElementById('settingsDensity');
+    const chEl = document.getElementById('settingsCodeHighlight');
+    const mdEl = document.getElementById('settingsMarkdown');
+    const rpEl = document.getElementById('settingsRepeatPenalty');
+    const tpEl = document.getElementById('settingsTopP');
+    const csEl = document.getElementById('settingsContextSize');
     syncFontSizeControls(STATE.fontSize || '14px');
-    if (dEl)   dEl.value     = STATE.density     || 'normal';
-    if (chEl)  chEl.checked  = STATE.codeHL      !== false;
-    if (mdEl)  mdEl.checked  = STATE.markdown    !== false;
-    if (rpEl)  { rpEl.value  = STATE.repeatPenalty || 1.1; const l = document.getElementById('repeatPenaltyLabel'); if(l) l.textContent = parseFloat(rpEl.value).toFixed(2); }
-    if (tpEl)  { tpEl.value  = STATE.topP        || 0.92;  const l = document.getElementById('topPLabel');          if(l) l.textContent = parseFloat(tpEl.value).toFixed(2); }
-    if (csEl)  csEl.value    = STATE.contextSize || 4096;
+    if (dEl) dEl.value = STATE.density || 'normal';
+    if (chEl) chEl.checked = STATE.codeHL !== false;
+    if (mdEl) mdEl.checked = STATE.markdown !== false;
+    if (rpEl) { rpEl.value = STATE.repeatPenalty || 1.1; const l = document.getElementById('repeatPenaltyLabel'); if (l) l.textContent = parseFloat(rpEl.value).toFixed(2); }
+    if (tpEl) { tpEl.value = STATE.topP || 0.92; const l = document.getElementById('topPLabel'); if (l) l.textContent = parseFloat(tpEl.value).toFixed(2); }
+    if (csEl) csEl.value = STATE.contextSize || 4096;
+    populateVoiceList().then(syncVoiceSettingsUI).catch(() => syncVoiceSettingsUI());
 
     openModal('settingsModal');
   });
@@ -4025,7 +5276,7 @@ function setupEventListeners() {
 
   // Keyboard shortcuts
   document.addEventListener('keydown', e => {
-    if ((e.metaKey||e.ctrlKey) && e.key === 'k') { e.preventDefault(); STATE.activeConvId = null; showWelcomeScreen(); renderChatHistory(); el.chatInput.focus(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); STATE.activeConvId = null; showWelcomeScreen(); renderChatHistory(); el.chatInput.focus(); }
     if (e.key === 'Escape') {
       setProfileMenuOpen(false);
       closeModal('settingsModal');
@@ -4052,7 +5303,7 @@ function setupEventListeners() {
     showToast('Chat exported!', 'success');
   });
 
-  // TTS — button opens voice settings; long-press or separate icon to toggle
+  // TTS - button opens voice settings; long-press or separate icon to toggle
   el.ttsToggleBtn?.addEventListener('click', () => {
     if (STATE.ttsEnabled) {
       // Turn off
@@ -4068,12 +5319,12 @@ function setupEventListeners() {
   });
 
   // TTS voice settings modal
-  el.ttsClose?.addEventListener('click',      () => closeModal('ttsModal'));
+  el.ttsClose?.addEventListener('click', () => closeModal('ttsModal'));
   el.ttsModal?.addEventListener('click', e => { if (e.target === el.ttsModal) closeModal('ttsModal'); });
   $('ttsCancelBtn')?.addEventListener('click', () => closeModal('ttsModal'));
 
   el.ttsTestBtn?.addEventListener('click', () => {
-    const sample = "Hey there! This is Hazy speaking - your local companion by Dream On.";
+    const sample = "Hey there! This is Hazy speaking - your local companion Hazy AI.";
     speakText(sample);
   });
 
@@ -4090,24 +5341,24 @@ function setupEventListeners() {
     // Reset ready state if voice changed so model reloads
     if (_piperLoadedVoice && _piperLoadedVoice !== STATE.ttsVoice) {
       stopTTS();
-      _piperSession     = null;   // destroy old session so new voice is actually loaded
+      _piperSession = null;   // destroy old session so new voice is actually loaded
       _piperLoadedVoice = null;
-      _piperLoading     = false;
-      STATE.tpsPiperReady   = false;
+      _piperLoading = false;
+      STATE.tpsPiperReady = false;
       STATE.ttsPiperLoading = false;
-      updatePiperStatus('idle', 'Voice changed — click Enable Voice to load');
+      updatePiperStatus('idle', 'Voice changed - click Enable Voice to load');
     }
   });
 
   el.ttsSpeedRange?.addEventListener('input', () => {
     STATE.ttsSpeed = parseFloat(el.ttsSpeedRange.value);
-    if (el.ttsSpeedLabel) el.ttsSpeedLabel.textContent = STATE.ttsSpeed.toFixed(1) + '×';
+    if (el.ttsSpeedLabel) el.ttsSpeedLabel.textContent = STATE.ttsSpeed.toFixed(1) + 'Ã-';
   });
 
   $('ttsSaveBtn')?.addEventListener('click', async () => {
     STATE.ttsEnabled = true;
-    STATE.ttsVoice   = el.ttsVoiceSelect?.value || 'en_US-lessac-medium';
-    STATE.ttsSpeed   = parseFloat(el.ttsSpeedRange?.value || '1.0');
+    STATE.ttsVoice = el.ttsVoiceSelect?.value || 'en_US-lessac-medium';
+    STATE.ttsSpeed = parseFloat(el.ttsSpeedRange?.value || '1.0');
 
     if (STATE.ttsEngine === 'piper') {
       el.ttsLabel.textContent = 'Piper (loading...)';
@@ -4122,6 +5373,51 @@ function setupEventListeners() {
       el.ttsToggleBtn.classList.add('active');
       closeModal('ttsModal');
       showToast('Browser TTS enabled', 'success');
+    }
+  });
+
+  document.getElementById('voiceEnabled')?.addEventListener('change', e => {
+    STATE.voiceEnabled = e.target.checked;
+    persistVoiceSettings();
+  });
+  document.getElementById('voiceSelect')?.addEventListener('change', e => {
+    STATE.voiceVoice = e.target.value;
+    persistVoiceSettings();
+  });
+  document.getElementById('voiceSpeed')?.addEventListener('input', e => {
+    STATE.voiceSpeed = parseFloat(e.target.value);
+    const label = document.getElementById('voiceSpeedLabel');
+    if (label) label.textContent = `${STATE.voiceSpeed.toFixed(2).replace(/0$/, '').replace(/\.$/, '')}Ã-`;
+    persistVoiceSettings();
+  });
+  document.getElementById('voiceVolume')?.addEventListener('input', e => {
+    STATE.voiceVolume = parseInt(e.target.value);
+    const label = document.getElementById('voiceVolumeLabel');
+    if (label) label.textContent = String(STATE.voiceVolume);
+    persistVoiceSettings();
+  });
+  document.getElementById('voiceAutoplay')?.addEventListener('change', e => {
+    STATE.voiceAutoplay = e.target.checked;
+    persistVoiceSettings();
+  });
+  document.getElementById('voicePreferGPU')?.addEventListener('change', e => {
+    STATE.voicePreferGPU = e.target.checked;
+    persistVoiceSettings();
+  });
+  document.getElementById('voicePreviewBtn')?.addEventListener('click', async () => {
+    // Unlock AudioContext first (required by browser autoplay policy before any audio plays)
+    if (window.HAZY_AUDIO_QUEUE_MANAGER?._audioCtx?.state === 'suspended') {
+      await window.HAZY_AUDIO_QUEUE_MANAGER._audioCtx.resume().catch(() => { });
+    }
+    updateKokoroStatus('loading', 'Generating voice...');
+    try {
+      await speakText("Hello, I'm Hazy AI. Nice to meet you.", true);
+      // Restore status after playback
+      checkKokoroHealth().catch(() => updateKokoroStatus('idle', 'Kokoro server offline'));
+    } catch (error) {
+      console.error('[Voice Preview]', error);
+      updateKokoroStatus('error', 'Kokoro TTS error - is the server running?');
+      showToast('Voice preview failed - Kokoro server may be offline', 'error');
     }
   });
 
@@ -4164,7 +5460,7 @@ function setupEventListeners() {
     });
   });
 
-  // ── Persona ──────────────────────────────────────
+  // -- Persona --------------------------------------
   el.personaBtn?.addEventListener('click', () => {
     setProfileMenuOpen(false);
     openPersonaModal();
@@ -4199,22 +5495,23 @@ function setupEventListeners() {
   // Trait pill toggles
   document.querySelectorAll('.trait-pill').forEach(pill => {
     pill.addEventListener('click', () => pill.classList.toggle('selected'));
-  });}
+  });
+}
 
 // ========================
 // Persona Modal
 // ========================
 function openPersonaModal() {
-  // Sync state → UI
-  if (el.personaToggle)        el.personaToggle.checked        = STATE.personaEnabled;
-  if (el.personaNameInput)     el.personaNameInput.value       = STATE.personaName;
-  if (el.personaUserNameInput) el.personaUserNameInput.value   = STATE.personaUserName;
-  if (el.personaGender)        el.personaGender.value          = STATE.personaGender;
-  if (el.personaLanguage)      el.personaLanguage.value        = STATE.personaLanguage;
-  if (el.scenarioDesc)         el.scenarioDesc.value           = STATE.scenarioDesc;
-  if (el.scenarioOpener)       el.scenarioOpener.value         = STATE.scenarioOpener;
-  if (el.scenarioUserRole)     el.scenarioUserRole.value       = STATE.scenarioUserRole;
-  if (el.scenarioCharRole)     el.scenarioCharRole.value       = STATE.scenarioCharRole;
+  // Sync state â†’ UI
+  if (el.personaToggle) el.personaToggle.checked = STATE.personaEnabled;
+  if (el.personaNameInput) el.personaNameInput.value = STATE.personaName;
+  if (el.personaUserNameInput) el.personaUserNameInput.value = STATE.personaUserName;
+  if (el.personaGender) el.personaGender.value = STATE.personaGender;
+  if (el.personaLanguage) el.personaLanguage.value = STATE.personaLanguage;
+  if (el.scenarioDesc) el.scenarioDesc.value = STATE.scenarioDesc;
+  if (el.scenarioOpener) el.scenarioOpener.value = STATE.scenarioOpener;
+  if (el.scenarioUserRole) el.scenarioUserRole.value = STATE.scenarioUserRole;
+  if (el.scenarioCharRole) el.scenarioCharRole.value = STATE.scenarioCharRole;
 
   document.querySelectorAll('.persona-card').forEach(c =>
     c.classList.toggle('selected', c.dataset.relation === STATE.personaRelation)
@@ -4229,19 +5526,56 @@ function openPersonaModal() {
   openModal('personaModal');
 }
 
-function savePersona() {
+async function savePersona() {
   const selectedCard = document.querySelector('.persona-card.selected');
-  STATE.personaRelation  = selectedCard?.dataset.relation        || 'friend';
-  STATE.personaEnabled   = el.personaToggle?.checked             ?? true;
-  STATE.personaName      = el.personaNameInput?.value.trim()     || 'Alex';
-  STATE.personaUserName  = el.personaUserNameInput?.value.trim() || '';
-  STATE.personaGender    = el.personaGender?.value               || 'neutral';
-  STATE.personaLanguage  = el.personaLanguage?.value             || 'casual';
-  STATE.personaTraits    = Array.from(document.querySelectorAll('.trait-pill.selected')).map(p => p.dataset.trait);
-  STATE.scenarioDesc     = el.scenarioDesc?.value.trim()         || '';
-  STATE.scenarioOpener   = el.scenarioOpener?.value.trim()       || '';
-  STATE.scenarioUserRole = el.scenarioUserRole?.value.trim()     || '';
-  STATE.scenarioCharRole = el.scenarioCharRole?.value.trim()     || '';
+  STATE.personaRelation = selectedCard?.dataset.relation || 'friend';
+  STATE.personaEnabled = el.personaToggle?.checked ?? true;
+  STATE.personaName = el.personaNameInput?.value.trim() || 'Alex';
+  STATE.personaUserName = el.personaUserNameInput?.value.trim() || '';
+  STATE.personaGender = el.personaGender?.value || 'neutral';
+  STATE.personaLanguage = el.personaLanguage?.value || 'casual';
+  STATE.personaTraits = Array.from(document.querySelectorAll('.trait-pill.selected')).map(p => p.dataset.trait);
+  STATE.scenarioDesc = el.scenarioDesc?.value.trim() || '';
+  STATE.scenarioOpener = el.scenarioOpener?.value.trim() || '';
+  STATE.scenarioUserRole = el.scenarioUserRole?.value.trim() || '';
+  STATE.scenarioCharRole = el.scenarioCharRole?.value.trim() || '';
+  STATE.scenarioSetting = document.querySelector('.scenario-setting-btn.selected')?.dataset.setting || '';
+
+  const currentSettings = {
+    personaRelation: STATE.personaRelation,
+    personaName: STATE.personaName,
+    personaUserName: STATE.personaUserName,
+    personaGender: STATE.personaGender,
+    personaLanguage: STATE.personaLanguage,
+    personaTraits: STATE.personaTraits,
+    scenarioDesc: STATE.scenarioDesc,
+    scenarioOpener: STATE.scenarioOpener,
+    scenarioUserRole: STATE.scenarioUserRole,
+    scenarioCharRole: STATE.scenarioCharRole,
+    scenarioSetting: STATE.scenarioSetting
+  };
+
+  let personaPrompt = '';
+  try {
+    if (window.location.protocol === 'file:') throw new Error('standalone');
+    const response = await fetch(hazyServerEndpoint('/hazy/persona-prompt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentSettings)
+    });
+    if (response.ok) {
+      const data = await response.json();
+      personaPrompt = data.prompt;
+    }
+  } catch (e) {
+    console.warn('[Hazy] Persona prompt generation failed, using client-side fallback:', e);
+  }
+
+  if (!personaPrompt) {
+    personaPrompt = buildPersonaPromptOffline(currentSettings);
+  }
+
+  STATE.personaPrompt = personaPrompt;
 
   // Persist everything
   const s = JSON.parse(localStorage.getItem('hazy_settings') || '{}');
@@ -4252,6 +5586,7 @@ function savePersona() {
     personaLanguage: STATE.personaLanguage, scenarioDesc: STATE.scenarioDesc,
     scenarioOpener: STATE.scenarioOpener, scenarioUserRole: STATE.scenarioUserRole,
     scenarioCharRole: STATE.scenarioCharRole, scenarioSetting: STATE.scenarioSetting,
+    personaPrompt: STATE.personaPrompt
   });
   localStorage.setItem('hazy_settings', JSON.stringify(s));
 
@@ -4260,7 +5595,7 @@ function savePersona() {
 
   if (STATE.personaEnabled) {
     const preset = PERSONA_PRESETS[STATE.personaRelation];
-    showToast(`${STATE.personaName} — starting scene...`, 'success');
+    showToast(`${STATE.personaName} - starting scene...`, 'success');
 
     // Start a new chat and inject the opener automatically
     STATE.activeConvId = null;
@@ -4271,8 +5606,8 @@ function savePersona() {
       // Create the conversation and immediately have the character open the scene
       const id = 'conv_' + Date.now();
       const title = STATE.scenarioDesc
-        ? STATE.scenarioDesc.slice(0, 50) + '…'
-        : `${STATE.personaName} — ${preset?.label || 'Chat'}`;
+        ? STATE.scenarioDesc.slice(0, 50) + '...'
+        : `${STATE.personaName} - ${preset?.label || 'Chat'}`;
       STATE.conversations[id] = { title, messages: [], createdAt: Date.now() };
       STATE.activeConvId = id;
       el.welcomeScreen.style.display = 'none';
@@ -4296,13 +5631,13 @@ function openTTSModal() {
   const piperOpts = $('ttsPiperOptions');
   if (piperOpts) piperOpts.style.display = STATE.ttsEngine === 'piper' ? 'block' : 'none';
   if (el.ttsVoiceSelect) el.ttsVoiceSelect.value = STATE.ttsVoice;
-  if (el.ttsSpeedRange)  el.ttsSpeedRange.value  = STATE.ttsSpeed;
-  if (el.ttsSpeedLabel)  el.ttsSpeedLabel.textContent = STATE.ttsSpeed.toFixed(1) + '×';
+  if (el.ttsSpeedRange) el.ttsSpeedRange.value = STATE.ttsSpeed;
+  if (el.ttsSpeedLabel) el.ttsSpeedLabel.textContent = STATE.ttsSpeed.toFixed(1) + 'Ã-';
 
   // Show current Piper status
-  if (STATE.tpsPiperReady)        updatePiperStatus('ready',   '✅ Piper model loaded and ready');
-  else if (STATE.ttsPiperLoading) updatePiperStatus('loading', 'Loading Piper model…');
-  else                            updatePiperStatus('idle',    'Select a voice above then click Enable Voice');
+  if (STATE.tpsPiperReady) updatePiperStatus('ready', 'âœ... Piper model loaded and ready');
+  else if (STATE.ttsPiperLoading) updatePiperStatus('loading', 'Loading Piper model...');
+  else updatePiperStatus('idle', 'Select a voice above then click Enable Voice');
 
   openModal('ttsModal');
 }
@@ -4339,7 +5674,7 @@ function switchTrainingTab(tabId) {
 
 function trainAddPair() {
   const instruction = document.getElementById('trainInstruction').value.trim();
-  const response    = document.getElementById('trainResponse').value.trim();
+  const response = document.getElementById('trainResponse').value.trim();
   if (!instruction || !response) { showToast('Fill in both fields', 'error'); return; }
   TRAINING.pairs.push({ type: 'qa', instruction, response });
   document.getElementById('trainInstruction').value = '';
@@ -4388,11 +5723,11 @@ Text:
 ${text.slice(0, 3000)}`;
 
   try {
-    const savedModel    = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
+    const savedModel = localStorage.getItem('hazyActiveModel') || ('ollama/' + STATE.model);
     const savedProvider = savedModel.split('/')[0] || 'ollama';
-    const isCloud       = ['anthropic','openai','groq','gemini','nvidia'].includes(savedProvider);
+    const isCloud = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
     const trainEndpoint = window.location.protocol === 'file:' ? `${STATE.ollamaUrl}/api/chat` : hazyServerEndpoint('/hazy/chat');
-    const trainBody     = window.location.protocol === 'file:'
+    const trainBody = window.location.protocol === 'file:'
       ? { model: STATE.model, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.3, num_predict: 2048 } }
       : { model: savedModel, messages: [{ role: 'user', content: prompt }], stream: false, options: { temperature: 0.3, num_predict: 2048, max_tokens: 2048 } };
 
@@ -4405,7 +5740,7 @@ ${text.slice(0, 3000)}`;
     const data = await res.json();
     let raw = (data.message?.content || '').trim();
     // Strip markdown fences if model wrapped it
-    raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/,'').trim();
+    raw = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/, '').trim();
     const pairs = JSON.parse(raw);
     if (!Array.isArray(pairs)) throw new Error('Not an array');
     pairs.forEach(p => {
@@ -4417,8 +5752,8 @@ ${text.slice(0, 3000)}`;
     if (status) status.textContent = `Extracted ${pairs.length} pairs!`;
     updateTrainCount();
     showToast(`Extracted ${pairs.length} training pairs!`, 'success');
-  } catch(e) {
-    if (status) status.textContent = 'Failed — try "Add as Raw Text" instead';
+  } catch (e) {
+    if (status) status.textContent = 'Failed - try "Add as Raw Text" instead';
     showToast('Hazy extraction failed: ' + e.message, 'error');
   }
 }
@@ -4427,7 +5762,7 @@ function renderTrainChatList() {
   const container = document.getElementById('trainChatList');
   if (!container) return;
   const convs = Object.entries(STATE.conversations)
-    .sort(([,a],[,b]) => (b.createdAt||0) - (a.createdAt||0));
+    .sort(([, a], [, b]) => (b.createdAt || 0) - (a.createdAt || 0));
   if (!convs.length) {
     container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">No conversations yet. Chat with Hazy first, then come back here.</p>';
     return;
@@ -4452,11 +5787,11 @@ function trainAddSelectedChats() {
     const msgs = (conv.messages || []).filter(m => m.role !== 'system');
     // Pair user -> Hazy messages
     for (let i = 0; i < msgs.length - 1; i++) {
-      if (msgs[i].role === 'user' && msgs[i+1].role === 'assistant') {
+      if (msgs[i].role === 'user' && msgs[i + 1].role === 'assistant') {
         TRAINING.pairs.push({
           type: 'qa',
           instruction: msgs[i].content,
-          response: msgs[i+1].content,
+          response: msgs[i + 1].content,
         });
         added++;
       }
@@ -4472,20 +5807,20 @@ function renderTrainPreview() {
   const container = document.getElementById('trainPreviewList');
   if (!container) return;
   if (!TRAINING.pairs.length) {
-    container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">No data yet — add pairs from the other tabs.</p>';
+    container.innerHTML = '<p style="font-size:13px;color:var(--text-muted);padding:8px 0;">No data yet - add pairs from the other tabs.</p>';
     return;
   }
   container.innerHTML = TRAINING.pairs.map((p, i) => `
     <div class="train-pair-item">
-      <button class="train-pair-delete" onclick="trainDeletePair(${i})">✕</button>
+      <button class="train-pair-delete" onclick="trainDeletePair(${i})">✖</button>
       ${p.type === 'raw'
-        ? `<span class="train-pair-label">raw text</span>
-           <span class="train-pair-q">${escapeHtml(p.raw.slice(0, 200))}${p.raw.length > 200 ? '…' : ''}</span>`
-        : `<span class="train-pair-label">instruction</span>
-           <span class="train-pair-q">${escapeHtml(p.instruction.slice(0, 150))}${p.instruction.length > 150 ? '…' : ''}</span>
+      ? `<span class="train-pair-label">raw text</span>
+           <span class="train-pair-q">${escapeHtml(p.raw.slice(0, 200))}${p.raw.length > 200 ? '...' : ''}</span>`
+      : `<span class="train-pair-label">instruction</span>
+           <span class="train-pair-q">${escapeHtml(p.instruction.slice(0, 150))}${p.instruction.length > 150 ? '...' : ''}</span>
            <span class="train-pair-label" style="margin-top:4px;">response</span>
-           <span class="train-pair-a">${escapeHtml(p.response.slice(0, 150))}${p.response.length > 150 ? '…' : ''}</span>`
-      }
+           <span class="train-pair-a">${escapeHtml(p.response.slice(0, 150))}${p.response.length > 150 ? '...' : ''}</span>`
+    }
     </div>`).join('');
 }
 
@@ -4538,7 +5873,7 @@ function trainExportJSONL() {
   showToast(`Exported ${TRAINING.pairs.length} examples!`, 'success');
 }
 
-// ── Wire up training modal events ─────────────────────────────────────────
+// -- Wire up training modal events -----------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('trainingDataBtn')?.addEventListener('click', () => {
     closeModal('settingsModal');
@@ -4565,86 +5900,98 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ════════════════════════════════════════════════════════════════
-// HAZY v2 — AI PROVIDERS PANEL + SETTINGS TABS
-// Single clean implementation — no duplicates
-// ════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// HAZY v2 - AI PROVIDERS PANEL + SETTINGS TABS
+// Single clean implementation - no duplicates
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-// ── Provider data ──────────────────────────────────────────────
+// -- Provider data ----------------------------------------------
 const PROVIDER_CATEGORIES = {
   text: [
-    { key:'anthropic',  name:'Anthropic (Claude)',       url:'https://console.anthropic.com',          note:'Claude Haiku, Sonnet, Opus — best for novel writing' },
-    { key:'openai',     name:'OpenAI (GPT-4o / DALL-E)', url:'https://platform.openai.com/api-keys',   note:'GPT-4o, o1, DALL-E 3, TTS — requires paid plan' },
-    { key:'groq',       name:'Groq (Fast Free Tier)',    url:'https://console.groq.com',               note:'Llama 3.1 70B at incredible speed — free tier available' },
-    { key:'gemini',     name:'Google Gemini',            url:'https://aistudio.google.com/app/apikey', note:'Gemini 1.5 Pro — 1M token context window' },
-    { key:'nvidia',     name:'NVIDIA NIM',               url:'https://build.nvidia.com',               note:'Nemotron and other NVIDIA-hosted OpenAI-compatible models' },
+    { key: 'anthropic', name: 'Anthropic (Claude)', url: 'https://console.anthropic.com', note: 'Claude Haiku, Sonnet, Opus - best for novel writing' },
+    { key: 'openai', name: 'OpenAI (GPT-4o / DALL-E)', url: 'https://platform.openai.com/api-keys', note: 'GPT-4o, o1, DALL-E 3, TTS - requires paid plan' },
+    { key: 'groq', name: 'Groq (Fast Free Tier)', url: 'https://console.groq.com', note: 'Llama 3.1 70B at incredible speed - free tier available' },
+    { key: 'openrouter', name: 'OpenRouter (Free & Paid Models)', url: 'https://openrouter.ai/keys', note: 'Access to dozens of free models and premium APIs' },
+    { key: 'gemini', name: 'Google Gemini', url: 'https://aistudio.google.com/app/apikey', note: 'Gemini 1.5 Pro - 1M token context window' },
+    { key: 'nvidia', name: 'NVIDIA NIM', url: 'https://build.nvidia.com', note: 'Nemotron and other NVIDIA-hosted OpenAI-compatible models' },
   ],
   image: [
-    { key:'stability',  name:'Stability AI',            url:'https://platform.stability.ai',          note:'Stable Diffusion XL, ultra quality images' },
-    { key:'ideogram',   name:'Ideogram',                url:'https://ideogram.ai',                    note:'Best AI model for text inside images' },
-    { key:'fal',        name:'fal.ai (Flux + Kling)',   url:'https://fal.ai',                         note:'Flux image generation + Kling video — fast API' },
+    { key: 'stability', name: 'Stability AI', url: 'https://platform.stability.ai', note: 'Stable Diffusion XL, ultra quality images' },
+    { key: 'ideogram', name: 'Ideogram', url: 'https://ideogram.ai', note: 'Best AI model for text inside images' },
+    { key: 'fal', name: 'fal.ai (Flux + Kling)', url: 'https://fal.ai', note: 'Flux image generation + Kling video - fast API' },
   ],
   media: [
-    { key:'elevenlabs', name:'ElevenLabs (TTS)',        url:'https://elevenlabs.io',                  note:'Most natural AI voices — 30+ voices, multilingual' },
-    { key:'suno',       name:'Suno (AI Music)',         url:'https://suno.com',                       note:'Generate full songs from text — cloud only' },
-    { key:'runway',     name:'Runway (AI Video)',       url:'https://runwayml.com',                   note:'Gen-3 video generation — cloud only' },
+    { key: 'elevenlabs', name: 'ElevenLabs (TTS)', url: 'https://elevenlabs.io', note: 'Most natural AI voices - 30+ voices, multilingual' },
+    { key: 'suno', name: 'Suno (AI Music)', url: 'https://suno.com', note: 'Generate full songs from text - cloud only' },
+    { key: 'runway', name: 'Runway (AI Video)', url: 'https://runwayml.com', note: 'Gen-3 video generation - cloud only' },
   ],
 };
 
 const OLLAMA_MODEL_LIST = [
-  {id:'ollama/llama3.2:1b',  label:'llama3.2:1b (1B — fastest)'},
-  {id:'ollama/llama3.2',     label:'llama3.2 (3B — recommended)'},
-  {id:'ollama/llama3',       label:'llama3 (8B)'},
-  {id:'ollama/mistral',      label:'mistral (7B — best writing)'},
-  {id:'ollama/mixtral',      label:'mixtral (47B — best quality)'},
-  {id:'ollama/gemma2',       label:'gemma2 (9B)'},
-  {id:'ollama/phi3',         label:'phi3 (3.8B)'},
-  {id:'ollama/qwen2.5',      label:'qwen2.5 (7B)'},
-  {id:'ollama/deepseek-r1',  label:'deepseek-r1 (7B)'},
-  {id:'ollama/llava',        label:'llava (7B vision)'},
+  { id: 'ollama/llama3.2:1b', label: 'llama3.2:1b (1B - fastest)' },
+  { id: 'ollama/llama3.2', label: 'llama3.2 (3B - recommended)' },
+  { id: 'ollama/llama3', label: 'llama3 (8B)' },
+  { id: 'ollama/mistral', label: 'mistral (7B - best writing)' },
+  { id: 'ollama/mixtral', label: 'mixtral (47B - best quality)' },
+  { id: 'ollama/gemma2', label: 'gemma2 (9B)' },
+  { id: 'ollama/phi3', label: 'phi3 (3.8B)' },
+  { id: 'ollama/qwen2.5', label: 'qwen2.5 (7B)' },
+  { id: 'ollama/deepseek-r1', label: 'deepseek-r1 (7B)' },
+  { id: 'ollama/llava', label: 'llava (7B vision)' },
 ];
 
 const CLOUD_MODEL_MAP = {
   anthropic: [
-    {id:'anthropic/claude-haiku-4-5-20251001',  label:'Claude Haiku 4.5 — fastest'},
-    {id:'anthropic/claude-sonnet-4-5-20250929', label:'Claude Sonnet 4.5 — recommended'},
-    {id:'anthropic/claude-opus-4-5-20251101',   label:'Claude Opus 4.5 — most capable'},
-    {id:'anthropic/claude-sonnet-4-20250514',   label:'Claude Sonnet 4'},
-    {id:'anthropic/claude-opus-4-20250514',     label:'Claude Opus 4'},
+    { id: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 - fastest' },
+    { id: 'anthropic/claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5 - recommended' },
+    { id: 'anthropic/claude-opus-4-5-20251101', label: 'Claude Opus 4.5 - most capable' },
+    { id: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    { id: 'anthropic/claude-opus-4-20250514', label: 'Claude Opus 4' },
   ],
   openai: [
-    {id:'openai/gpt-4o-mini',     label:'GPT-4o Mini — fastest'},
-    {id:'openai/gpt-4o',          label:'GPT-4o — recommended'},
-    {id:'openai/gpt-4.1',         label:'GPT-4.1'},
-    {id:'openai/gpt-4.1-mini',    label:'GPT-4.1 Mini'},
-    {id:'openai/o4-mini',         label:'o4 Mini — reasoning'},
-    {id:'openai/o3',              label:'o3 — best reasoning'},
+    { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini - fastest' },
+    { id: 'openai/gpt-4o', label: 'GPT-4o - recommended' },
+    { id: 'openai/gpt-4.1', label: 'GPT-4.1' },
+    { id: 'openai/gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+    { id: 'openai/o4-mini', label: 'o4 Mini - reasoning' },
+    { id: 'openai/o3', label: 'o3 - best reasoning' },
   ],
   groq: [
-    {id:'groq/llama-3.1-8b-instant',                          label:'Llama 3.1 8B — fastest'},
-    {id:'groq/llama-3.3-70b-versatile',                       label:'Llama 3.3 70B — recommended'},
-    {id:'groq/meta-llama/llama-4-scout-17b-16e-instruct',     label:'Llama 4 Scout 17B — newest'},
-    {id:'groq/moonshotai/kimi-k2-instruct',                   label:'Kimi K2 — 60 RPM'},
-    {id:'groq/qwen/qwen3-32b',                                label:'Qwen3 32B — 60 RPM'},
-    {id:'groq/openai/gpt-oss-120b',                           label:'GPT OSS 120B'},
-    {id:'groq/openai/gpt-oss-20b',                            label:'GPT OSS 20B'},
-    {id:'groq/compound',                                      label:'Compound (preview)'},
-    {id:'groq/compound-mini',                                 label:'Compound Mini (preview)'},
-    {id:'groq/allam-2-7b',                                    label:'Allam 2 7B'},
+    { id: 'groq/llama-3.1-8b-instant', label: 'Llama 3.1 8B - fastest' },
+    { id: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B - recommended' },
+    { id: 'groq/meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout 17B - newest' },
+    { id: 'groq/moonshotai/kimi-k2-instruct', label: 'Kimi K2 - 60 RPM' },
+    { id: 'groq/qwen/qwen3-32b', label: 'Qwen3 32B - 60 RPM' },
+    { id: 'groq/openai/gpt-oss-120b', label: 'GPT OSS 120B' },
+    { id: 'groq/openai/gpt-oss-20b', label: 'GPT OSS 20B' },
+    { id: 'groq/compound', label: 'Compound (preview)' },
+    { id: 'groq/compound-mini', label: 'Compound Mini (preview)' },
+    { id: 'groq/allam-2-7b', label: 'Allam 2 7B' },
   ],
+  openrouter: [
+    { id: 'openrouter/google/gemini-2.5-flash-pro:free', label: 'Gemini 2.5 Flash Pro (Free)' },
+    { id: 'openrouter/deepseek/deepseek-r1:free', label: 'DeepSeek R1 (Free)' },
+    { id: 'openrouter/meta-llama/llama-3.1-8b-instruct:free', label: 'Llama 3.1 8B (Free)' },
+    { id: 'openrouter/qwen/qwen-2.5-7b-instruct:free', label: 'Qwen 2.5 7B (Free)' },
+    { id: 'openrouter/mistralai/mistral-7b-instruct:free', label: 'Mistral 7B (Free)' },
+    { id: 'openrouter/meta-llama/llama-3.2-11b-vision-instruct:free', label: 'Llama 3.2 11B Vision (Free)' },
+    { id: 'openrouter/mistralai/mixtral-8x22b-instruct', label: 'Mixtral 8x22B' }, // newest, paid
+    { id: 'openrouter/openai/gpt-oss-120b:free', label: 'GPT OSS 120B (Free)' }, // good free model
+  ],
+
   gemini: [
-    {id:'gemini/gemini-2.0-flash',   label:'Gemini 2.0 Flash (recommended)'},
-    {id:'gemini/gemini-2.5-flash',   label:'Gemini 2.5 Flash (latest)'},
-    {id:'gemini/gemini-1.5-pro',     label:'Gemini 1.5 Pro (1M ctx)'},
+    { id: 'gemini/gemini-2.0-flash', label: 'Gemini 2.0 Flash (recommended)' },
+    { id: 'gemini/gemini-2.5-flash', label: 'Gemini 2.5 Flash (latest)' },
+    { id: 'gemini/gemini-1.5-pro', label: 'Gemini 1.5 Pro (1M ctx)' },
   ],
   nvidia: [
-    {id:'nvidia/nemotron-3-super-120b-a12b', label:'Nemotron 3 Super 120B A12B'},
+    { id: 'nvidia/nemotron-3-super-120b-a12b', label: 'Nemotron 3 Super 120B A12B' },
   ],
 };
 
 let _providerStatuses = {};
 
-// ── Single initProvidersPanel ───────────────────────────────────
+// -- Single initProvidersPanel -----------------------------------
 async function initProvidersPanel() {
   const urlEl = document.getElementById('ollamaUrlProvider');
   if (urlEl && !urlEl.value.trim()) {
@@ -4692,7 +6039,7 @@ async function initProvidersPanel() {
   checkOllamaConnection();
 }
 
-// ── Provider status bar ─────────────────────────────────────────
+// -- Provider status bar -----------------------------------------
 function renderProviderStatusBar() {
   const bar = document.getElementById('providerStatusBar');
   if (!bar) return;
@@ -4701,32 +6048,32 @@ function renderProviderStatusBar() {
     .map(([k]) => k);
   bar.innerHTML = active.length
     ? active.map(k => `<span style="font-size:10px;font-family:var(--font-mono,monospace);padding:2px 8px;border-radius:10px;background:#e8f5e9;color:#2d6a4f;border:1px solid #b0d8b8">&#10003; ${k}</span>`).join('')
-    : '<span style="font-size:11px;color:var(--text-muted)">No cloud providers active yet — add an API key below.</span>';
+    : '<span style="font-size:11px;color:var(--text-muted)">No cloud providers active yet - add an API key below.</span>';
 }
 
-// ── Categorized provider rows ───────────────────────────────────
+// -- Categorized provider rows -----------------------------------
 function renderCategorizedProviders() {
   const renderGroup = (containerId, providers) => {
     const el = document.getElementById(containerId);
     if (!el) return;
     el.innerHTML = providers.map(p => {
-      const st     = _providerStatuses[p.key] || {};
+      const st = _providerStatuses[p.key] || {};
       const hasKey = Boolean(st.hasKey);
       return `<div class="provider-key-row">
         <div class="provider-key-row-head">
           <span class="provider-key-name">${p.name}</span>
           ${(() => {
-            const verified = localStorage.getItem('hazyVerified_' + p.key) === 'true';
-            if (hasKey && verified)  return '<span class="provider-badge-active">&#10003; verified</span>';
-            if (hasKey && !verified) return '<span class="provider-badge-saved">● saved — test it</span>';
-            return '<span class="provider-badge-inactive">inactive</span>';
-          })()}
+          const verified = localStorage.getItem('hazyVerified_' + p.key) === 'true';
+          if (hasKey && verified) return '<span class="provider-badge-active">&#10003; verified</span>';
+          if (hasKey && !verified) return '<span class="provider-badge-saved">â- saved - test it</span>';
+          return '<span class="provider-badge-inactive">inactive</span>';
+        })()}
           <a href="${p.url}" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:4px">Get key &#8599;</a>
         </div>
         <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${p.note}</div>
         <div class="provider-key-input-row">
           <input type="password" id="apikey_${p.key}"
-            placeholder="${hasKey ? '●●●●●●●● (saved — paste new to update)' : 'Paste API key here...'}"
+            placeholder="${hasKey ? 'â-â-â-â-â-â-â-â- (saved - paste new to update)' : 'Paste API key here...'}"
             autocomplete="off">
           <button onclick="saveProviderKey('${p.key}')" class="btn-primary" style="padding:6px 14px;font-size:11px;white-space:nowrap;">Save</button>
           ${hasKey ? `
@@ -4738,12 +6085,12 @@ function renderCategorizedProviders() {
       </div>`;
     }).join('');
   };
-  renderGroup('providerKeyRows',   PROVIDER_CATEGORIES.text);
+  renderGroup('providerKeyRows', PROVIDER_CATEGORIES.text);
   renderGroup('providerImageRows', PROVIDER_CATEGORIES.image);
   renderGroup('providerMediaRows', PROVIDER_CATEGORIES.media);
 }
 
-// ── Save / clear key — encrypted server vault ─────────────────
+// -- Save / clear key - encrypted server vault -----------------
 async function saveProviderKey(providerKey) {
   const input = document.getElementById('apikey_' + providerKey);
   if (!input) return;
@@ -4792,15 +6139,15 @@ async function clearProviderKey(key) {
       body: JSON.stringify({ provider: key, apiKey: '' }),
       signal: AbortSignal.timeout(3000),
     });
-  } catch {}
+  } catch { }
   localStorage.removeItem('hazyVerified_' + key);
   showToast(key + ' key removed.', '');
   await initProvidersPanel();
 }
 
-// ── Test provider key — sends a real minimal API call to verify ──────────
+// -- Test provider key - sends a real minimal API call to verify ----------
 async function testProviderKey(providerKey) {
-  const btn    = document.getElementById('testBtn_' + providerKey);
+  const btn = document.getElementById('testBtn_' + providerKey);
   const result = document.getElementById('testResult_' + providerKey);
   if (!btn || !result) return;
 
@@ -4808,12 +6155,12 @@ async function testProviderKey(providerKey) {
   btn.disabled = true;
   result.style.display = 'block';
   result.style.color = 'var(--text-muted)';
-  result.textContent = '⏳ Sending test message...';
+  result.textContent = 'â³ Sending test message...';
 
   try {
     // Send a tiny real request through /hazy/chat
     // The encrypted key is resolved only by the server.
-    const models   = CLOUD_MODEL_MAP[providerKey] || [];
+    const models = CLOUD_MODEL_MAP[providerKey] || [];
     const testModel = (models[0] || {}).id || (providerKey + '/test');
 
     const r = await fetch('/hazy/chat', {
@@ -4821,8 +6168,8 @@ async function testProviderKey(providerKey) {
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
-        model:    testModel,
-        stream:   true,
+        model: testModel,
+        stream: true,
         messages: [
           { role: 'user', content: 'Say "OK" and nothing else.' }
         ],
@@ -4830,25 +6177,25 @@ async function testProviderKey(providerKey) {
       }),
     });
 
-    // ── Check HTTP status — server now forwards real upstream error codes ──
+    // -- Check HTTP status - server now forwards real upstream error codes --
     if (!r.ok) {
       let errMsg = 'Authentication failed';
       try {
         const e = await r.json();
         errMsg = e.error || errMsg;
-      } catch {}
+      } catch { }
       result.style.color = 'var(--danger)';
-      result.textContent = '❌ ' + r.status + ' — ' + errMsg;
+      result.textContent = 'âŒ ' + r.status + ' - ' + errMsg;
       return;
     }
 
-    // ── Read the stream and look for REAL content vs error tokens ──────────
-    const reader  = r.body.getReader();
+    // -- Read the stream and look for REAL content vs error tokens ----------
+    const reader = r.body.getReader();
     const decoder = new TextDecoder();
-    let rawBuffer  = '';
-    let realToken  = '';   // actual AI text token
-    let streamErr  = '';   // error found inside stream
-    let tries      = 0;
+    let rawBuffer = '';
+    let realToken = '';   // actual AI text token
+    let streamErr = '';   // error found inside stream
+    let tries = 0;
 
     while (tries++ < 30 && !realToken && !streamErr) {
       const { done, value } = await reader.read();
@@ -4875,27 +6222,27 @@ async function testProviderKey(providerKey) {
             realToken = token;
             break;
           }
-        } catch {}
+        } catch { }
       }
     }
     reader.cancel();
 
     if (streamErr) {
-      // Got an error inside the stream — bad key
+      // Got an error inside the stream - bad key
       result.style.color = 'var(--danger)';
-      result.textContent = '❌ Key rejected — ' + streamErr;
+      result.textContent = 'âŒ Key rejected - ' + streamErr;
       return;
     }
 
     if (realToken) {
-      // ✅ Got a real AI token — key is genuinely working
+      // âœ... Got a real AI token - key is genuinely working
       localStorage.setItem('hazyVerified_' + providerKey, 'true');
 
-      const models    = CLOUD_MODEL_MAP[providerKey] || [];
+      const models = CLOUD_MODEL_MAP[providerKey] || [];
       const bestModel = models[1] || models[0];
       if (bestModel) {
         localStorage.setItem('hazyActiveModel', bestModel.id);
-        localStorage.setItem('hazyProvider',    providerKey);
+        localStorage.setItem('hazyProvider', providerKey);
         STATE.model = bestModel.id;
         if (el && el.currentModelName) {
           el.currentModelName.textContent = bestModel.id.split('/')[1] || bestModel.id;
@@ -4903,25 +6250,25 @@ async function testProviderKey(providerKey) {
       }
 
       result.style.color = 'var(--success)';
-      result.textContent = '✅ Verified! ' + providerKey + ' responded. Model auto-selected.';
-      showToast('✅ ' + providerKey + ' verified and active!', 'success');
+      result.textContent = 'âœ... Verified! ' + providerKey + ' responded. Model auto-selected.';
+      showToast('âœ... ' + providerKey + ' verified and active!', 'success');
 
       checkOllamaConnection();
       await initProvidersPanel();
 
     } else {
-      // Connected but got no content and no error — unexpected
+      // Connected but got no content and no error - unexpected
       result.style.color = 'var(--warning)';
-      result.textContent = '⚠️ No response token received — try again or check your quota.';
+      result.textContent = 'âš ï¸ No response token received - try again or check your quota.';
     }
 
   } catch (err) {
     if (err.name === 'AbortError') {
       result.style.color = 'var(--danger)';
-      result.textContent = '❌ Timeout — server may not be running or key is invalid.';
+      result.textContent = 'âŒ Timeout - server may not be running or key is invalid.';
     } else {
       result.style.color = 'var(--danger)';
-      result.textContent = '❌ ' + err.message;
+      result.textContent = 'âŒ ' + err.message;
     }
   } finally {
     btn.textContent = 'Test';
@@ -4929,7 +6276,7 @@ async function testProviderKey(providerKey) {
   }
 }
 
-// ── Installed local models ──────────────────────────────────────
+// -- Installed local models --------------------------------------
 async function loadInstalledModels() {
   const el = document.getElementById('installedModelsList');
   if (!el) return;
@@ -4959,7 +6306,7 @@ async function loadInstalledModels() {
         </span>`;
       }).join('');
       const activeProv = document.getElementById('activeProviderSelect');
-      const modelSel   = document.getElementById('activeModelSelect');
+      const modelSel = document.getElementById('activeModelSelect');
       if (activeProv?.value === 'ollama' && modelSel) {
         modelSel.innerHTML = models.map(m => `<option value="ollama/${m.name}">ollama/${m.name}</option>`).join('');
         const saved = localStorage.getItem('hazyActiveModel');
@@ -4974,14 +6321,14 @@ async function loadInstalledModels() {
 async function deleteOllamaModel(name) {
   if (!confirm('Delete "' + name + '" from Ollama?')) return;
   try {
-    await fetch('/hazy/delete-model', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: name }) });
+    await fetch('/hazy/delete-model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: name }) });
     showToast(name + ' deleted.', 'success');
     await loadInstalledModels();
   } catch (e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 async function testOllamaConn() {
-  const urlEl    = document.getElementById('ollamaUrlProvider');
+  const urlEl = document.getElementById('ollamaUrlProvider');
   const statusEl = document.getElementById('ollamaConnStatus');
   if (!statusEl) return;
 
@@ -5009,19 +6356,19 @@ async function testOllamaConn() {
   statusEl.style.color = '#8b2020';
 }
 
-// ── Model download ──────────────────────────────────────────────
+// -- Model download ----------------------------------------------
 async function pullModel() {
-  const sel  = document.getElementById('pullModelSelect');
-  const btn  = document.getElementById('pullModelBtn');
+  const sel = document.getElementById('pullModelSelect');
+  const btn = document.getElementById('pullModelBtn');
   const wrap = document.getElementById('pullProgressWrap');
-  const bar  = document.getElementById('pullProgressBar');
-  const txt  = document.getElementById('pullProgressText');
+  const bar = document.getElementById('pullProgressBar');
+  const txt = document.getElementById('pullProgressText');
   if (!sel || !btn) return;
   const modelName = sel.value;
   btn.disabled = true; btn.textContent = 'Downloading...';
   if (wrap) wrap.style.display = 'block';
   try {
-    const r = await fetch('/hazy/pull', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ model: modelName }) });
+    const r = await fetch('/hazy/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: modelName }) });
     const reader = r.body.getReader();
     const dec = new TextDecoder();
     while (true) {
@@ -5035,7 +6382,7 @@ async function pullModel() {
             bar.style.width = Math.round(j.completed / j.total * 100) + '%';
             if (txt) txt.textContent = (j.status || '') + ' ' + Math.round(j.completed / j.total * 100) + '%';
           }
-        } catch {}
+        } catch { }
       }
     }
     showToast(modelName + ' downloaded!', 'success');
@@ -5043,16 +6390,16 @@ async function pullModel() {
   } catch (e) {
     showToast('Download failed: ' + e.message, 'error');
   } finally {
-    btn.disabled = false; btn.textContent = '↓ Download';
+    btn.disabled = false; btn.textContent = 'â†“ Download';
     if (wrap) wrap.style.display = 'none';
-    if (bar)  bar.style.width = '0%';
+    if (bar) bar.style.width = '0%';
   }
 }
 
-// ── Active model selector (Novel Writer tab) ────────────────────
+// -- Active model selector (Novel Writer tab) --------------------
 function updateModelDropdown() {
   const prov = document.getElementById('activeProviderSelect')?.value || 'ollama';
-  const sel  = document.getElementById('activeModelSelect');
+  const sel = document.getElementById('activeModelSelect');
   if (!sel) return;
   if (prov === 'ollama') {
     sel.innerHTML = OLLAMA_MODEL_LIST.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
@@ -5061,12 +6408,12 @@ function updateModelDropdown() {
       if (d.models?.length) sel.innerHTML = d.models.map(m => `<option value="ollama/${m.name}">ollama/${m.name}</option>`).join('');
       const saved = localStorage.getItem('hazyActiveModel');
       if (saved) sel.value = saved;
-    }).catch(() => {});
+    }).catch(() => { });
   } else {
     const list = CLOUD_MODEL_MAP[prov] || [];
     sel.innerHTML = list.length
       ? list.map(m => `<option value="${m.id}">${m.label}</option>`).join('')
-      : '<option value="">— add API key first —</option>';
+      : '<option value="">- add API key first -</option>';
     const saved = localStorage.getItem('hazyActiveModel');
     if (saved?.startsWith(prov + '/')) sel.value = saved;
   }
@@ -5075,7 +6422,7 @@ function updateModelDropdown() {
 function restoreActiveModel() {
   const saved = localStorage.getItem('hazyActiveModel');
   if (!saved) return;
-  const prov    = saved.split('/')[0];
+  const prov = saved.split('/')[0];
   const modelId = saved.includes('/') ? saved.slice(saved.indexOf('/') + 1) : saved;
 
   // Restore dropdown selections
@@ -5094,20 +6441,20 @@ function restoreActiveModel() {
 }
 
 function saveActiveModelChoice() {
-  const provSel  = document.getElementById('activeProviderSelect');
+  const provSel = document.getElementById('activeProviderSelect');
   const modelSel = document.getElementById('activeModelSelect');
   if (!provSel || !modelSel || !modelSel.value) return;
   const fullModel = modelSel.value; // e.g. 'anthropic/claude-sonnet-4-5' or 'ollama/mistral'
   localStorage.setItem('hazyActiveModel', fullModel);
-  localStorage.setItem('hazyProvider',    provSel.value);
+  localStorage.setItem('hazyProvider', provSel.value);
 
-  // Update STATE.model — for Ollama strip prefix, for cloud keep full id
-  const provider  = fullModel.split('/')[0];
-  const modelId   = fullModel.includes('/') ? fullModel.slice(fullModel.indexOf('/') + 1) : fullModel;
+  // Update STATE.model - for Ollama strip prefix, for cloud keep full id
+  const provider = fullModel.split('/')[0];
+  const modelId = fullModel.includes('/') ? fullModel.slice(fullModel.indexOf('/') + 1) : fullModel;
   if (provider === 'ollama') {
     STATE.model = modelId;
   } else {
-    // Cloud provider — store the full 'provider/model' string so sendMessage can route
+    // Cloud provider - store the full 'provider/model' string so sendMessage can route
     STATE.model = fullModel;
   }
 
@@ -5118,13 +6465,13 @@ function saveActiveModelChoice() {
 
   const hasKey = provider === 'ollama' || Boolean(_providerStatuses[provider]?.hasKey);
   if (!hasKey) {
-    showToast('⚠️ No API key for ' + provider + ' — add it in Settings → AI Providers', 'error');
+    showToast('âš ï¸ No API key for ' + provider + ' - add it in Settings â†’ AI Providers', 'error');
   } else {
     showToast('Model set to ' + modelId, 'success');
   }
 }
 
-// ── Export all data ─────────────────────────────────────────────
+// -- Export all data ---------------------------------------------
 function exportAllData() {
   const data = {};
   for (let i = 0; i < localStorage.length; i++) {
@@ -5137,7 +6484,7 @@ function exportAllData() {
   a.click();
 }
 
-// ── Settings tab switching ──────────────────────────────────────
+// -- Settings tab switching --------------------------------------
 function switchSettingsTab(tabId) {
   document.querySelectorAll('.snav-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.stab').forEach(p => p.classList.remove('active'));
@@ -5242,14 +6589,14 @@ async function deleteCompanionMemory(id) {
   await loadCompanionMemories();
 }
 
-// ── ollamaUrl sync between General tab and Models tab ──────────
+// -- ollamaUrl sync between General tab and Models tab ----------
 function syncOllamaUrlFields(sourceId) {
   const val = document.getElementById(sourceId)?.value || '';
   const targets = ['ollamaUrl', 'ollamaUrlProvider'].filter(id => id !== sourceId);
   targets.forEach(id => { const el = document.getElementById(id); if (el) el.value = val; });
 }
 
-// ── Single DOMContentLoaded for ALL v2 additions ───────────────
+// -- Single DOMContentLoaded for ALL v2 additions ---------------
 document.addEventListener('DOMContentLoaded', () => {
   // Settings tab clicks
   document.querySelectorAll('.snav-btn').forEach(btn => {
@@ -5259,7 +6606,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('memoryRefreshBtn')?.addEventListener('click', loadCompanionMemories);
   document.getElementById('memoryShowDisabled')?.addEventListener('change', loadCompanionMemories);
 
-  // Appearance tab — live preview as user changes values
+  // Appearance tab - live preview as user changes values
   document.getElementById('settingsFontSize')?.addEventListener('change', e => {
     const customEl = document.getElementById('settingsFontSizeCustom');
     if (customEl) customEl.hidden = e.target.value !== 'custom';
@@ -5282,7 +6629,7 @@ document.addEventListener('DOMContentLoaded', () => {
     STATE.markdown = e.target.checked;
     applyAppearanceSettings();
   });
-  // Generation tab — live label updates
+  // Generation tab - live label updates
   document.getElementById('settingsRepeatPenalty')?.addEventListener('input', e => {
     const lbl = document.getElementById('repeatPenaltyLabel');
     if (lbl) lbl.textContent = parseFloat(e.target.value).toFixed(2);
@@ -5292,12 +6639,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (lbl) lbl.textContent = parseFloat(e.target.value).toFixed(2);
   });
 
-  // Open settings → init providers panel
+  // Open settings â†’ init providers panel
   document.getElementById('settingsBtn')?.addEventListener('click', () => {
     setTimeout(initProvidersPanel, 80);
   });
 
-  // Save settings → also save active model choice
+  // Save settings â†’ also save active model choice
   const saveBtn = document.getElementById('settingsSaveBtn');
   if (saveBtn) {
     saveBtn.addEventListener('click', saveActiveModelChoice);
@@ -5307,6 +6654,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('ollamaUrl')?.addEventListener('input', () => syncOllamaUrlFields('ollamaUrl'));
   document.getElementById('ollamaUrlProvider')?.addEventListener('input', () => syncOllamaUrlFields('ollamaUrlProvider'));
 
-  // Novel Writer tab — active provider change
+  // Novel Writer tab - active provider change
   document.getElementById('activeProviderSelect')?.addEventListener('change', updateModelDropdown);
 });

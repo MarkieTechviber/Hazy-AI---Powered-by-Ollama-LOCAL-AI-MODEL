@@ -6,14 +6,14 @@ const { estimateTokens } = require('../ai/context/contextWindowManager');
 const { detectSearchDecision } = require('./searchRouter');
 const { planQueries, resolveUserQuestion } = require('./queryPlanner');
 const { createSearchProvider } = require('./searchProviders');
-const { filterSearchResults } = require('./resultFilter');
-const { scoreSourceQuality } = require('./sourceQuality');
+const { filterSearchResultsWithReasons } = require('./resultFilter');
+const { annotateSourceQuality } = require('./sourceQuality');
 const { fetchPage } = require('./pageFetcher');
 const { extractMainContent, detectSuspiciousInstructions } = require('./contentExtractor');
 const { chunkPage, chunksFromSearchSnippets } = require('./chunker');
 const { rerankChunks } = require('./reranker');
 const { buildWebContext } = require('./contextBuilder');
-const { buildCitations, estimateConfidence } = require('./citationBuilder');
+const { buildCitations, estimateConfidence, buildSourcePanelSummary } = require('./citationBuilder');
 const { SearchRunStore } = require('./searchRunStore');
 
 class WebSearchService {
@@ -35,7 +35,8 @@ class WebSearchService {
     decision: providedDecision,
     provider: providedProvider,
     forceSearch,
-    maxContextTokens
+    maxContextTokens,
+    onProgress // optional callback for progressive steps (Phase 1): onProgress({step, ...})
   }) {
     const startedAt = Date.now();
     const decision = providedDecision || detectSearchDecision(userMessage, { forceSearch });
@@ -48,15 +49,21 @@ class WebSearchService {
         query: resolvedQuestion,
         queries: [],
         results: [],
+        rejectedResults: [],
         pages: [],
         chunks: [],
         citations: [],
         contextText: '',
-        metrics: this.buildMetrics({ startedAt, confidence: 'medium' })
+        confidence: 'medium',
+        metrics: this.buildMetrics({ startedAt, confidence: 'medium' }),
+        warnings: []
       };
     }
 
     const queries = planQueries(userMessage, decision, { messages });
+    if (typeof onProgress === 'function') {
+      onProgress({ step: 'queries_planned', count: queries.length, queries: queries.map(q => q.query || q) });
+    }
     const provider = providedProvider || createSearchProvider(cfg, { fetchImpl: this.fetchImpl });
     const searchStarted = Date.now();
     const providerResponses = await Promise.allSettled(queries.map((query) =>
@@ -64,7 +71,9 @@ class WebSearchService {
         maxResults: Math.max(3, Math.ceil(decision.maxResults / Math.max(1, queries.length))),
         allowedDomains: decision.allowedDomains,
         blockedDomains: decision.blockedDomains,
-        freshnessRequired: decision.freshnessRequired
+        freshnessRequired: decision.freshnessRequired,
+        officialOnly: decision.officialOnly,
+        researchMode: decision.mode === 'research_mode'
       })
     ));
     const rawResults = [];
@@ -80,61 +89,84 @@ class WebSearchService {
       (payload.errors || []).forEach((error) => providerErrors.push(error));
       (payload.providersTried || []).forEach((name) => providersTried.add(name));
     });
-    const filteredResults = filterSearchResults(rawResults, decision)
-      .map((result) => ({
-        ...result,
-        sourceQualityScore: scoreSourceQuality(result, decision)
-      }))
+
+    const filtered = filterSearchResultsWithReasons(rawResults, decision);
+    const filteredResults = filtered.accepted
+      .map((result) => annotateSourceQuality(result, decision))
       .sort((a, b) => b.sourceQualityScore - a.sourceQualityScore);
+    const rejectedResults = filtered.rejected;
     const searchLatencyMs = Date.now() - searchStarted;
+    if (typeof onProgress === 'function') {
+      onProgress({ step: 'search_complete', accepted: filteredResults.length, rejected: rejectedResults.length });
+    }
 
     const fetchStarted = Date.now();
     const topResults = filteredResults.slice(0, decision.maxPagesToFetch);
     const fetchErrors = [];
+    if (typeof onProgress === 'function') onProgress({ step: 'fetching_pages', count: topResults.length });
     const fetched = await Promise.all(topResults.map((result) => fetchPage(result.url, {
       fetchImpl: this.fetchImpl,
       lookup: this.lookup,
       sourceName: result.sourceName,
       publishedAt: result.publishedAt,
-      onError: (error) => fetchErrors.push({ url: result.url, error: error.message })
+      timeoutMs: cfg.search?.fetchTimeoutMs,
+      maxBytes: cfg.search?.maxPageBytes,
+      onError: (error) => fetchErrors.push({
+        url: error.url || result.url,
+        title: result.title,
+        domain: result.domain,
+        error: error.error || error.message || String(error),
+        code: error.code || 'FETCH_FAILED'
+      })
     })));
+    const qualityByUrl = new Map(filteredResults.map((result) => [result.url, result]));
     const pages = fetched.filter(Boolean)
-      .map(extractMainContent)
-      .filter((page) => page.text.length >= 80);
+      .map((page) => {
+        const quality = qualityByUrl.get(page.url) || qualityByUrl.get(page.finalUrl) || {};
+        return extractMainContent({
+          ...page,
+          sourceQualityScore: quality.sourceQualityScore || 55,
+          qualitySignals: quality.qualitySignals || {},
+          sourceId: quality.sourceId
+        });
+      })
+      .filter((page) => String(page.text || '').length >= 80);
     const fetchLatencyMs = Date.now() - fetchStarted;
 
-    const qualityByUrl = new Map(filteredResults.map((result) => [result.url, result.sourceQualityScore]));
     let chunks = pages.flatMap((page) => chunkPage(page).map((chunk) => ({
       ...chunk,
-      sourceQualityScore: qualityByUrl.get(page.url) || qualityByUrl.get(page.finalUrl) || 55
+      sourceQualityScore: page.sourceQualityScore || 55,
+      qualitySignals: page.qualitySignals || {}
     })));
     const chunkUrls = new Set(chunks.map((chunk) => chunk.url));
-    chunks.push(...chunksFromSearchSnippets(
-      filteredResults.filter((result) => !chunkUrls.has(result.url))
-    ));
+    chunks.push(...chunksFromSearchSnippets(filteredResults.filter((result) => !chunkUrls.has(result.url))));
 
     const rerankStarted = Date.now();
     const reranked = rerankChunks({ userMessage: resolvedQuestion, chunks, decision });
     const rerankLatencyMs = Date.now() - rerankStarted;
     const packed = buildWebContext({
       chunks: reranked,
-      maxTokens: maxContextTokens || (decision.mode === 'deep_web' ? 20000 : 12000),
-      maxChunks: decision.mode === 'deep_web' ? 15 : 8
+      maxTokens: maxContextTokens || (decision.mode === 'research_mode' ? 20000 : 12000),
+      maxChunks: decision.mode === 'research_mode' ? 15 : 8,
+      mode: decision.mode
     });
     const citations = buildCitations(packed.selectedChunks);
+    const suspiciousSources = pages.flatMap((page) => {
+      const matches = page.promptInjectionPatterns?.length ? page.promptInjectionPatterns : detectSuspiciousInstructions(page.text);
+      return matches.length ? [{ url: page.finalUrl, title: page.title, patterns: matches }] : [];
+    });
     const confidence = estimateConfidence({
       selectedChunks: packed.selectedChunks,
       citations,
-      freshnessRequired: decision.freshnessRequired
+      freshnessRequired: decision.freshnessRequired,
+      suspiciousSources
     });
-    const suspiciousSources = pages.flatMap((page) => {
-      const matches = detectSuspiciousInstructions(page.text);
-      return matches.length ? [{ url: page.finalUrl, patterns: matches }] : [];
-    });
+    const warnings = this.buildWarnings({ decision, citations, providerErrors, fetchErrors, confidence, suspiciousSources, rejectedResults });
     const metrics = this.buildMetrics({
       startedAt,
       queryCount: queries.length,
       resultCount: filteredResults.length,
+      rejectedResultCount: rejectedResults.length,
       fetchedPageCount: pages.length,
       selectedChunkCount: packed.selectedChunks.length,
       failedFetchCount: topResults.length - pages.length,
@@ -145,6 +177,12 @@ class WebSearchService {
       citationCount: citations.length,
       confidence
     });
+    const fetchedPages = pages.map(({ text, ...page }) => ({
+      ...page,
+      textPreview: text.slice(0, 500),
+      tokenCount: estimateTokens(text)
+    }));
+    const panelSummary = buildSourcePanelSummary({ decision, queries, citations, rejectedResults, fetchErrors, warnings });
     const run = this.store.save({
       userId,
       chatId,
@@ -152,17 +190,17 @@ class WebSearchService {
       decision,
       queries,
       results: filteredResults,
-      fetchedPages: pages.map(({ text, ...page }) => ({
-        ...page,
-        textPreview: text.slice(0, 500),
-        tokenCount: estimateTokens(text)
-      })),
+      rejectedResults,
+      fetchedPages,
       selectedChunks: packed.selectedChunks,
       citations,
+      confidence,
       metrics,
       providerErrors,
       fetchErrors,
-      suspiciousSources
+      suspiciousSources,
+      warnings,
+      panelSummary
     });
 
     return {
@@ -173,6 +211,7 @@ class WebSearchService {
       query: resolvedQuestion,
       queries,
       results: filteredResults,
+      rejectedResults,
       pages,
       chunks: packed.selectedChunks,
       citations,
@@ -183,7 +222,8 @@ class WebSearchService {
       fetchErrors,
       suspiciousSources,
       metrics,
-      warnings: this.buildWarnings({ decision, citations, providerErrors, fetchErrors, confidence })
+      warnings,
+      panelSummary
     };
   }
 
@@ -192,6 +232,7 @@ class WebSearchService {
     return {
       queryCount: 0,
       resultCount: 0,
+      rejectedResultCount: 0,
       fetchedPageCount: 0,
       selectedChunkCount: 0,
       failedFetchCount: 0,
@@ -208,12 +249,14 @@ class WebSearchService {
     };
   }
 
-  buildWarnings({ decision, citations, providerErrors, fetchErrors, confidence }) {
+  buildWarnings({ decision, citations, providerErrors, fetchErrors, confidence, suspiciousSources = [], rejectedResults = [] }) {
     const warnings = [];
     if (!citations.length) warnings.push('No usable source evidence was selected.');
     if (decision.freshnessRequired && confidence === 'low') warnings.push('Fresh information could not be verified confidently.');
     if (providerErrors.length) warnings.push(`${providerErrors.length} search provider request(s) failed.`);
     if (fetchErrors.length) warnings.push(`${fetchErrors.length} page fetch(es) failed or were blocked.`);
+    if (rejectedResults.length) warnings.push(`${rejectedResults.length} result(s) were rejected by URL/domain/source-quality filters.`);
+    if (suspiciousSources.length) warnings.push('Suspicious webpage instructions were detected and treated as untrusted evidence.');
     return warnings;
   }
 }

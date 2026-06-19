@@ -1,51 +1,173 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hazy - Local Companion by Dream On</title>
+  <title>Hazy AI - Local AI Chat and Code Assistant</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" id="hljs-theme">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+    id="hljs-theme">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+    crossorigin="anonymous">
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="quick-prompts.css" />
   <link rel="stylesheet" href="hazy-rag.css" />
   <link rel="stylesheet" href="hazy-agent.css" />
 </head>
+
 <body>
   <!-- UI RESET: legacy dashboard shell erased; compatibility hooks remain hidden so app.js keeps working. -->
   <svg width="0" height="0" style="position:absolute;left:-9999px;overflow:hidden" aria-hidden="true" focusable="false">
-    <symbol id="icon-chat" viewBox="0 0 24 24"><path d="M5 6.5C5 5.12 6.12 4 7.5 4h9C17.88 4 19 5.12 19 6.5v6c0 1.38-1.12 2.5-2.5 2.5H10l-4 3v-3H7.5C6.12 15 5 13.88 5 12.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-home" viewBox="0 0 24 24"><path d="M4.5 11.5 12 5l7.5 6.5M6.5 10.75V19h4.5v-5H13v5h4.5v-8.25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4.5 7.5h5l2 2h7a1.5 1.5 0 0 1 1.5 1.5v6.5A1.5 1.5 0 0 1 18.5 19h-14A1.5 1.5 0 0 1 3 17.5v-8A2 2 0 0 1 5 7.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-box" viewBox="0 0 24 24"><path d="M4.5 7.5 12 4l7.5 3.5L12 11 4.5 7.5Zm0 0V16.5L12 20l7.5-3.5V7.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-code" viewBox="0 0 24 24"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M13 6 11 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-grid" viewBox="0 0 24 24"><path d="M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M5 19.25h14M7.75 16V10.5M12 16V7.25M16.25 16v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m7.5 10.75 4-3.5 4 2.25 2.25-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-clipboard" viewBox="0 0 24 24"><path d="M9 5.75h6M10 4h4a1.5 1.5 0 0 1 1.5 1.5v.25H17A2 2 0 0 1 19 7.75v10.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7.75a2 2 0 0 1 2-2h1.5V5.5A1.5 1.5 0 0 1 10 4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-3.4-3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-    <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20M6.1 6.1l1.8 1.8M16.1 16.1l1.8 1.8M17.9 6.1l-1.8 1.8M7.9 16.1l-1.8 1.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
-    <symbol id="icon-user" viewBox="0 0 24 24"><path d="M12 12a3.75 3.75 0 1 0 0-7.5a3.75 3.75 0 0 0 0 7.5Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-    <symbol id="icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-    <symbol id="icon-send" viewBox="0 0 24 24"><path d="M4 12l15-8-4 15-3-6-8-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h4l2-5 3 10 2-5h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-bulb" viewBox="0 0 24 24"><path d="M12 4a6.5 6.5 0 0 0-4 11.7V17h8v-1.3A6.5 6.5 0 0 0 12 4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M10 20h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-    <symbol id="icon-microphone" viewBox="0 0 24 24"><path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 1 1-6 0V7a3 3 0 0 1 3-3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3M9 20h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-    <symbol id="icon-volume" viewBox="0 0 24 24"><path d="M4 10h4l5-4v12l-5-4H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M17 9a4 4 0 0 1 0 6M19.5 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-    <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.7 4.8L18.5 9l-4.8 1.7L12 15.5l-1.7-4.8L5.5 9l4.8-1.2zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8zM5 15l.8 2.2L8 18l-2.2.8L5 21l-.8-2.2L2 18l2.2-.8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-bolt" viewBox="0 0 24 24"><path d="M13 2 5 13h5l-1 9 8-11h-5l1-9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 1.2 4.25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 4.75v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-robot" viewBox="0 0 24 24"><path d="M12 3.5v3M9 3.5h6M7.75 8.25h8.5A2.75 2.75 0 0 1 19 11v5.25A2.75 2.75 0 0 1 16.25 19h-8.5A2.75 2.75 0 0 1 5 16.25V11a2.75 2.75 0 0 1 2.75-2.75Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.75 12.25h.01M15.25 12.25h.01" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M9.5 15.5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-    <symbol id="icon-bot" viewBox="0 0 24 24"><path d="M12 4v3M8.5 4h7M7.75 8.25h8.5A2.75 2.75 0 0 1 19 11v5.25A2.75 2.75 0 0 1 16.25 19h-8.5A2.75 2.75 0 0 1 5 16.25V11a2.75 2.75 0 0 1 2.75-2.75Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="12" r="1.1" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="15" cy="12" r="1.1" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-    <symbol id="icon-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h18M12 3c2.5 2.5 4 5.3 4 9s-1.5 6.5-4 9M12 3c-2.5 2.5-4 5.3-4 9s1.5 6.5 4 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
-    <symbol id="icon-check" viewBox="0 0 24 24"><path d="M5.5 12.5 10 17l8.5-10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-    <symbol id="icon-arrow-right" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8.5v4l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-    <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/></symbol>
-    <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M3.75 12s3-6 8.25-6 8.25 6 8.25 6-3 6-8.25 6-8.25-6-8.25-6Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.75" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
-    <symbol id="icon-menu-lines" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="icon-chat" viewBox="0 0 24 24">
+      <path
+        d="M5 6.5C5 5.12 6.12 4 7.5 4h9C17.88 4 19 5.12 19 6.5v6c0 1.38-1.12 2.5-2.5 2.5H10l-4 3v-3H7.5C6.12 15 5 13.88 5 12.5z"
+        fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-home" viewBox="0 0 24 24">
+      <path d="M4.5 11.5 12 5l7.5 6.5M6.5 10.75V19h4.5v-5H13v5h4.5v-8.25" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-folder" viewBox="0 0 24 24">
+      <path
+        d="M4.5 7.5h5l2 2h7a1.5 1.5 0 0 1 1.5 1.5v6.5A1.5 1.5 0 0 1 18.5 19h-14A1.5 1.5 0 0 1 3 17.5v-8A2 2 0 0 1 5 7.5z"
+        fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-box" viewBox="0 0 24 24">
+      <path d="M4.5 7.5 12 4l7.5 3.5L12 11 4.5 7.5Zm0 0V16.5L12 20l7.5-3.5V7.5" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-code" viewBox="0 0 24 24">
+      <path d="M8 8 4 12l4 4M16 8l4 4-4 4M13 6 11 18" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-grid" viewBox="0 0 24 24">
+      <path d="M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-chart" viewBox="0 0 24 24">
+      <path d="M5 19.25h14M7.75 16V10.5M12 16V7.25M16.25 16v-5" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" />
+      <path d="m7.5 10.75 4-3.5 4 2.25 2.25-2" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-clipboard" viewBox="0 0 24 24">
+      <path
+        d="M9 5.75h6M10 4h4a1.5 1.5 0 0 1 1.5 1.5v.25H17A2 2 0 0 1 19 7.75v10.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7.75a2 2 0 0 1 2-2h1.5V5.5A1.5 1.5 0 0 1 10 4Z"
+        fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <path d="M20 20l-3.4-3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <path
+        d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20M6.1 6.1l1.8 1.8M16.1 16.1l1.8 1.8M17.9 6.1l-1.8 1.8M7.9 16.1l-1.8 1.8"
+        fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-user" viewBox="0 0 24 24">
+      <path d="M12 12a3.75 3.75 0 1 0 0-7.5a3.75 3.75 0 0 0 0 7.5Z" fill="none" stroke="currentColor"
+        stroke-width="1.8" />
+      <path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <path
+        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+        fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-send" viewBox="0 0 24 24">
+      <path d="M4 12l15-8-4 15-3-6-8-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-activity" viewBox="0 0 24 24">
+      <path d="M3 12h4l2-5 3 10 2-5h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-bulb" viewBox="0 0 24 24">
+      <path d="M12 4a6.5 6.5 0 0 0-4 11.7V17h8v-1.3A6.5 6.5 0 0 0 12 4Z" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" />
+      <path d="M10 20h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-microphone" viewBox="0 0 24 24">
+      <path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 1 1-6 0V7a3 3 0 0 1 3-3Z" fill="none" stroke="currentColor"
+        stroke-width="1.8" />
+      <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3M9 20h6" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-volume" viewBox="0 0 24 24">
+      <path d="M4 10h4l5-4v12l-5-4H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+      <path d="M17 9a4 4 0 0 1 0 6M19.5 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-sparkles" viewBox="0 0 24 24">
+      <path
+        d="M12 3l1.7 4.8L18.5 9l-4.8 1.7L12 15.5l-1.7-4.8L5.5 9l4.8-1.2zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8zM5 15l.8 2.2L8 18l-2.2.8L5 21l-.8-2.2L2 18l2.2-.8z"
+        fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-bolt" viewBox="0 0 24 24">
+      <path d="M13 2 5 13h5l-1 9 8-11h-5l1-9Z" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24">
+      <path d="M20 11a8 8 0 1 0 1.2 4.25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+      <path d="M20 4.75v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-robot" viewBox="0 0 24 24">
+      <path
+        d="M12 3.5v3M9 3.5h6M7.75 8.25h8.5A2.75 2.75 0 0 1 19 11v5.25A2.75 2.75 0 0 1 16.25 19h-8.5A2.75 2.75 0 0 1 5 16.25V11a2.75 2.75 0 0 1 2.75-2.75Z"
+        fill="none" stroke="currentColor" stroke-width="1.8" />
+      <path d="M8.75 12.25h.01M15.25 12.25h.01" fill="none" stroke="currentColor" stroke-width="2.4"
+        stroke-linecap="round" />
+      <path d="M9.5 15.5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-bot" viewBox="0 0 24 24">
+      <path
+        d="M12 4v3M8.5 4h7M7.75 8.25h8.5A2.75 2.75 0 0 1 19 11v5.25A2.75 2.75 0 0 1 16.25 19h-8.5A2.75 2.75 0 0 1 5 16.25V11a2.75 2.75 0 0 1 2.75-2.75Z"
+        fill="none" stroke="currentColor" stroke-width="1.8" />
+      <circle cx="9" cy="12" r="1.1" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <circle cx="15" cy="12" r="1.1" fill="none" stroke="currentColor" stroke-width="1.8" />
+    </symbol>
+    <symbol id="icon-globe" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <path d="M3 12h18M12 3c2.5 2.5 4 5.3 4 9s-1.5 6.5-4 9M12 3c-2.5 2.5-4 5.3-4 9s1.5 6.5 4 9" fill="none"
+        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24">
+      <path d="M5.5 12.5 10 17l8.5-10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24">
+      <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+    </symbol>
+    <symbol id="icon-arrow-right" viewBox="0 0 24 24">
+      <path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8" />
+      <path d="M12 8.5v4l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" />
+    </symbol>
+    <symbol id="icon-more" viewBox="0 0 24 24">
+      <circle cx="6" cy="12" r="1.6" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+      <circle cx="18" cy="12" r="1.6" fill="currentColor" />
+    </symbol>
+    <symbol id="icon-eye" viewBox="0 0 24 24">
+      <path d="M3.75 12s3-6 8.25-6 8.25 6 8.25 6-3 6-8.25 6-8.25-6-8.25-6Z" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+      <circle cx="12" cy="12" r="2.75" fill="none" stroke="currentColor" stroke-width="1.8" />
+    </symbol>
+    <symbol id="icon-menu-lines" viewBox="0 0 24 24">
+      <path d="M5 7h14M5 12h14M5 17h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+    </symbol>
   </svg>
 
   <div class="app-shell dream-layout">
@@ -54,7 +176,8 @@
         <div class="sidebar-profile-bar">
           <button class="sidebar-profile-trigger" id="profileMenuBtn" type="button" title="Open profile menu">
             <div class="brand-mark sidebar-profile-avatar">
-              <img class="hazy-theme-logo" src="assets/logos/hazy_logo_cream_transparent.svg" alt="Hazy logo" data-hazy-logo />
+              <img class="hazy-theme-logo" src="assets/logos/hazy_logo_cream_transparent.svg" alt="Hazy logo"
+                data-hazy-logo />
             </div>
             <div class="brand-copy sidebar-profile-copy">
               <strong>Hazy</strong>
@@ -70,7 +193,9 @@
             <span id="statusText">Online</span>
           </div>
           <button class="sidebar-card model-selector" id="modelSelector" type="button">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-box"></use></svg>
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-box"></use>
+            </svg>
             <span class="model-selector-copy">
               <strong id="currentModelName">minimax-m3:cloud</strong>
               <small>Local · Private</small>
@@ -78,46 +203,78 @@
             <span class="chevron">⌄</span>
           </button>
           <button class="sidebar-card" id="settingsBtn" type="button">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-settings"></use></svg>
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-settings"></use>
+            </svg>
             <span>Settings</span>
             <span class="chevron">⌄</span>
           </button>
           <button class="sidebar-card" id="personaBtn" type="button">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-user"></use></svg>
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-user"></use>
+            </svg>
             <span>Persona</span>
             <span class="chevron">⌄</span>
           </button>
           <button class="sidebar-card" id="railMoreBtn" type="button">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-more"></use></svg>
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-more"></use>
+            </svg>
             <span>More Tools</span>
             <span class="chevron">⌄</span>
           </button>
         </div>
 
+        <div class="sidebar-section-label workspace-section-label">Workspace</div>
+        <div class="page-nav" id="pageNav" role="tablist" aria-label="Hazy workspace pages">
+          <button class="page-nav-btn active" id="navChatBtn" data-page="chat" type="button" role="tab"
+            aria-pressed="true">
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-chat"></use>
+            </svg>
+            <span>Chat</span>
+          </button>
+          <button class="page-nav-btn" id="navAgentBtn" data-page="agent" type="button" role="tab" aria-pressed="false">
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-bot"></use>
+            </svg>
+            <span>Agentic Mode</span>
+          </button>
+        </div>
+
         <div class="sidebar-search-row">
           <label class="sidebar-search" for="historySearch">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-search"></use></svg>
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-search"></use>
+            </svg>
             <input id="historySearch" type="search" placeholder="Search chats..." autocomplete="off" />
           </label>
         </div>
 
         <button class="new-chat-btn" id="newChatBtn" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-sparkles"></use></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-sparkles"></use>
+          </svg>
           <span>New Chat</span>
         </button>
         <button class="clear-chat-btn" id="clearChatBtn" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-close"></use>
+          </svg>
           <span>Clear Chat</span>
         </button>
 
-        <div class="sidebar-section-label">Recent Chats</div>
-        <p class="sidebar-history-note">Jump back into older threads, rename them, or clean them up from here.</p>
+        <div class="sidebar-section-label" id="historySectionLabel">Recent Chats</div>
+        <p class="sidebar-history-note" id="historySectionNote">Jump back into older threads, rename them, or clean them
+          up from here.</p>
         <div class="chat-history" id="chatHistory"></div>
       </div>
 
       <div class="sidebar-bottom" hidden>
         <button class="sidebar-card model-selector" id="legacyModelSelector" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-box"></use></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-box"></use>
+          </svg>
           <span class="model-selector-copy">
             <strong id="legacyCurrentModelName">minimax-m3:cloud</strong>
             <small>Local · Private</small>
@@ -126,24 +283,32 @@
         </button>
 
         <button class="sidebar-card" id="legacyRailSettingsBtn" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-settings"></use></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-settings"></use>
+          </svg>
           <span>Settings</span>
           <span class="chevron">⌄</span>
         </button>
         <button class="sidebar-card" id="legacyPersonaBtn" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-user"></use></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-user"></use>
+          </svg>
           <span>Persona</span>
           <span class="chevron">⌄</span>
         </button>
         <button class="sidebar-card" id="legacyRailMoreBtn" type="button">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-more"></use></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-more"></use>
+          </svg>
           <span>More Tools</span>
           <span class="chevron">⌄</span>
         </button>
 
         <div class="privacy-card">
           <div>
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-check"></use></svg>
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-check"></use>
+            </svg>
             <strong>Hazy is local &amp; private</strong>
           </div>
           <p>Your data stays on your machine.</p>
@@ -172,7 +337,9 @@
             <span id="legacyStatusText">Online</span>
           </button>
           <button class="topbar-icon" id="legacySettingsBtn" type="button" title="Settings">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-settings"></use></svg>
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-settings"></use>
+            </svg>
           </button>
           <button class="avatar-btn" id="legacyMoreMenuBtn" type="button" title="More tools">D</button>
         </div>
@@ -189,31 +356,48 @@
 
         <div class="welcome-screen" id="welcomeScreen">
           <div class="hero-orb">
-            <img class="hazy-theme-logo" src="assets/logos/hazy_logo_cream_transparent.svg" alt="Hazy logo" data-hazy-logo />
+            <img class="hazy-theme-logo" src="assets/logos/hazy_logo_cream_transparent.svg" alt="Hazy logo"
+              data-hazy-logo />
           </div>
           <h1>Hazy</h1>
-          <p class="hero-brand">by <strong>Dream On</strong></p>
+          <p class="hero-brand">by <strong>Hazy AI</strong></p>
           <p class="hero-subtitle">Your local companion for support, coding, and building full websites.</p>
 
           <div class="starter-grid" id="suggestionGrid">
-            <button class="suggestion-card" data-mode="build" data-prompt="Build a portfolio landing page with a working contact form, clean responsive styling, and simple Express backend.">
-              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-sparkles"></use></svg></span>
-              <span><strong>Build a portfolio landing page with contact form</strong><small>Create a modern landing page with a working contact form.</small></span>
+            <button class="suggestion-card" data-mode="build"
+              data-prompt="Build a portfolio landing page with a working contact form, clean responsive styling, and simple Express backend.">
+              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24">
+                  <use href="#icon-sparkles"></use>
+                </svg></span>
+              <span><strong>Build a portfolio landing page with contact form</strong><small>Create a modern landing page
+                  with a working contact form.</small></span>
               <b>›</b>
             </button>
-            <button class="suggestion-card" data-mode="build" data-prompt="Create a multi-page restaurant website with a Node.js backend, menu, booking flow, and admin panel.">
-              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-code"></use></svg></span>
-              <span><strong>Multi-page restaurant website with Node.js backend</strong><small>Full-stack website with menu, booking, and admin panel.</small></span>
+            <button class="suggestion-card" data-mode="build"
+              data-prompt="Create a multi-page restaurant website with a Node.js backend, menu, booking flow, and admin panel.">
+              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24">
+                  <use href="#icon-code"></use>
+                </svg></span>
+              <span><strong>Multi-page restaurant website with Node.js backend</strong><small>Full-stack website with
+                  menu, booking, and admin panel.</small></span>
               <b>›</b>
             </button>
-            <button class="suggestion-card" data-mode="code" data-prompt="Create an analytics dashboard with Chart.js using clean cards, live sample data, and responsive layout.">
-              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chart"></use></svg></span>
-              <span><strong>Analytics dashboard with Chart.js charts</strong><small>Interactive dashboard and real-time data visualizations.</small></span>
+            <button class="suggestion-card" data-mode="code"
+              data-prompt="Create an analytics dashboard with Chart.js using clean cards, live sample data, and responsive layout.">
+              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24">
+                  <use href="#icon-chart"></use>
+                </svg></span>
+              <span><strong>Analytics dashboard with Chart.js charts</strong><small>Interactive dashboard and real-time
+                  data visualizations.</small></span>
               <b>›</b>
             </button>
-            <button class="suggestion-card" data-mode="code" data-prompt="Build a secure responsive contact form with Express.js backend and email notifications.">
-              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-clipboard"></use></svg></span>
-              <span><strong>Contact form with Express.js backend</strong><small>Secure responsive contact form with email notifications.</small></span>
+            <button class="suggestion-card" data-mode="code"
+              data-prompt="Build a secure responsive contact form with Express.js backend and email notifications.">
+              <span class="suggestion-icon"><svg class="icon-svg" viewBox="0 0 24 24">
+                  <use href="#icon-clipboard"></use>
+                </svg></span>
+              <span><strong>Contact form with Express.js backend</strong><small>Secure responsive contact form with
+                  email notifications.</small></span>
               <b>›</b>
             </button>
           </div>
@@ -228,7 +412,9 @@
           <div id="scrollAnchor"></div>
         </div>
         <button class="scroll-bottom-btn" id="scrollBottomBtn" type="button" title="Scroll to latest">
-          <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-arrow-right"></use></svg>
+          <svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-arrow-right"></use>
+          </svg>
         </button>
       </section>
 
@@ -239,17 +425,26 @@
             <h3 id="builderProjectName">Project Preview</h3>
           </div>
           <button class="icon-btn" id="builderClose" type="button" title="Close builder">
-            <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg>
+            <svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-close"></use>
+            </svg>
           </button>
         </div>
         <div class="builder-toolbar">
-          <div class="builder-meta"><span id="builderFileLabel">No file selected</span><span id="builderFileCount"></span></div>
+          <div class="builder-meta"><span id="builderFileLabel">No file selected</span><span
+              id="builderFileCount"></span></div>
           <div class="builder-actions">
-            <button class="builder-view-btn" id="builderPreviewToggle" type="button" title="Preview website" aria-label="Preview website">
-              <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-eye"></use></svg>
+            <button class="builder-view-btn" id="builderPreviewToggle" type="button" title="Preview website"
+              aria-label="Preview website">
+              <svg class="icon-svg" viewBox="0 0 24 24">
+                <use href="#icon-eye"></use>
+              </svg>
             </button>
-            <button class="builder-view-btn" id="builderFilesToggle" type="button" title="Show source files" aria-label="Show source files">
-              <svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-menu-lines"></use></svg>
+            <button class="builder-view-btn" id="builderFilesToggle" type="button" title="Show source files"
+              aria-label="Show source files">
+              <svg class="icon-svg" viewBox="0 0 24 24">
+                <use href="#icon-menu-lines"></use>
+              </svg>
             </button>
             <button id="builderRefresh" type="button" title="Refresh preview">Refresh</button>
             <button id="builderCopyFile" type="button" title="Copy current file">Copy</button>
@@ -258,7 +453,9 @@
         </div>
         <div class="builder-tabs" id="builderTabs"></div>
         <div class="builder-body" id="builderBody">
-          <div class="builder-code-pane" id="builderCodePane"><pre><code id="builderCode"></code></pre></div>
+          <div class="builder-code-pane" id="builderCodePane">
+            <pre><code id="builderCode"></code></pre>
+          </div>
           <div class="builder-preview-pane" id="builderPreviewPane">
             <div class="preview-toolbar">
               <span>Preview</span>
@@ -268,64 +465,81 @@
                 <button class="viewport-btn" data-width="390px" type="button">Mobile</button>
               </div>
             </div>
-            <div class="preview-wrapper" id="previewWrapper"><iframe id="previewFrame" title="Project preview"></iframe></div>
+            <div class="preview-wrapper" id="previewWrapper"><iframe id="previewFrame" title="Project preview"></iframe>
+            </div>
           </div>
         </div>
         <div class="builder-footer"><span id="builderStatus">No active build output</span></div>
       </aside>
 
       <section class="input-area">
-        <div class="input-mode-bar" id="inputModeBar">
-          <button class="mode-btn active" id="modeChatBtn" data-mode="chat" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Chat</button>
-          <button class="mode-btn" id="modeBuildBtn" data-mode="build" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-globe"></use></svg>Build Website</button>
-          <button class="mode-btn" id="modeCodeBtn" data-mode="code" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-code"></use></svg>Build Code</button>
-          <div class="code-lang-wrap" id="codeLangWrap">
-            <select id="codeLangSelect" aria-label="Code language">
-              <option value="auto" selected>Auto - Hazy decides</option>
-            </select>
-          </div>
-          <div class="mode-status" id="modeIndicator"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Chat mode</div>
-        </div>
+
         <div class="file-preview-strip" id="filePreviewStrip"></div>
         <div class="composer-card">
-          <button class="composer-icon-btn" id="ttsToggleBtn" type="button" title="Voice"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-microphone"></use></svg></button>
-          <button class="composer-icon-btn" id="uploadBtn" type="button" title="Attach file"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-clipboard"></use></svg></button>
+          <button class="composer-icon-btn" id="ttsToggleBtn" type="button" title="Voice"><svg class="icon-svg"
+              viewBox="0 0 24 24">
+              <use href="#icon-microphone"></use>
+            </svg></button>
+          <button class="composer-icon-btn" id="uploadBtn" type="button" title="Attach file"><svg class="icon-svg"
+              viewBox="0 0 24 24">
+              <use href="#icon-clipboard"></use>
+            </svg></button>
           <div class="composer-input-shell">
             <textarea id="chatInput" rows="1" placeholder="Ask Hazy anything..."></textarea>
             <div class="reasoning-toggle" id="reasoningToggle" role="group" aria-label="Response reasoning mode">
-              <button class="reasoning-toggle-btn" id="reasoningInstantBtn" data-reasoning="off" type="button" title="Answer without extended thinking">Instant</button>
-              <button class="reasoning-toggle-btn" id="reasoningDeepBtn" data-reasoning="deep" type="button" title="Use extended thinking before answering">Deep Thinking</button>
+              <button class="reasoning-toggle-btn" id="reasoningInstantBtn" data-reasoning="off" type="button"
+                title="Answer without extended thinking">Instant</button>
+              <button class="reasoning-toggle-btn" id="reasoningDeepBtn" data-reasoning="deep" type="button"
+                title="Use extended thinking before answering">Deep Thinking</button>
             </div>
             <button class="composer-secondary-btn" id="stopBtn" type="button">Stop</button>
           </div>
-          <button class="send-btn" id="sendBtn" type="button" title="Send"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-send"></use></svg></button>
+          <button class="send-btn" id="sendBtn" type="button" title="Send"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-send"></use>
+            </svg></button>
         </div>
-        <div class="composer-footer"><span>Hazy by <strong>Dream On</strong> · Powered by Ollama</span><span id="charCount"></span></div>
+        <div class="composer-footer"><span>Hazy by <strong>Hazy AI</strong> · Powered by Ollama</span><span
+            id="charCount"></span></div>
       </section>
     </main>
 
     <div class="model-dropdown" id="modelDropdown">
       <div class="dropdown-header">Available Models</div>
-      <div class="model-list" id="modelList"><div class="model-item loading-models">Connecting to Ollama...</div></div>
+      <div class="model-list" id="modelList">
+        <div class="model-item loading-models">Connecting to Ollama...</div>
+      </div>
     </div>
   </div>
 
   <div class="history-drawer" id="historyDrawer">
     <div class="drawer-header">
-      <div><span class="surface-label">Recent Chats</span><h3>Conversation List</h3></div>
-      <button class="icon-btn" id="historyDrawerClose" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg></button>
+      <div><span class="surface-label">Recent Chats</span>
+        <h3>Conversation List</h3>
+      </div>
+      <button class="icon-btn" id="historyDrawerClose" type="button"><svg class="icon-svg" viewBox="0 0 24 24">
+          <use href="#icon-close"></use>
+        </svg></button>
     </div>
-    <p class="drawer-note">Recent chats are already placed cleanly in the sidebar so they never cover the main canvas.</p>
+    <p class="drawer-note">Recent chats are already placed cleanly in the sidebar so they never cover the main canvas.
+    </p>
   </div>
 
   <div class="more-menu" id="moreMenu">
     <div class="drawer-header">
-      <div><span class="surface-label">Secondary Tools</span><h3>More</h3></div>
-      <button class="icon-btn" id="moreMenuClose" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg></button>
+      <div><span class="surface-label">Secondary Tools</span>
+        <h3>More</h3>
+      </div>
+      <button class="icon-btn" id="moreMenuClose" type="button"><svg class="icon-svg" viewBox="0 0 24 24">
+          <use href="#icon-close"></use>
+        </svg></button>
     </div>
     <div class="more-menu-list">
-      <button class="more-menu-item" id="exportBtn" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-folder"></use></svg><span><strong>Export Chat</strong><small>Download the current thread as text.</small></span></button>
-      <button class="more-menu-item" id="moreTrainingBtn" type="button"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bolt"></use></svg><span><strong>Training Data</strong><small>Build datasets from chats and examples.</small></span></button>
+      <button class="more-menu-item" id="exportBtn" type="button"><svg class="icon-svg" viewBox="0 0 24 24">
+          <use href="#icon-folder"></use>
+        </svg><span><strong>Export Chat</strong><small>Download the current thread as text.</small></span></button>
+      <button class="more-menu-item" id="moreTrainingBtn" type="button"><svg class="icon-svg" viewBox="0 0 24 24">
+          <use href="#icon-bolt"></use>
+        </svg><span><strong>Training Data</strong><small>Build datasets from chats and examples.</small></span></button>
     </div>
   </div>
 
@@ -340,21 +554,41 @@
     <div id="hazy-appearance-overrides"></div>
     <div id="quickPromptsDropdown"></div>
     <button id="voiceInputBtn" type="button"></button>
-    <button id="ragBtn" type="button"></button><span id="ragIndicator"></span><input id="ragFileInput" type="file" multiple />
+    <button id="ragBtn" type="button"></button><span id="ragIndicator"></span><input id="ragFileInput" type="file"
+      multiple />
     <button id="agentBtn" type="button"></button><span id="agentIndicator"></span>
-    <button id="autoContinueBtn" type="button"></button><input id="autoContinueToggle" type="checkbox" /><input id="maxAttemptsInput" type="number" />
-    <div id="chatBox"></div><div id="knowledgeModal"></div><div id="knowledgeList"></div><input id="knowledgeSearch" />
-    <div id="ragDocumentsList"></div><input id="ragEnableToggle" type="checkbox" /><div id="ragUploadArea"></div><span id="docCount"></span><span id="totalChunks"></span><span id="avgChunkSize"></span><button id="ragCloseBtn" type="button"></button>
-    <input id="agentEnableToggle" type="checkbox" /><input id="agentMaxIterations" type="number" /><div id="agentToolsList"></div><span id="toolCount"></span><div id="agentHistory"></div><button id="agentCloseBtn" type="button"></button>
+    <button id="autoContinueBtn" type="button"></button><input id="autoContinueToggle" type="checkbox" /><input
+      id="maxAttemptsInput" type="number" />
+    <div id="chatBox"></div>
+    <div id="knowledgeModal"></div>
+    <div id="knowledgeList"></div><input id="knowledgeSearch" />
+    <div id="ragDocumentsList"></div><input id="ragEnableToggle" type="checkbox" />
+    <div id="ragUploadArea"></div><span id="docCount"></span><span id="totalChunks"></span><span
+      id="avgChunkSize"></span><button id="ragCloseBtn" type="button"></button>
+    <input id="agentEnableToggle" type="checkbox" /><input id="agentMaxIterations" type="number" />
+    <div id="agentToolsList"></div><span id="toolCount"></span>
+    <div id="agentHistory"></div><button id="agentCloseBtn" type="button"></button>
     <button id="autoContinueCloseBtn" type="button"></button>
-    <div id="exportModal"></div><div id="importModal"></div><div id="templatesModal"></div><div id="templateGrid"></div><div id="templateFillModal"></div><form id="templateFillForm"></form><div id="templateFillTitle"></div><div id="shortcutsPanel"></div><div id="performanceModal"></div><div id="performanceStats"></div><div id="performanceModelList"></div>
+    <div id="exportModal"></div>
+    <div id="importModal"></div>
+    <div id="templatesModal"></div>
+    <div id="templateGrid"></div>
+    <div id="templateFillModal"></div>
+    <form id="templateFillForm"></form>
+    <div id="templateFillTitle"></div>
+    <div id="shortcutsPanel"></div>
+    <div id="performanceModal"></div>
+    <div id="performanceStats"></div>
+    <div id="performanceModelList"></div>
   </div>
 
   <div class="modal-overlay" id="renameModal">
     <div class="modal modal-compact">
       <div class="modal-header">
         <h2>Rename Chat</h2>
-        <button class="modal-close" id="renameClose"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg></button>
+        <button class="modal-close" id="renameClose"><svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-close"></use>
+          </svg></button>
       </div>
       <div class="modal-body modal-body-padded">
         <label class="setting-label" for="renameInput">Conversation title</label>
@@ -373,7 +607,9 @@
     <div class="modal modal-compact">
       <div class="modal-header">
         <h2>Voice Settings</h2>
-        <button class="modal-close" id="ttsClose"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg></button>
+        <button class="modal-close" id="ttsClose"><svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-close"></use>
+          </svg></button>
       </div>
       <div class="modal-body modal-body-padded">
         <div class="tts-engine-group">
@@ -409,7 +645,8 @@
       <div class="modal-footer">
         <div class="footer-actions">
           <button class="btn-secondary" id="ttsCancelBtn">Cancel</button>
-          <button class="btn-primary" id="ttsSaveBtn">Enable Voice</button>
+          <button class="btn-primary" id="ttsSaveBtn">Enable Classic Voice</button>
+          <!-- plan Agent F: this is the Legacy/Classic (Piper + browser) path. The recommended Kokoro Voice controls live in the main Settings > Voice tab. -->
         </div>
       </div>
     </div>
@@ -419,7 +656,9 @@
     <div class="modal modal-persona">
       <div class="modal-header">
         <h2>Persona Workspace</h2>
-        <button class="modal-close" id="personaClose"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg></button>
+        <button class="modal-close" id="personaClose"><svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-close"></use>
+          </svg></button>
       </div>
       <div class="modal-body persona-layout">
         <div class="persona-tabs">
@@ -464,10 +703,14 @@
           </div>
 
           <div class="persona-card-grid">
-            <button class="persona-card selected" type="button" data-relation="friend"><span class="persona-card-emoji">F</span><strong>Friend</strong></button>
-            <button class="persona-card" type="button" data-relation="mentor"><span class="persona-card-emoji">M</span><strong>Mentor</strong></button>
-            <button class="persona-card" type="button" data-relation="partner"><span class="persona-card-emoji">P</span><strong>Partner</strong></button>
-            <button class="persona-card" type="button" data-relation="rival"><span class="persona-card-emoji">R</span><strong>Rival</strong></button>
+            <button class="persona-card selected" type="button" data-relation="friend"><span
+                class="persona-card-emoji">F</span><strong>Friend</strong></button>
+            <button class="persona-card" type="button" data-relation="mentor"><span
+                class="persona-card-emoji">M</span><strong>Mentor</strong></button>
+            <button class="persona-card" type="button" data-relation="partner"><span
+                class="persona-card-emoji">P</span><strong>Partner</strong></button>
+            <button class="persona-card" type="button" data-relation="rival"><span
+                class="persona-card-emoji">R</span><strong>Rival</strong></button>
           </div>
 
           <div class="trait-pills">
@@ -489,7 +732,8 @@
           </div>
           <div class="setting-group">
             <label class="setting-label" for="scenarioOpener">Opening line</label>
-            <textarea class="setting-textarea" id="scenarioOpener" placeholder="Write how the scene should begin."></textarea>
+            <textarea class="setting-textarea" id="scenarioOpener"
+              placeholder="Write how the scene should begin."></textarea>
           </div>
           <div class="setting-grid two-column">
             <div class="setting-group">
@@ -522,18 +766,39 @@
     <div class="modal modal-settings">
       <div class="modal-header">
         <h2>Settings</h2>
-        <button class="modal-close" id="settingsClose"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg></button>
+        <button class="modal-close" id="settingsClose"><svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-close"></use>
+          </svg></button>
       </div>
       <div class="modal-body settings-layout">
         <nav class="settings-nav">
-          <button class="snav-btn active" data-tab="sGeneral"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-settings"></use></svg>General</button>
-          <button class="snav-btn" data-tab="sModels"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chart"></use></svg>Models</button>
-          <button class="snav-btn" data-tab="sProviders"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-box"></use></svg>AI Providers</button>
-          <button class="snav-btn" data-tab="sMemory"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Memory</button>
-          <button class="snav-btn" data-tab="sGeneration"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-bolt"></use></svg>Generation</button>
-          <button class="snav-btn" data-tab="sAppearance"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-sun"></use></svg>Appearance</button>
-          <button class="snav-btn" data-tab="sNovelWriter"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-chat"></use></svg>Novel Writer</button>
-          <button class="snav-btn" data-tab="sAbout"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-user"></use></svg>About</button>
+          <button class="snav-btn active" data-tab="sGeneral"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-settings"></use>
+            </svg>General</button>
+          <button class="snav-btn" data-tab="sModels"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-chart"></use>
+            </svg>Models</button>
+          <button class="snav-btn" data-tab="sProviders"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-box"></use>
+            </svg>AI Providers</button>
+          <button class="snav-btn" data-tab="sMemory"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-chat"></use>
+            </svg>Memory</button>
+          <button class="snav-btn" data-tab="sGeneration"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-bolt"></use>
+            </svg>Generation</button>
+          <button class="snav-btn" data-tab="sVoice"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-microphone"></use>
+            </svg>Voice</button>
+          <button class="snav-btn" data-tab="sAppearance"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-sun"></use>
+            </svg>Appearance</button>
+          <button class="snav-btn" data-tab="sNovelWriter"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-chat"></use>
+            </svg>Novel Writer</button>
+          <button class="snav-btn" data-tab="sAbout"><svg class="icon-svg" viewBox="0 0 24 24">
+              <use href="#icon-user"></use>
+            </svg>About</button>
         </nav>
         <div class="settings-content">
           <div class="stab active" id="sGeneral">
@@ -545,29 +810,40 @@
             </div>
             <div class="setting-group">
               <label class="setting-label" for="systemPrompt">System prompt</label>
-              <textarea class="setting-textarea" id="systemPrompt" placeholder="Set the base behavior for Hazy."></textarea>
+              <textarea class="setting-textarea" id="systemPrompt"
+                placeholder="Set the base behavior for Hazy."></textarea>
             </div>
           </div>
 
           <div class="stab" id="sModels">
             <div class="stab-section-title">Models</div>
-            <p class="stab-helper">Choose the active provider and tune how much live code should appear while streaming.</p>
+            <p class="stab-helper">Choose the active provider and tune how much live code should appear while streaming.
+            </p>
+            <div class="setting-group">
+              <label class="setting-label" for="activeProviderSelect">Provider</label>
+              <select class="setting-input" id="activeProviderSelect">
+                <option value="ollama">💻 Ollama (Local / Subscriber)</option>
+                <option value="anthropic">⚡ Anthropic (Claude)</option>
+                <option value="openai">⭐ OpenAI (GPT-4o)</option>
+                <option value="groq">⚡ Groq (Free + Fast)</option>
+                <option value="openrouter">🔗 OpenRouter</option>
+                <option value="gemini">🔹 Google Gemini</option>
+                <option value="nvidia">🖥️ NVIDIA NIM</option>
+              </select>
+            </div>
             <div class="setting-group">
               <label class="setting-label" for="activeModelSelect">Active model</label>
               <select class="setting-input" id="activeModelSelect"></select>
             </div>
             <div class="setting-group">
-              <label class="setting-label" for="showLiveCode"><input id="showLiveCode" type="checkbox" /> Show live code while streaming</label>
+              <label class="setting-label" for="showLiveCode"><input id="showLiveCode" type="checkbox" /> Show live code
+                while streaming</label>
             </div>
           </div>
 
           <div class="stab" id="sProviders">
             <div class="stab-section-title">AI Providers</div>
             <p class="stab-helper">Manage local or remote providers without moving away from the main workspace.</p>
-            <div class="setting-group">
-              <label class="setting-label" for="activeProviderSelect">Provider</label>
-              <select class="setting-input" id="activeProviderSelect"></select>
-            </div>
             <div class="setting-group">
               <label class="setting-label" for="ollamaUrlProvider">Provider URL</label>
               <input class="setting-input" id="ollamaUrlProvider" type="text" placeholder="http://127.0.0.1:11434" />
@@ -587,11 +863,24 @@
             </div>
             <span class="progress-label" id="pullProgressText"></span>
             <div class="preview-list" id="installedModelsList"></div>
+
+            <p class="setting-desc" style="margin-top:20px;margin-bottom:16px">Keys are saved securely on the server.
+              Never stored in the browser.</p>
+
+            <div class="stab-section-title">Cloud Text Models</div>
+            <div id="providerKeyRows" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px"></div>
+
+            <div class="stab-section-title">Image Generation</div>
+            <div id="providerImageRows" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px"></div>
+
+            <div class="stab-section-title">Audio, Music &amp; Video</div>
+            <div id="providerMediaRows" style="display:flex;flex-direction:column;gap:10px"></div>
           </div>
 
           <div class="stab" id="sMemory">
             <div class="stab-section-title">Companion Memory</div>
-            <p class="stab-helper">Review and control durable facts Hazy may use across conversations. Credentials and passwords are never accepted as companion memories.</p>
+            <p class="stab-helper">Review and control durable facts Hazy may use across conversations. Credentials and
+              passwords are never accepted as companion memories.</p>
             <div class="memory-create-grid">
               <select class="setting-input" id="memoryType">
                 <option value="explicit_fact">Fact</option>
@@ -600,12 +889,15 @@
                 <option value="ongoing_goal">Ongoing goal</option>
                 <option value="project_fact">Project fact</option>
               </select>
-              <input class="setting-input" id="memoryKey" type="text" maxlength="120" placeholder="Short label, e.g. preferred_name" />
-              <input class="setting-input" id="memoryValue" type="text" maxlength="2000" placeholder="What should Hazy remember?" />
+              <input class="setting-input" id="memoryKey" type="text" maxlength="120"
+                placeholder="Short label, e.g. preferred_name" />
+              <input class="setting-input" id="memoryValue" type="text" maxlength="2000"
+                placeholder="What should Hazy remember?" />
               <button class="btn-primary" id="memoryAddBtn" type="button">Add memory</button>
             </div>
             <div class="memory-toolbar">
-              <label class="setting-label"><input id="memoryShowDisabled" type="checkbox" /> Show paused memories</label>
+              <label class="setting-label"><input id="memoryShowDisabled" type="checkbox" /> Show paused
+                memories</label>
               <button class="btn-secondary" id="memoryRefreshBtn" type="button">Refresh</button>
             </div>
             <div class="memory-list" id="memoryList">
@@ -625,8 +917,10 @@
               <input class="setting-input" id="maxTokens" type="number" min="128" step="128" value="2048" />
             </div>
             <div class="setting-group">
-              <label class="setting-label" for="settingsRepeatPenalty">Repeat penalty: <span id="repeatPenaltyLabel">1.10</span></label>
-              <input class="setting-range" id="settingsRepeatPenalty" type="range" min="1" max="2" step="0.01" value="1.1" />
+              <label class="setting-label" for="settingsRepeatPenalty">Repeat penalty: <span
+                  id="repeatPenaltyLabel">1.10</span></label>
+              <input class="setting-range" id="settingsRepeatPenalty" type="range" min="1" max="2" step="0.01"
+                value="1.1" />
             </div>
             <div class="setting-group">
               <label class="setting-label" for="settingsTopP">Top P: <span id="topPLabel">0.92</span></label>
@@ -645,10 +939,43 @@
                   <option value="off">Off</option>
                 </select>
               </div>
-              <div class="setting-group">
-                <label class="setting-label" for="settingsReasoningSummary"><input id="settingsReasoningSummary" type="checkbox" checked /> Show reasoning summary</label>
+            </div>
+          </div>
+
+          <div class="stab" id="sVoice">
+            <div class="stab-section-title">Voice Settings</div>
+            <p class="stab-helper">Control <strong>Kokoro Voice</strong> (recommended, fully local streaming) for
+              responses and message playback. (See Classic/Legacy TTS option in the separate TTS modal for Piper/browser
+              fallback.)</p>
+            <div class="setting-group">
+              <label class="setting-label"><input id="voiceEnabled" type="checkbox" /> Enable voice responses</label>
+            </div>
+            <div class="setting-group">
+              <label class="setting-label" for="voiceSelect">Voice selection</label>
+              <div class="setting-grid two-column">
+                <select class="setting-input" id="voiceSelect"></select>
+                <button class="btn-secondary" id="voicePreviewBtn" type="button">Preview</button>
               </div>
             </div>
+            <div class="setting-group">
+              <label class="setting-label" for="voiceSpeed">Speech speed: <span id="voiceSpeedLabel">1.0×</span></label>
+              <input class="setting-range" id="voiceSpeed" type="range" min="0.5" max="2" step="0.25" value="1" />
+            </div>
+            <div class="setting-group">
+              <label class="setting-label" for="voiceVolume">Speech volume: <span
+                  id="voiceVolumeLabel">100</span></label>
+              <input class="setting-range" id="voiceVolume" type="range" min="0" max="100" step="1" value="100" />
+            </div>
+            <div class="setting-group">
+              <label class="setting-label"><input id="voiceAutoplay" type="checkbox" checked /> Auto play
+                responses</label>
+            </div>
+            <div class="setting-group">
+              <label class="setting-label"><input id="voicePreferGPU" type="checkbox" checked /> Prefer GPU acceleration
+                (WebGPU) when available</label>
+            </div>
+            <!-- plan Agent E: kokoro ready status indicator (cloned from Piper tts-model-status pattern) inside sVoice stab; no new modals -->
+            <div id="kokoroStatus" class="tts-model-status">Kokoro loads on first use or preview.</div>
           </div>
 
           <div class="stab" id="sAppearance">
@@ -669,7 +996,8 @@
                   <option value="16px">Large</option>
                   <option value="custom">Custom</option>
                 </select>
-                <input class="setting-input appearance-custom-input" id="settingsFontSizeCustom" type="text" value="14px" placeholder="Example: 15px" hidden />
+                <input class="setting-input appearance-custom-input" id="settingsFontSizeCustom" type="text"
+                  value="14px" placeholder="Example: 15px" hidden />
               </div>
               <div class="setting-group">
                 <label class="setting-label" for="settingsDensity">Density</label>
@@ -681,16 +1009,19 @@
               </div>
             </div>
             <div class="setting-group">
-              <label class="setting-label" for="settingsCodeHighlight"><input id="settingsCodeHighlight" type="checkbox" checked /> Syntax highlight code</label>
+              <label class="setting-label" for="settingsCodeHighlight"><input id="settingsCodeHighlight" type="checkbox"
+                  checked /> Syntax highlight code</label>
             </div>
             <div class="setting-group">
-              <label class="setting-label" for="settingsMarkdown"><input id="settingsMarkdown" type="checkbox" checked /> Render markdown</label>
+              <label class="setting-label" for="settingsMarkdown"><input id="settingsMarkdown" type="checkbox"
+                  checked /> Render markdown</label>
             </div>
           </div>
 
           <div class="stab" id="sNovelWriter">
             <div class="stab-section-title">Active Model for Novel Writer</div>
-            <p class="stab-helper">Choose which provider and model the Novel Writer uses. This is separate from the main chat model.</p>
+            <p class="stab-helper">Choose which provider and model the Novel Writer uses. This is separate from the main
+              chat model.</p>
             <div class="setting-group">
               <label class="setting-label" for="novelProvider">Provider</label>
               <select class="setting-input" id="novelProvider">
@@ -704,14 +1035,17 @@
               </select>
             </div>
             <div class="setting-group">
-              <label class="setting-label" for="novelDefaultWords">Default words per chapter: <span id="novelWordsLabel">2000</span></label>
-              <input class="setting-range" id="novelDefaultWords" type="range" min="500" max="5000" step="100" value="2000" />
+              <label class="setting-label" for="novelDefaultWords">Default words per chapter: <span
+                  id="novelWordsLabel">2000</span></label>
+              <input class="setting-range" id="novelDefaultWords" type="range" min="500" max="5000" step="100"
+                value="2000" />
             </div>
           </div>
 
           <div class="stab" id="sAbout">
             <div class="stab-section-title">About</div>
-            <p class="stab-helper">Hazy is a local-first AI workspace focused on clean chat, code generation, and website building in one place.</p>
+            <p class="stab-helper">Hazy is a local-first AI workspace focused on clean chat, code generation, and
+              website building in one place.</p>
           </div>
         </div>
       </div>
@@ -729,7 +1063,9 @@
     <div class="modal">
       <div class="modal-header">
         <h2>Training Data Builder</h2>
-        <button class="modal-close" id="trainingClose"><svg class="icon-svg" viewBox="0 0 24 24"><use href="#icon-close"></use></svg></button>
+        <button class="modal-close" id="trainingClose"><svg class="icon-svg" viewBox="0 0 24 24">
+            <use href="#icon-close"></use>
+          </svg></button>
       </div>
       <div class="modal-body">
         <div class="training-tabs">
@@ -743,11 +1079,13 @@
           <div class="modal-body-padded">
             <div class="setting-group">
               <label class="setting-label" for="trainInstruction">Instruction</label>
-              <textarea class="setting-textarea" id="trainInstruction" placeholder="What should the model learn to respond to?"></textarea>
+              <textarea class="setting-textarea" id="trainInstruction"
+                placeholder="What should the model learn to respond to?"></textarea>
             </div>
             <div class="setting-group">
               <label class="setting-label" for="trainResponse">Response</label>
-              <textarea class="setting-textarea" id="trainResponse" placeholder="Write the ideal answer here."></textarea>
+              <textarea class="setting-textarea" id="trainResponse"
+                placeholder="Write the ideal answer here."></textarea>
             </div>
             <div class="footer-actions">
               <button class="btn-primary" id="trainAddPairBtn" type="button">Add Pair</button>
@@ -760,7 +1098,8 @@
           <div class="modal-body-padded">
             <div class="setting-group">
               <label class="setting-label" for="trainBulkText">Raw text</label>
-              <textarea class="setting-textarea" id="trainBulkText" placeholder="Paste text to split or convert into examples."></textarea>
+              <textarea class="setting-textarea" id="trainBulkText"
+                placeholder="Paste text to split or convert into examples."></textarea>
             </div>
             <div class="footer-actions">
               <button class="btn-secondary" id="trainRawBtn" type="button">Add Raw</button>
@@ -774,7 +1113,8 @@
           <div class="modal-body-padded">
             <div class="setting-group">
               <label class="setting-label" for="trainSystemPrompt">Instruction prefix</label>
-              <input class="setting-input" id="trainSystemPrompt" type="text" placeholder="Optional system guidance for exported pairs" />
+              <input class="setting-input" id="trainSystemPrompt" type="text"
+                placeholder="Optional system guidance for exported pairs" />
             </div>
             <div class="setting-group">
               <div class="chat-list" id="trainChatList"></div>
@@ -816,20 +1156,23 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"
+    crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    crossorigin="anonymous"></script>
+  <script src="voiceSettingsStore.js"></script>
+  <script src="audioQueueManager.js"></script>
+  <script src="ttsManager.js"></script>
+  <script src="streamingTTSController.js"></script>
+  <script src="hazy-mascot-emotion.js"></script>
   <script src="app.js"></script>
   <script src="hazy-enhancements-complete.js"></script>
   <script src="hazy-rag.js"></script>
   <script src="hazy-agent.js"></script>
-  <script type="importmap">
-  {
-    "imports": {
-      "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/+esm"
-    }
-  }
-  </script>
   <script>
     window.PiperTTS = null;
     window.dispatchEvent(new Event('piper-ready'));
   </script>
 </body>
+
 </html>

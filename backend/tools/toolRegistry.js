@@ -1,11 +1,15 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 const TOOL_RISKS = Object.freeze([
   'read',
   'low_write',
   'medium_write',
   'high_write',
-  'external_side_effect'
+  'external_side_effect',
+  'device_control'
 ]);
 
 const DEFAULT_ROLES = Object.freeze(['admin', 'cashier', 'user']);
@@ -41,8 +45,11 @@ function normalizeTool(tool) {
     ...tool,
     description: tool.description || '',
     risk,
+    toolset: tool.toolset || 'safe_default',
+    rateLimit: tool.rateLimit || null,
+    audit: tool.audit === false ? false : true,
     requiresConfirmation: tool.requiresConfirmation === true
-      || ['medium_write', 'high_write', 'external_side_effect'].includes(risk),
+      || ['medium_write', 'high_write', 'external_side_effect', 'device_control'].includes(risk),
     allowedRoles,
     schema: cloneValue(tool.schema || {
       type: 'object',
@@ -76,6 +83,9 @@ class ToolRegistry {
     this.tools.set(tool.name, this.snapshot(normalizeTool(tool)));
   }
 
+  // Return convention (for Phase4 tools + plan/memory): explicit {ok: true, data: ...} or {ok:false, error:{code,message}}.
+  // Legacy (web/calc) may return raw; gatekeeper normalizeToolResult + executor handle both for compatibility.
+
   list(ctx = null) {
     return Array.from(this.tools.values())
       .filter((tool) => !ctx?.role || tool.allowedRoles.includes(ctx.role))
@@ -83,6 +93,7 @@ class ToolRegistry {
       name: tool.name,
       description: tool.description || "",
       risk: tool.risk,
+      toolset: tool.toolset,
       requiresConfirmation: tool.requiresConfirmation,
       schema: cloneValue(tool.schema || {})
     }));
@@ -103,6 +114,43 @@ class ToolRegistry {
       },
       strict: true
     }));
+  }
+
+  discover(toolsDir) {
+    // import-side-effect via register() export for zero-dep reliability (per Phase4 self-registering design; no central list).
+    // Trust boundary: tools/ is source-controlled; gatekeeper (rate/role/schema/confirm/audit + synthetic) protects execution.
+    // Side-effect require of .js modules is the mechanism (any planted .js would be RCE on load, but writes go to artifacts/ not tools/, per guard fixes).
+    // AST-based discovery placeholder; current impl uses import-side-effect via register() export for zero-dep reliability. Future: acorn walk on top-level CallExpression.
+    if (!toolsDir) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(toolsDir);
+    } catch (e) {
+      console.warn('[ToolRegistry] discover failed to read dir:', e && e.message ? e.message : e);
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.endsWith('.js')) continue;
+      if (['toolExecutor.js', 'toolRegistry.js', 'toolRouter.js'].includes(entry)) continue;
+      // additional skips for non-tool modules (dot, tests, etc) to reduce surface
+      if (entry.startsWith('.') || entry.includes('.test') || entry.includes('node_modules')) continue;
+      const full = path.join(toolsDir, entry);
+      try {
+        const mod = require(full);
+        if (typeof mod.register === 'function') {
+          mod.register(this);
+        } else if (mod && mod.toolDef) {
+          this.register(mod.toolDef);
+        }
+      } catch (e) {
+        console.warn(`[ToolRegistry] discover skip ${entry}:`, e && e.message ? e.message : e);
+      }
+    }
+  }
+
+  discoverAST(toolsDir) {
+    // See discover() for full impl + AST placeholder comment.
+    return this.discover(toolsDir);
   }
 }
 

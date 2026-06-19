@@ -46,6 +46,40 @@ function normalizeTaskType(value) {
   return TASK_TYPES.has(value) ? value : 'general';
 }
 
+// FIX #4 — The original confidence formula was purely linear:
+// 55 + (bestScore * 12). This meant a message like "what is Python"
+// and "rewrite my entire auth system in TypeScript" could score the same
+// confidence because both matched 3 coding signals. The new formula
+// accounts for:
+//   1. Signal spread  — how much the winner beats the runner-up
+//   2. Text length    — longer, more specific requests earn higher confidence
+//   3. Hard cap       — keeps us honest; we never claim >92% on heuristics
+function computeConfidence(scores, bestType, bestScore, text) {
+  if (bestScore === 0) return 35;
+
+  const ranked = Object.entries(scores)
+    .filter(([type]) => type !== 'general')
+    .sort((a, b) => b[1] - a[1]);
+
+  const runnerUpScore = ranked[1]?.[1] ?? 0;
+  const spread = bestScore - runnerUpScore; // 0 = ambiguous, higher = clearer
+
+  // Base confidence from raw signal count
+  let base = 50 + bestScore * 10;
+
+  // Reward clear separation from nearest rival
+  base += spread * 6;
+
+  // Longer, more specific messages earn a small boost (up to +8)
+  const lengthBonus = Math.min(8, Math.floor(text.length / 40));
+  base += lengthBonus;
+
+  // Penalise ambiguity: if runner-up is only 1 below winner it's noisy
+  if (spread <= 1 && bestScore <= 2) base -= 10;
+
+  return Math.min(92, Math.max(35, Math.round(base)));
+}
+
 function classifyReasoningTask(question, hints = {}) {
   const text = String(question || '').trim();
   const scores = {
@@ -63,23 +97,28 @@ function classifyReasoningTask(question, hints = {}) {
     .sort((a, b) => b[1] - a[1]);
   const [bestType, bestScore] = ranked[0] || ['general', 0];
   const taskType = bestScore > 0 ? bestType : 'general';
+
   const explicitSimple = SIMPLE_SIGNALS.some((pattern) => pattern.test(text));
   const structuralSteps = countMatches(text, MULTI_STEP_SIGNALS);
   const numericTerms = text.match(/\b\d+(?:\.\d+)?\b/g) || [];
   const sentenceCount = text.split(/[.!?]+/).filter((part) => part.trim()).length;
+
   const multiStep = !explicitSimple && (
     structuralSteps >= 1
     || (taskType === 'math' && numericTerms.length >= 3)
     || (taskType === 'coding' && text.length >= 45)
     || sentenceCount >= 3
   );
+
   const complex = multiStep && (
     structuralSteps >= 2
     || numericTerms.length >= 5
     || text.length >= 180
     || /\b(high[- ]stakes|critical|production|security|financial|medical|legal)\b/i.test(text)
   );
-  const confidence = Math.min(98, bestScore === 0 ? 35 : 55 + (bestScore * 12));
+
+  // FIX #4 — use improved confidence formula
+  const confidence = computeConfidence(scores, bestType, bestScore, text);
 
   return {
     taskType: normalizeTaskType(taskType),

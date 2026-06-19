@@ -1,0 +1,17 @@
+{
+  "project": "Code Project",
+  "files": [
+    {
+      "filename": "run.sh",
+      "language": "bash",
+      "status": "new"
+    },
+    {
+      "filename": "run_1.sh",
+      "language": "bash",
+      "status": "new"
+    }
+  ],
+  "ts": 1781099122590,
+  "summary": "Extracted from code blocks"
+}

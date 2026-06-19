@@ -1,17 +1,24 @@
 {
   "name": "hazy-server",
   "version": "1.0.0",
-  "description": "Hazy local companion backend - by Dream On - Ollama proxy + static server",
+  "description": "Hazy local companion backend - Hazy AI - Ollama proxy + static server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test"
   },
-  "keywords": ["companion", "support", "ollama", "llm"],
+  "keywords": [
+    "companion",
+    "support",
+    "ollama",
+    "llm"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=22.5.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
 }
