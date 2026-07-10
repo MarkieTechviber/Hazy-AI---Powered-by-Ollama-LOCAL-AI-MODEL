@@ -207,8 +207,6 @@ async function analyzeMessage({ body, conversationId = "default", userId = "defa
     conversationHistory: body.messages || []
   };
 
-  console.log('[Hazy] currentProject present for prompt:', Boolean(contextForPrompt.currentProject), contextForPrompt.currentProject?.files?.length || 0);
-
   const prompt = buildSystemPrompt(contextForPrompt);
 
   return {

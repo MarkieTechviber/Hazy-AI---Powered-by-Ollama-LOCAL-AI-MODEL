@@ -45,7 +45,21 @@ const guardrailService = require('../../application/guardrailService');
 const { execSync, exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const AIRuntime = require('../../../ai/aiRuntime');
+const toolRegistry = require('../../../ai/tools/toolRegistry');
+const permissionLayer = require('../../../ai/permissions/permissionLayer');
+const strategySelector = require('../../../ai/strategySelector');
+const capabilityDetector = require('../../../ai/capabilityDetector');
+const ToolExecutionScheduler = require('../../../ai/tools/toolExecutionScheduler');
+const OllamaProvider = require('../../../ai/providers/ollamaProvider');
 
+const aiRuntime = new AIRuntime({
+  toolRegistry,
+  permissionLayer,
+  strategySelector,
+  capabilityDetector,
+  toolExecutionScheduler: new ToolExecutionScheduler(toolRegistry, permissionLayer)
+});
 // ─────────────────────────────────────────────────────
 // Paths
 // ─────────────────────────────────────────────────────
@@ -54,11 +68,11 @@ const HOST         = process.env.HOST || 'localhost';
 // Support both localhost and 127.0.0.1 (Windows launcher + controller use localhost; avoids CORS mismatch on Origin vs ACAO).
 const LOCAL_LOOPBACK_ORIGINS = ['http://localhost:8080', 'http://127.0.0.1:8080', 'http://[::1]:8080'];
 const CORS_ORIGIN  = process.env.HAZY_ALLOWED_ORIGIN || `http://${HOST}:${PORT}`;
-const FRONTEND_DIR = path.join(__dirname, '..', '..', '..', 'frontend');
-const KOKORO_DIR   = path.join(__dirname, '..', '..', '..', 'kokoro');
-const CONFIG_PATH  = path.join(__dirname, '..', '..', '..', 'config', 'hazy-config.json');
-const REGISTRY_PATH= path.join(__dirname, '..', '..', '..', 'config', 'models-registry.json');
-const CACHE_DIR    = path.join(__dirname, '..', '..', '..', 'cache');
+const FRONTEND_DIR = path.join(__dirname, '..', '..', '..', '..', 'frontend');
+const KOKORO_DIR   = path.join(__dirname, '..', '..', '..', '..', 'kokoro');
+const CONFIG_PATH  = path.join(__dirname, '..', '..', '..', '..', 'config', 'hazy-config.json');
+const REGISTRY_PATH= path.join(__dirname, '..', '..', '..', '..', 'config', 'models-registry.json');
+const CACHE_DIR    = path.join(__dirname, '..', '..', '..', '..', 'cache');
 const usageStatsStore = new UsageStatsStore(path.join(CACHE_DIR, 'hazy-engine', 'stats'));
 const secretVault = new SecretVault(database);
 
@@ -313,6 +327,31 @@ function createThinkingStreamTransformer(isDeepThinkOrAgentic) {
   };
 
   return transform;
+}
+
+async function resolveAvailableOllamaModel(modelId, ollamaUrl, headers = {}) {
+  const requested = String(modelId || '').replace(/^ollama\//, '');
+  if (!requested) return requested;
+
+  try {
+    const tagsUrl = new URL('/api/tags', ollamaUrl);
+    const response = await fetch(tagsUrl, { headers });
+    if (!response.ok) return requested;
+
+    const data = await response.json();
+    const names = (data.models || []).map(model => model?.name).filter(Boolean);
+    if (!names.length || names.includes(requested)) return requested;
+
+    const preferred = ['qwen3.5', 'qwen3', 'qwen2.5', 'qwen2', 'mistral', 'llama3', 'llama3.2', 'llama2', 'gemma', 'phi3'];
+    const fallback = preferred
+      .map(prefix => names.find(name => name.includes(prefix)))
+      .find(Boolean) || names[0];
+    console.warn(`[Hazy] Requested Ollama model "${requested}" is unavailable; using "${fallback}" instead.`);
+    return fallback;
+  } catch (error) {
+    console.warn(`[Hazy] Could not validate Ollama model "${requested}": ${error.message}`);
+    return requested;
+  }
 }
 
 function safeArtifactChatId(chatId) {
@@ -965,10 +1004,12 @@ async function handleHazyChat(req, res, routeOptions = {}) {
   if (provider === 'ollama') {
     const ollamaUrl  = new URL(cfg.providers?.ollama?.baseUrl || 'http://localhost:11434');
     const rMode = body.hazy?.reasoningMode || 'auto';
+    const isAgenticSurface = prepared.analysis?.agentEnabled === true;
+    const shouldThink = rMode === 'deep' || isAgenticSurface;
     const ollamaBody = {
       ...providerBody,
       model: modelId.replace('ollama/', ''),
-      think: rMode === 'off' ? false : true,
+      think: shouldThink,
     };
     const apiKey = getProviderApiKey('ollama', cfg);
     const headers = { 'Content-Type': 'application/json' };
@@ -985,14 +1026,92 @@ async function handleHazyChat(req, res, routeOptions = {}) {
     if (req.headers['x-api-key']) headers['X-Api-Key'] = req.headers['x-api-key'];
     if (req.headers['api-key']) headers['Api-Key'] = req.headers['api-key'];
 
-    streamProxy({
-      hostname: ollamaUrl.hostname,
-      port: ollamaUrl.port ? Number(ollamaUrl.port) : (ollamaUrl.protocol === 'https:' ? 443 : 80),
-      path: '/api/chat',
-      method: 'POST',
-      headers,
-      protocol: ollamaUrl.protocol,
-    }, ollamaBody, res);
+    const runtimeModelName = await resolveAvailableOllamaModel(modelId, ollamaUrl, headers);
+    const runtimeModelId = `ollama/${runtimeModelName}`;
+    ollamaBody.model = runtimeModelName;
+
+    // Route through AI Runtime (v2 pipeline)
+    const providerInstance = new OllamaProvider({
+      baseUrl: cfg.providers?.ollama?.baseUrl
+    });
+
+    res.writeHead(200, mergeResponseHeaders(res, {
+      'Content-Type': 'application/x-ndjson',
+      'Transfer-Encoding': 'chunked'
+    }));
+
+    const abortController = new AbortController();
+    const abortForDisconnectedClient = () => {
+      if (!res.writableEnded && !abortController.signal.aborted) {
+        abortController.abort();
+      }
+    };
+    req.once('aborted', abortForDisconnectedClient);
+    res.once('close', abortForDisconnectedClient);
+
+    try {
+      const ExecutionContext = require('../../../ai/executionContext');
+      const ctx = new ExecutionContext({
+        modelId: runtimeModelId,
+        messages: ollamaBody.messages,
+        context: {
+          provider: 'ollama',
+          baseUrl: cfg.providers?.ollama?.baseUrl,
+          options: ollamaBody.options,
+          think: ollamaBody.think,
+          tools: ollamaBody.tools
+        },
+        provider: providerInstance,
+        onEvent: (event) => {
+          // Keep runtime events in the same NDJSON shape that the chat UI parses.
+          if (event.type === 'TEXT_DELTA') {
+            res.write(JSON.stringify({
+              message: { content: event.content || '' },
+              done: false
+            }) + '\n');
+          } else if (event.type === 'THINKING_DELTA') {
+            res.write(JSON.stringify({
+              message: { content: '', thinking: event.content || '' },
+              done: false
+            }) + '\n');
+          } else if (event.type === 'TOOL_CALL_STARTED') {
+             res.write(JSON.stringify({ hazyEvent: 'tool_started', name: event.name }) + '\n');
+          } else if (event.type === 'TOOL_ARGUMENT') {
+             res.write(JSON.stringify({ hazyEvent: 'tool_argument', chunk: event.chunk }) + '\n');
+          } else if (event.type === 'STATE_CHANGE') {
+             res.write(JSON.stringify({ hazyEvent: 'state_change', state: event.state }) + '\n');
+          }
+        },
+        signal: abortController.signal
+      });
+
+      const runtimeResult = await aiRuntime.executeInference(ctx);
+
+      // Handle any tool executions or normalization after stream ends if necessary
+      if (runtimeResult.files && runtimeResult.files.length > 0) {
+        console.log('[Server] AI Runtime emitted files:', runtimeResult.files.length);
+        // We'd write them here, or tell the frontend to write them
+        // For now, emit a special metadata chunk so the frontend knows what happened
+        res.write(JSON.stringify({ hazyEvent: 'files_generated', files: runtimeResult.files }) + '\n');
+      }
+
+      // Handle Permission Layer warnings
+      if (runtimeResult.warnings && runtimeResult.warnings.length > 0) {
+        res.write(JSON.stringify({ hazyEvent: 'warnings', warnings: runtimeResult.warnings }) + '\n');
+      }
+
+    } catch (err) {
+      console.error('[AIRuntime Error]', err);
+      res.write(JSON.stringify({ error: err.message }) + '\n');
+    } finally {
+      req.removeListener('aborted', abortForDisconnectedClient);
+      res.removeListener('close', abortForDisconnectedClient);
+    }
+
+    if (!res.writableEnded && !res.destroyed) {
+      res.write(JSON.stringify({ done: true }) + '\n');
+      res.end();
+    }
     return;
   }
 
@@ -1140,7 +1259,7 @@ async function handleHazyChat(req, res, routeOptions = {}) {
   const ollamaBody = {
     ...providerBody,
     model: (modelId || 'ollama/llama3.2').replace(/^[a-zA-Z0-9_-]+\//, ''), // strip any prefix
-    think: rMode === 'off' ? false : true,
+    think: rMode === 'deep' || prepared.analysis?.agentEnabled === true,
   };
   const apiKey = getProviderApiKey('ollama', cfg);
   const headers = { 'Content-Type': 'application/json' };
@@ -1173,9 +1292,9 @@ async function handleHazyChat(req, res, routeOptions = {}) {
 // ─────────────────────────────────────────────────────
 function handleDefaultPrompt(req, res) {
   setCORS(res, req);
-  const { DEFAULT_SYSTEM_PROMPT } = require('../../../ai/promptBuilder');
+  const { getPrompts } = require('../../../ai/promptBuilder');
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT }));
+  res.end(JSON.stringify({ defaultSystemPrompt: getPrompts().DEFAULT_SYSTEM_PROMPT }));
 }
 
 // ─────────────────────────────────────────────────────
@@ -1585,7 +1704,6 @@ async function handleBrowserAction(req, res) {
   });
   const statusCode = result.status === 'blocked' ? 400 : 200;
   res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
-  res.end(JSON.stringify(result));
 }
 
 async function handleBrowserControl(req, res, parsed) {
@@ -1647,6 +1765,7 @@ async function handleBrowserScreenshot(req, res, parsed) {
   fs.createReadStream(screenshotPath).pipe(res);
 }
 
+
 // ─────────────────────────────────────────────────────
 // ROUTE: /hazy/pull — auto-download Ollama model
 // ─────────────────────────────────────────────────────
@@ -1689,6 +1808,44 @@ async function handlePull(req, res) {
   pullReq.on('error', err => res.end(JSON.stringify({ error: err.message })));
   pullReq.write(JSON.stringify({ name: modelName, stream: true }));
   pullReq.end();
+}
+
+// ─────────────────────────────────────────────────────
+// ROUTE: /hazy/models — list local Ollama models
+// ─────────────────────────────────────────────────────
+async function handleModels(req, res) {
+  setCORS(res);
+  const cfg  = loadConfig();
+  const ollamaUrl = new URL(cfg.providers?.ollama?.baseUrl || 'http://localhost:11434');
+  
+  const apiKey = getProviderApiKey('ollama', cfg);
+  const headers = {};
+  if (apiKey) {
+    headers['Authorization'] = 'Bearer ' + apiKey;
+    headers['X-Subscription-Token'] = apiKey;
+  }
+  if (ollamaUrl.username || ollamaUrl.password) {
+    const auth = Buffer.from(`${ollamaUrl.username}:${ollamaUrl.password}`).toString('base64');
+    headers['Authorization'] = `Basic ${auth}`;
+  }
+  if (req.headers['authorization']) headers['Authorization'] = req.headers['authorization'];
+  if (req.headers['x-subscription-token']) headers['X-Subscription-Token'] = req.headers['x-subscription-token'];
+  if (req.headers['x-api-key']) headers['X-Api-Key'] = req.headers['x-api-key'];
+  if (req.headers['api-key']) headers['Api-Key'] = req.headers['api-key'];
+
+  const requestModule = ollamaUrl.protocol === 'https:' ? https : http;
+  const modelsReq = requestModule.request({
+    hostname: ollamaUrl.hostname,
+    port: ollamaUrl.port ? Number(ollamaUrl.port) : (ollamaUrl.protocol === 'https:' ? 443 : 80),
+    path: '/api/tags',
+    method: 'GET',
+    headers
+  }, modelsRes => {
+    res.writeHead(modelsRes.statusCode, modelsRes.headers);
+    modelsRes.pipe(res);
+  });
+  modelsReq.on('error', err => res.end(JSON.stringify({ error: err.message, models: [] })));
+  modelsReq.end();
 }
 
 // ─────────────────────────────────────────────────────
@@ -2346,9 +2503,18 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/hazy/memories')     { await handleMemories(req, res, parsed); return; }
   if (pathname === '/hazy/conversations'){ await handleConversations(req, res, parsed); return; }
   if (pathname === '/hazy/pull')         { await handlePull(req, res); return; }
+  if (pathname === '/hazy/models')       { await handleModels(req, res); return; }
   if (pathname === '/hazy/delete-model') { await handleDeleteModel(req, res); return; }
   if (pathname === '/hazy/save-key')     { await handleSaveKey(req, res); return; }
   if (pathname === '/hazy/image')        { await handleImage(req, res); return; }
+  // ── Readiness probe — used by hazy_controller.py to confirm the server started ──
+  if (pathname === '/health') {
+    setCORS(res);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
+    res.end(JSON.stringify({ status: 'ok', version: '2' }));
+    return;
+  }
+
   if (pathname === '/hazy/tts')          { await handleHazyTTS(req, res); return; }
   if (pathname === '/hazy/tts/health')   { await handleHazyTTSHealth(req, res); return; }
   if (pathname === '/hazy/hardware')     { await handleHazyHardware(req, res); return; }
@@ -2357,6 +2523,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/hazy/rag/documents') { await handleRagDocuments(req, res); return; }
   if (pathname === '/hazy/rag/upload')    { await handleRagUpload(req, res); return; }
   if (pathname === '/hazy/rag/delete')    { await handleRagDelete(req, res); return; }
+
 
   // ── Phase 5 manual verification checklist (from plan + review Issue 13) ──
   // External kokoro-fastapi only (manual user step, no auto-clone/launcher per constraints).

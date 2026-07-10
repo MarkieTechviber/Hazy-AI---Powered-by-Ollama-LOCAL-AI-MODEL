@@ -264,10 +264,11 @@ app.post('/hazy/chat', rateLimiter, async (req, res) => {
         res.write(JSON.stringify({ error: err.message }));
         res.end();
       });
+      const shouldThink = reasoningMode === 'deep' || prepared.analysis?.agentEnabled === true;
       proxyReq.write(JSON.stringify({
         ...providerBody,
         model: requestedModel.replace('ollama/', ''),
-        think: reasoningMode === 'off' ? false : true
+        think: shouldThink
       }));
       proxyReq.end();
     } else {
@@ -326,8 +327,8 @@ app.post('/hazy/write-workspace-files', async (req, res) => {
 });
 
 app.get('/hazy/default-prompt', (req, res) => {
-  const { DEFAULT_SYSTEM_PROMPT } = require('../../../ai/promptBuilder');
-  res.json({ defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT });
+  const { getPrompts } = require('../../../ai/promptBuilder');
+  res.json({ defaultSystemPrompt: getPrompts().DEFAULT_SYSTEM_PROMPT });
 });
 
 app.post('/hazy/persona-prompt', (req, res) => {

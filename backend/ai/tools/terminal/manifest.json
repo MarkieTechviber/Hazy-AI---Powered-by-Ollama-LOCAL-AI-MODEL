@@ -1,0 +1,13 @@
+{
+  "name": "run_terminal",
+  "description": "Runs a terminal command.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "command": { "type": "string" }
+    },
+    "required": ["command"]
+  },
+  "requiredPermissions": ["run_terminal"],
+  "entrypoint": "runTerminalTool.js"
+}

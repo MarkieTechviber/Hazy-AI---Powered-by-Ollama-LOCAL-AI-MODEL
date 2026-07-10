@@ -1,0 +1,23 @@
+{
+  "name": "write_files",
+  "description": "Creates or overwrites files on the disk.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "filename": { "type": "string" },
+            "code": { "type": "string" }
+          },
+          "required": ["filename", "code"]
+        }
+      }
+    },
+    "required": ["files"]
+  },
+  "requiredPermissions": ["write_files"],
+  "entrypoint": "writeFilesTool.js"
+}

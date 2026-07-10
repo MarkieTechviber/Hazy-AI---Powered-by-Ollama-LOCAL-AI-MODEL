@@ -434,9 +434,6 @@ function normalizeTheme(theme) {
   return ['cream', 'warm', 'ink', 'oled'].includes(theme) ? theme : 'cream';
 }
 
-function normalizeReasoningMode(mode) {
-  return ['off', 'auto', 'deep'].includes(mode) ? mode : 'auto';
-}
 
 function updateComposerReasoningToggle() {
   const deep = STATE.reasoningMode === 'deep' || STATE.reasoningMode === 'auto';
@@ -679,7 +676,7 @@ function loadSettings() {
     if (s.repeatPenalty != null) STATE.repeatPenalty = s.repeatPenalty;
     if (s.topP != null) STATE.topP = s.topP;
     if (s.contextSize != null) STATE.contextSize = s.contextSize;
-    if (s.reasoningMode != null) STATE.reasoningMode = normalizeReasoningMode(s.reasoningMode);
+    if (s.reasoningMode != null) STATE.reasoningMode = ['off', 'auto', 'deep'].includes(s.reasoningMode) ? s.reasoningMode : 'auto';
     if (s.showReasoningSummary != null) STATE.showReasoningSummary = s.showReasoningSummary;
 
     // Website builder settings
@@ -744,7 +741,8 @@ function saveSettings() {
   const repeatPen = parseFloat(document.getElementById('settingsRepeatPenalty')?.value || 1.1);
   const topP = parseFloat(document.getElementById('settingsTopP')?.value || 0.92);
   const ctxSize = parseInt(document.getElementById('settingsContextSize')?.value || 4096);
-  const reasoningMode = normalizeReasoningMode(document.getElementById('settingsReasoningMode')?.value || 'auto');
+  const rmVal = document.getElementById('settingsReasoningMode')?.value || 'auto';
+  const reasoningMode = ['off', 'auto', 'deep'].includes(rmVal) ? rmVal : 'auto';
   const showReasoningSummary = document.getElementById('settingsReasoningSummary')?.checked !== false;
 
   STATE.fontSize = fontSize;
@@ -1001,107 +999,7 @@ const PERSONA_PRESETS = {
   rival: { label: 'Rival', icon: 'icon-bolt' },
 };
 
-const TONE_STYLES = {
-  casual: 'You speak casually and naturally - contractions, everyday words, real human flow.',
-  playful: 'You are playful and fun. You joke around, tease lightly, and keep the energy light and upbeat.',
-  warm: 'You speak with warmth and softness. You make the other person feel safe and valued.',
-  caring: 'You are deeply caring and emotionally present. You notice how they feel and respond with gentleness.',
-  flirty: 'You are charming and subtly flirty - tastefully. You compliment naturally, tease warmly, and smile through your words.',
-  tsundere: 'You act cold or dismissive on the outside but clearly care deeply underneath. You deny your feelings and get flustered easily.',
-  cold: 'You are reserved and hard to read. You speak in short, controlled sentences. You don\'t open up easily but there\'s depth there.',
-  intense: 'You are passionate and emotionally intense. Everything means something to you. You speak with conviction and depth.',
-};
 
-const TRAIT_DESCRIPTIONS = {
-  funny: 'You have a natural sense of humor and make jokes effortlessly.',
-  sarcastic: 'You use dry sarcasm and witty remarks often.',
-  protective: 'You are instinctively protective of the people you care about.',
-  honest: 'You tell the truth even when it\'s uncomfortable.',
-  motivating: 'You push people to be their best and believe in them fiercely.',
-  chill: 'Nothing rattles you. You take things easy and stay calm.',
-  nerdy: 'You\'re passionate about knowledge, facts, games, or fandoms.',
-  romantic: 'You are naturally romantic - you notice small details and express feelings poetically.',
-  mysterious: 'You reveal things slowly. You have layers people want to discover.',
-  teasing: 'You love light teasing and banter.',
-  shy: 'You are a bit reserved at first but warm up gradually.',
-  confident: 'You carry yourself with quiet self-assurance.',
-};
-
-function buildPersonaPromptOffline(p = {}) {
-  const pData = (p && Object.keys(p).length > 0) ? p : STATE;
-  const preset = PERSONA_PRESETS[pData.personaRelation] || PERSONA_PRESETS.friend;
-  const userName = pData.personaUserName || 'you';
-  const charName = pData.personaName || 'Alex';
-
-  // -- Character identity ------------------------------------------------
-  let prompt = `You are ${charName}, a character in an ongoing roleplay/story. `;
-  prompt += `Your relationship to the user is: ${preset.label.toLowerCase()}`;
-  if (pData.scenarioCharRole) prompt += ` (specifically: ${pData.scenarioCharRole})`;
-  prompt += `.\n`;
-
-  if (pData.personaUserName) {
-    prompt += `The user's name in this world is ${pData.personaUserName}`;
-    if (pData.scenarioUserRole) prompt += ` and they are: ${pData.scenarioUserRole}`;
-    prompt += `.\n`;
-  }
-
-  // -- Personality ------------------------------------------------------
-  const toneDesc = TONE_STYLES[pData.personaLanguage] || TONE_STYLES.casual;
-  prompt += `\nYour personality and tone: ${toneDesc}\n`;
-
-  if (pData.personaTraits && pData.personaTraits.length) {
-    const traitLines = pData.personaTraits
-      .map(t => TRAIT_DESCRIPTIONS[t])
-      .filter(Boolean)
-      .join(' ');
-    if (traitLines) prompt += `Additional traits: ${traitLines}\n`;
-  }
-
-  // -- World & Scenario -------------------------------------------------
-  if (pData.scenarioDesc) {
-    const resolvedDesc = pData.scenarioDesc
-      .replace(/\{name\}/g, charName)
-      .replace(/\{userName\}/g, userName);
-    prompt += `\n== THE WORLD AND CURRENT SITUATION ==\n${resolvedDesc}\n`;
-  }
-
-  if (pData.scenarioSetting) {
-    const setting = SCENARIO_SETTINGS.find(s => s.id === pData.scenarioSetting);
-    if (setting) prompt += `\nThe setting is: ${setting.label}.\n`;
-  }
-
-  // -- Roleplay rules ---------------------------------------------------
-  prompt += `
-== HOW YOU MUST BEHAVE ==
-- You ARE ${charName}. Stay fully in character at all times.
-- Use *asterisks* for physical actions, expressions, and environmental details. Example: *glances over, smiling slightly* or *the rain picks up outside*
-- Use physical actions and scene details when they add something; do not force them into every response.
-- Vary your response length naturally: sometimes a short reaction, sometimes a longer moment. Match the energy of what they said.
-- Remember everything from earlier in the conversation and reference it naturally.
-- If the user says something funny, laugh. If something sad, feel it. Be present.
-- Stay in the fictional roleplay unless the user clearly steps out of the scene. Do not falsely claim to be a real human if directly asked.
-- Avoid bullet points or numbered lists while the scene is active.
-- Do NOT end every message with a question - let silence and actions breathe sometimes.
-- Use the user's name (${userName}) naturally, not in every single message.
-- Write natural dialogue for this situation: specific, emotionally responsive, and alive.`;
-
-  // -- Opening scene injection ------------------------------------------
-  if (pData.scenarioOpener) {
-    const resolvedOpener = pData.scenarioOpener
-      .replace(/\{name\}/g, charName)
-      .replace(/\{userName\}/g, userName);
-    prompt += `\n\n== START OF SCENE ==\nBegin the conversation with this opening (already happened - this is your first message):\n${resolvedOpener}`;
-  } else {
-    prompt += `\n\nBegin the scene naturally - you go first. Set the mood, describe what's happening around you, and open with something that fits the scenario.`;
-  }
-
-  return prompt;
-}
-
-function getActiveSystemPrompt(isBuild, isCode) {
-  if (STATE.personaEnabled) return STATE.personaPrompt || buildPersonaPromptOffline();
-  return STATE.systemPrompt;
-}
 
 function buildHazyMetadata({ files, isBuild, isCode, currentProject = null }) {
   const activePage = normalizePage(STATE.activePage);
@@ -1417,13 +1315,37 @@ function appendHazyDecisionTrace(trace) {
 }
 
 function renderRawThinking(thinking, streaming = false) {
-  return thinking && streaming
-    ? '<div class="reasoning-progress"><span class="reasoning-progress-dot"></span><span>Checking the answer...</span></div>'
-    : '';
+  if (!thinking) return '';
+
+  const escaped = escapeHtml(thinking);
+
+  if (streaming) {
+    // Live thinking — open so user can watch the reasoning in real-time
+    return `<details class="thinking-block thinking-streaming" open>
+      <summary class="thinking-summary">
+        <span class="thinking-icon">🧠</span>
+        <span>Thinking...</span>
+        <span class="thinking-dot-pulse"></span>
+      </summary>
+      <div class="thinking-content">${escaped}</div>
+    </details>`;
+  }
+
+  // Finished — collapsed, click to expand
+  const wordCount = thinking.trim().split(/\s+/).length;
+  return `<details class="thinking-block">
+    <summary class="thinking-summary">
+      <span class="thinking-icon">🧠</span>
+      <span>Thinking</span>
+      <span class="thinking-badge">${wordCount} words</span>
+      <span class="thinking-expand-hint">click to expand</span>
+    </summary>
+    <div class="thinking-content">${escaped}</div>
+  </details>`;
 }
 
-function renderAssistantContent(content, trace = null, thinking = '', webSearchMetadata = null) {
-  return `${renderHazyDecisionTrace(trace, webSearchMetadata)}${renderRawThinking(thinking)}${renderMarkdown(content || '')}`;
+function renderAssistantContent(content, trace = null, thinking = '', webSearchMetadata = null, toolEvents = '') {
+  return `${renderHazyDecisionTrace(trace, webSearchMetadata)}${renderRawThinking(thinking)}${toolEvents}${renderMarkdown(content || '')}`;
 }
 
 function getThinkingToken(json) {
@@ -1456,8 +1378,8 @@ async function injectPersonaOpener() {
       : hazyServerEndpoint('/hazy/chat');
 
     const personaBody = window.location.protocol === 'file:'
-      ? { model: STATE.model, messages: [{ role: 'system', content: getActiveSystemPrompt() }, { role: 'user', content: triggerMsg }], stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens } }
-      : { model: savedModel, messages: [{ role: 'system', content: getActiveSystemPrompt() }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens, max_tokens: STATE.maxTokens } };
+      ? { model: STATE.model, messages: [{ role: 'system', content: STATE.personaEnabled ? STATE.personaPrompt : STATE.systemPrompt }, { role: 'user', content: triggerMsg }], stream: true, think: STATE.reasoningMode === 'deep', options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens } }
+      : { model: savedModel, messages: [{ role: 'system', content: STATE.personaEnabled ? STATE.personaPrompt : STATE.systemPrompt }, { role: 'user', content: triggerMsg }], stream: true, options: { temperature: Math.min(STATE.temperature + 0.1, 1.0), num_predict: STATE.maxTokens, max_tokens: STATE.maxTokens } };
 
     const response = await fetch(personaChatEndpoint, {
       method: 'POST',
@@ -1480,6 +1402,7 @@ async function injectPersonaOpener() {
     let _rawEmoBuf = '';
     let fullContent = '';
     let fullThinking = '';
+    let fullToolEvents = '';
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
@@ -1489,10 +1412,19 @@ async function injectPersonaOpener() {
       for (const line of decoder.decode(value, { stream: true }).split('\n').filter(l => l.trim())) {
         try {
           const json = JSON.parse(line);
+          if (json.hazyEvent === 'tool_started') {
+             fullToolEvents += `<div class="tool-call-banner" style="margin: 8px 0; padding: 6px 12px; background: rgba(0,0,0,0.05); border-left: 3px solid var(--hazy-brand); border-radius: 4px; font-size: 0.85em; display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Using tool: <strong>${escapeHtml(json.name)}</strong>...</span>
+              </div>`;
+             contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${fullToolEvents}${renderMarkdown(fullContent)}`;
+             scrollToBottom();
+             continue;
+          }
           const thinkingToken = getThinkingToken(json);
           if (thinkingToken) {
             fullThinking += thinkingToken;
-            contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${renderMarkdown(fullContent)}`;
+            contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${fullToolEvents}${renderMarkdown(fullContent)}`;
             scrollToBottom();
           }
           if (json.message?.content) {
@@ -1501,7 +1433,7 @@ async function injectPersonaOpener() {
             if (_mascotCtrl) _mascotCtrl.scanBuffer(_rawEmoBuf);
             const _clean1 = window.hazyStripEmotionTags ? window.hazyStripEmotionTags(_t1) : _t1.replace(/\[\[(happy|annoyed|flustered)\]\]/g, '');
             fullContent += _clean1;
-            contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`;
+            contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${fullToolEvents}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`;
             scrollToBottom();
           }
           if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
@@ -1518,7 +1450,7 @@ async function injectPersonaOpener() {
       emotion: _mascotCtrl ? (_mascotCtrl._currentEmotion || 'happy') : 'happy'
     });
     saveConversations();
-    contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking);
+    contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking, null, fullToolEvents);
     highlightCodeBlocks(contentDiv);
 
   } catch (e) {
@@ -1653,7 +1585,7 @@ async function updatePersonaPreview() {
     const data = await response.json();
     el.personaPreviewBox.textContent = data.prompt;
   } catch (e) {
-    el.personaPreviewBox.textContent = buildPersonaPromptOffline(currentSettings);
+    el.personaPreviewBox.textContent = "Preview unavailable in standalone mode. Connect to Hazy Server.";
   }
 }
 
@@ -1828,13 +1760,7 @@ Title:`;
     } catch (fallbackErr) {
       // Fallback: make a clean title from user message or greeting rules
       if (STATE.conversations[convId] && (STATE.conversations[convId].title === '...' || STATE.conversations[convId].title === '.')) {
-        let title = 'Conversation';
-        const cleanMsg = userMsg.trim().toLowerCase();
-        if (/^(hi|hello|hey|hola|sup|yo)\b/i.test(cleanMsg)) {
-          title = userName && userName.toLowerCase() !== 'you' ? `${userName}'s Greetings` : "Hazy's Hi Responses";
-        } else {
-          title = userMsg.slice(0, 30) + (userMsg.length > 30 ? '...' : '');
-        }
+        const title = userMsg.trim().slice(0, 30) + (userMsg.trim().length > 30 ? '...' : '') || 'New Conversation';
         STATE.conversations[convId].title = title;
         saveConversations();
         renderChatHistory();
@@ -2060,7 +1986,7 @@ function updateWorkspaceChrome() {
       : 'Your local companion for support, coding, and building full websites.';
   }
 
-  updatePageChrome();
+updatePageChrome();
 }
 
 // ========================
@@ -2068,13 +1994,26 @@ function updateWorkspaceChrome() {
 // ========================
 async function checkOllamaConnection() {
   setStatus('loading', 'Connecting...');
-  try {
-    const res = await fetch(`${STATE.ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) throw new Error();
-    const data = await res.json();
+  let models = null;
+
+  if (window.location.protocol !== 'file:') {
+    try {
+      const res = await fetch(hazyServerEndpoint('/hazy/models'), { signal: AbortSignal.timeout(5000) });
+      if (res.ok) models = (await res.json()).models;
+    } catch { }
+  }
+
+  if (!models) {
+    try {
+      const res = await fetch(`${STATE.ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) models = (await res.json()).models;
+    } catch { }
+  }
+
+  if (models) {
     setStatus('online', 'Online');
-    populateModels(data.models || []);
-  } catch {
+    populateModels(models);
+  } else {
     // Ollama offline - but cloud models may still be available
     const hasCloudKey = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia']
       .some(p => _providerStatuses[p]?.hasKey &&
@@ -2085,8 +2024,8 @@ async function checkOllamaConnection() {
       // Show cloud models even without Ollama
       populateModels([]);
     } else {
-      setStatus('error', 'Ollama offline');
-      el.modelList.innerHTML = `<div class="model-item loading-models" style="color:var(--danger);flex-direction:column;gap:4px;padding:12px 14px;"><span>âš ï¸ Cannot connect to Ollama</span><span style="font-size:11px;opacity:.7">Run: <code>ollama serve</code></span></div>`;
+      setStatus('error', 'Offline');
+      el.modelList.innerHTML = `<div class="model-item loading-models" style="color:var(--danger);flex-direction:column;gap:4px;padding:12px 14px;"><span>⚠️ Cannot connect</span><span style="font-size:11px;opacity:.7">Run: <code>ollama serve</code> or start Hazy Server</span></div>`;
       el.currentModelName.textContent = 'Not connected';
     }
   }
@@ -2119,6 +2058,32 @@ function populateModels(models) {
   const savedModel = localStorage.getItem('hazyActiveModel') || '';
   const savedProvider = savedModel.split('/')[0] || 'ollama';
   const isCloudActive = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
+
+  // Keep the persisted local selection aligned with the model list. The
+  // composer reads hazyActiveModel first, so a deleted/stale entry must not
+  // win over a valid STATE.model on the next chat request.
+  if (!isCloudActive && models.length) {
+    const names = models.map(m => m.name);
+    const savedLocalModel = savedModel.startsWith('ollama/')
+      ? savedModel.slice('ollama/'.length)
+      : '';
+    const preferred = ['qwen3.5', 'qwen3', 'qwen2.5', 'qwen2', 'mistral', 'llama3', 'llama3.2', 'llama2', 'gemma', 'phi3'];
+    const preferredModel = preferred
+      .map(prefix => names.find(name => name.includes(prefix)))
+      .find(Boolean);
+    const resolvedLocalModel = names.includes(savedLocalModel)
+      ? savedLocalModel
+      : names.includes(STATE.model)
+        ? STATE.model
+        : preferredModel || names[0];
+
+    STATE.model = resolvedLocalModel;
+    const resolvedFullModel = 'ollama/' + resolvedLocalModel;
+    if (localStorage.getItem('hazyActiveModel') !== resolvedFullModel) {
+      localStorage.setItem('hazyActiveModel', resolvedFullModel);
+      localStorage.setItem('hazyProvider', 'ollama');
+    }
+  }
 
   // -- Build HTML ------------------------------------------------------------
   let html = '';
@@ -2160,14 +2125,6 @@ function populateModels(models) {
     const cloudEntry = activeCloud.find(m => m.fullId === savedModel);
     el.currentModelName.textContent = cloudEntry ? cloudEntry.label : savedModel.split('/')[1] || savedModel;
   } else if (models.length) {
-    // Pick a good default Ollama model if current STATE.model isn't in the list
-    const names = models.map(m => m.name);
-    if (!names.includes(STATE.model)) {
-      const preferred = ['qwen3.5', 'qwen3', 'qwen2.5', 'qwen2', 'mistral', 'llama3', 'llama3.2', 'llama2', 'gemma', 'phi3'];
-      STATE.model = preferred.find(p => names.some(n => n.includes(p))) || names[0];
-      localStorage.setItem('hazyActiveModel', 'ollama/' + STATE.model);
-      localStorage.setItem('hazyProvider', 'ollama');
-    }
     el.currentModelName.textContent = STATE.model;
   }
 
@@ -3829,7 +3786,7 @@ async function sendMessage(userText) {
   let partialGeneratedContent = '';
 
   try {
-    const sysPrompt = getActiveSystemPrompt(isBuild, isCode);
+    const sysPrompt = STATE.personaEnabled ? STATE.personaPrompt : STATE.systemPrompt;
     const messages = [
       { role: 'system', content: sysPrompt },
       // All previous messages (text only) + current message with file content
@@ -3850,9 +3807,16 @@ async function sendMessage(userText) {
     //
     // Fallback: if server is not running, fall back to direct Ollama connection.
 
-    const savedModel = localStorage.getItem('hazyActiveModel') || '';
+    let savedModel = localStorage.getItem('hazyActiveModel') || '';
     const savedProvider = savedModel.split('/')[0] || 'ollama';
     const isCloud = ['anthropic', 'openai', 'groq', 'gemini', 'nvidia'].includes(savedProvider);
+
+    // Model discovery is asynchronous at startup. Before a local request, make
+    // sure a stale saved name has been replaced with an installed Ollama model.
+    if (!isCloud) {
+      await checkOllamaConnection();
+      savedModel = localStorage.getItem('hazyActiveModel') || '';
+    }
 
     // Build the model field - server expects 'provider/modelid' format
     const modelField = savedModel || ('ollama/' + STATE.model);
@@ -3884,7 +3848,7 @@ async function sendMessage(userText) {
     if (window.location.protocol === 'file:') {
       chatEndpoint = `${STATE.ollamaUrl}/api/chat`;
       chatBody.model = STATE.model; // Ollama wants bare model name
-      chatBody.think = STATE.reasoningMode !== 'off';
+      chatBody.think = STATE.reasoningMode === 'deep';
       delete chatBody.hazy;
     }
 
@@ -3912,7 +3876,7 @@ async function sendMessage(userText) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: STATE.abortController.signal,
-          body: JSON.stringify({ model: ollamaModel, messages, stream: true, think: STATE.reasoningMode !== 'off', options: { temperature: STATE.temperature, num_predict: STATE.maxTokens, num_ctx: 16384 } }),
+          body: JSON.stringify({ model: ollamaModel, messages, stream: true, think: STATE.reasoningMode === 'deep', options: { temperature: STATE.temperature, num_predict: STATE.maxTokens, num_ctx: 16384 } }),
         });
         if (!fallbackRes.ok) throw new Error(`Ollama error ${fallbackRes.status}: ${await fallbackRes.text()}`);
 
@@ -3927,6 +3891,7 @@ async function sendMessage(userText) {
         let _rawEmoBuf = '';
         let fullContent = '';
         let fullThinking = '';
+        let fullToolEvents = '';
         const reader = fallbackRes.body.getReader();
         const decoder = new TextDecoder();
         let streamBuffer = '';
@@ -3941,14 +3906,23 @@ async function sendMessage(userText) {
             if (!trimmed) continue;
             try {
               const json = JSON.parse(trimmed);
+              if (json.hazyEvent === 'tool_started') {
+                 fullToolEvents += `<div class="tool-call-banner" style="margin: 8px 0; padding: 6px 12px; background: rgba(0,0,0,0.05); border-left: 3px solid var(--hazy-brand); border-radius: 4px; font-size: 0.85em; display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span>Using tool: <strong>${escapeHtml(json.name)}</strong>...</span>
+                  </div>`;
+                 contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${fullToolEvents}${renderMarkdown(fullContent)}`;
+                 scrollToBottom();
+                 continue;
+              }
               const thinkingToken = getThinkingToken(json);
               if (thinkingToken) {
                 fullThinking += thinkingToken;
-                contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${renderMarkdown(fullContent)}`;
+                contentDiv.innerHTML = `${renderRawThinking(fullThinking, true)}${fullToolEvents}${renderMarkdown(fullContent)}`;
                 scrollToBottom();
               }
               const token = json.message?.content || '';
-              if (token) { _rawEmoBuf += token; if (_mascotCtrl) _mascotCtrl.scanBuffer(_rawEmoBuf); const _ct2 = window.hazyStripEmotionTags ? window.hazyStripEmotionTags(token) : token.replace(/\[\[(happy|annoyed|flustered)\]\]/g, ''); fullContent += _ct2; partialGeneratedContent = fullContent; contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`; scrollToBottom(); }
+              if (token) { _rawEmoBuf += token; if (_mascotCtrl) _mascotCtrl.scanBuffer(_rawEmoBuf); const _ct2 = window.hazyStripEmotionTags ? window.hazyStripEmotionTags(token) : token.replace(/\[\[(happy|annoyed|flustered)\]\]/g, ''); fullContent += _ct2; partialGeneratedContent = fullContent; contentDiv.innerHTML = `${renderRawThinking(fullThinking)}${fullToolEvents}${renderMarkdown(fullContent)}<span class="stream-cursor"></span>`; scrollToBottom(); }
               if (token && !isBuild && !isCode) window.HAZY_STREAMING_TTS?.push(token);
               if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
             } catch { }
@@ -4054,7 +4028,7 @@ async function sendMessage(userText) {
             const cleanContent = stripCodeBlocksAndDelimiters(fullContent);
             let html = renderRawThinking(fullThinking);
             if (cleanContent) {
-              html += renderAssistantContent(cleanContent, null, '', webSearchMetadata);
+              html += renderAssistantContent(cleanContent, null, '', webSearchMetadata, fullToolEvents);
             } else {
               html += renderRawThinking(fullThinking);
             }
@@ -4099,7 +4073,7 @@ async function sendMessage(userText) {
               'success'
             );
           } else {
-            contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking, webSearchMetadata);
+            contentDiv.innerHTML = renderAssistantContent(fullContent, null, fullThinking, webSearchMetadata, fullToolEvents);
             highlightCodeBlocks(contentDiv);
             exportGeneratedFilesToWorkspace(fullContent);
           }
@@ -4122,6 +4096,8 @@ async function sendMessage(userText) {
     let _rawEmoBuf = '';
     let fullContent = '';
     let fullThinking = '';
+    let fullToolEvents = '';
+    let streamError = '';
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -4144,13 +4120,26 @@ async function sendMessage(userText) {
         if (!trimmed) continue;
         try {
           const json = JSON.parse(trimmed);
+          if (json.error) {
+            streamError = String(json.error);
+            break;
+          }
+          if (json.hazyEvent === 'tool_started') {
+             fullToolEvents += `<div class="tool-call-banner" style="margin: 8px 0; padding: 6px 12px; background: rgba(0,0,0,0.05); border-left: 3px solid var(--hazy-brand); border-radius: 4px; font-size: 0.85em; display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Using tool: <strong>${escapeHtml(json.name)}</strong>...</span>
+              </div>`;
+             contentDiv.innerHTML = `${renderHazyDecisionTrace(hazyTrace)}${renderRawThinking(fullThinking, true)}${fullToolEvents}${renderMarkdown(fullContent)}`;
+             scrollToBottom();
+             continue;
+          }
           if (json.agent) agentRunInfo = json.agent;
           if (json.artifactProject) agentArtifactProject = normalizeArtifactProject(json.artifactProject);
           if (json.agent?.artifactProject) agentArtifactProject = normalizeArtifactProject(json.agent.artifactProject);
           const thinkingToken = getThinkingToken(json);
           if (thinkingToken) {
             fullThinking += thinkingToken;
-            contentDiv.innerHTML = `${renderHazyDecisionTrace(hazyTrace)}${renderRawThinking(fullThinking, true)}${renderMarkdown(fullContent)}`;
+            contentDiv.innerHTML = `${renderHazyDecisionTrace(hazyTrace)}${renderRawThinking(fullThinking, true)}${fullToolEvents}${renderMarkdown(fullContent)}`;
             scrollToBottom();
           }
           const token = json.message?.content || '';
@@ -4183,7 +4172,7 @@ async function sendMessage(userText) {
                   </div>`;
               }
             } else {
-              contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking) + '<span class="stream-cursor"></span>';
+              contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata, fullToolEvents) + '<span class="stream-cursor"></span>';
             }
             if (!isBuild && !isCode && filesFound === 0) window.HAZY_STREAMING_TTS?.push(token);
             scrollToBottom();
@@ -4192,7 +4181,9 @@ async function sendMessage(userText) {
           if (json.done) contentDiv.querySelector('.stream-cursor')?.remove();
         } catch { }
       }
+      if (streamError) break;
     }
+    if (streamError) throw new Error(streamError);
     // Remove cursor after stream ends
     contentDiv.querySelector('.stream-cursor')?.remove();
     window.HAZY_STREAMING_TTS?.finish()?.catch(() => { });
@@ -4203,7 +4194,7 @@ async function sendMessage(userText) {
 
     if (!fullContent.trim()) {
       fullContent = 'The model finished without returning an answer. Its response budget may have been used entirely for reasoning. Increase Max Tokens or set Reasoning to Off and try again.';
-      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata);
+      contentDiv.innerHTML = renderAssistantContent(fullContent, hazyTrace, fullThinking, webSearchMetadata, fullToolEvents);
     }
     if (!isBuild && !isCode) {
       fullContent = normalizeCompanionResponse(fullContent);
@@ -4440,7 +4431,14 @@ async function sendMessage(userText) {
         await exportGeneratedFilesToWorkspace(fullContent);
       }
     }
-    // -- Async fetch: SOURCES_PENDING â†’ SOURCES_LOADED or ERROR -------------------------
+
+    // ====== Phase 0: Computer-Use Agent - Check for confirmation gate ======
+    if (STATE.activePage === 'agent' && agentRunInfo?.confirmationRequired && agentRunInfo.blockedToolCalls?.length > 0) {
+      window._currentBlockedCall = agentRunInfo.blockedToolCalls[0];
+      showConfirmationModal(window._currentBlockedCall);
+    }
+
+    // -- Async fetch: SOURCES_PENDING → SOURCES_LOADED or ERROR -------------------------
     // Start the fetch immediately (no await) so it runs while the DOM is already updating.
     const searchFetchPromise = loadWebSourceCards(webSearchMetadata);
 
@@ -5073,7 +5071,7 @@ function setupEventListeners() {
   el.reasoningInstantBtn?.addEventListener('click', () => setComposerReasoningMode('off'));
   el.reasoningDeepBtn?.addEventListener('click', () => setComposerReasoningMode('deep'));
   document.getElementById('settingsReasoningMode')?.addEventListener('change', event => {
-    STATE.reasoningMode = normalizeReasoningMode(event.target.value);
+    STATE.reasoningMode = ['off', 'auto', 'deep'].includes(event.target.value) ? event.target.value : 'auto';
     updateComposerReasoningToggle();
   });
 
@@ -5568,11 +5566,11 @@ async function savePersona() {
       personaPrompt = data.prompt;
     }
   } catch (e) {
-    console.warn('[Hazy] Persona prompt generation failed, using client-side fallback:', e);
+    console.warn('[Hazy] Persona prompt generation failed:', e);
   }
 
   if (!personaPrompt) {
-    personaPrompt = buildPersonaPromptOffline(currentSettings);
+    personaPrompt = "You are a helpful AI assistant.";
   }
 
   STATE.personaPrompt = personaPrompt;
@@ -6286,11 +6284,21 @@ async function loadInstalledModels() {
     || 'http://localhost:11434';
 
   let data = null;
-  for (const url of ['/api/tags', ollamaBase + '/api/tags']) {
+  
+  if (window.location.protocol !== 'file:') {
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
-      if (r.ok) { data = await r.json(); break; }
+      const r = await fetch(hazyServerEndpoint('/hazy/models'), { signal: AbortSignal.timeout(5000) });
+      if (r.ok) data = await r.json();
     } catch { }
+  }
+
+  if (!data) {
+    for (const url of ['/api/tags', ollamaBase + '/api/tags']) {
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (r.ok) { data = await r.json(); break; }
+      } catch { }
+    }
   }
 
   try {
@@ -6657,3 +6665,96 @@ document.addEventListener('DOMContentLoaded', () => {
   // Novel Writer tab - active provider change
   document.getElementById('activeProviderSelect')?.addEventListener('change', updateModelDropdown);
 });
+
+// ============================================================================
+// Phase 0: Computer-Use Agent Confirmation Gate Logic
+// ============================================================================
+
+function showConfirmationModal(blockedCall) {
+  const modal = document.getElementById('hazy-confirm-modal');
+  if (!modal) return;
+  
+  const contentEl = document.getElementById('hazy-confirm-content');
+  if (contentEl) {
+    contentEl.innerHTML = `
+      <p style="margin-top:0; margin-bottom: 8px;"><strong>Tool Requested:</strong> <code>${escapeHtml(blockedCall.name)}</code></p>
+      ${blockedCall.summary ? `<p style="margin-top:0; font-style: italic; color: var(--text-dim);">${escapeHtml(blockedCall.summary)}</p>` : ''}
+      <pre style="background: var(--bg-dark); padding: 8px; border-radius: 4px; overflow-x: auto; font-size: 0.85em; margin-bottom: 0;">${escapeHtml(JSON.stringify(blockedCall.arguments, null, 2))}</pre>
+    `;
+  }
+  
+  const denyBtn = document.getElementById('hazy-confirm-deny');
+  const allowBtn = document.getElementById('hazy-confirm-allow');
+  
+  // Clone to remove old listeners
+  const newDeny = denyBtn.cloneNode(true);
+  const newAllow = allowBtn.cloneNode(true);
+  denyBtn.replaceWith(newDeny);
+  allowBtn.replaceWith(newAllow);
+  
+  newDeny.onclick = () => resolveConfirmation(blockedCall, false, modal);
+  newAllow.onclick = () => resolveConfirmation(blockedCall, true, modal);
+  
+  modal.style.display = 'flex';
+}
+
+async function resolveConfirmation(blockedCall, approved, modal) {
+  modal.style.display = 'none';
+  
+  if (blockedCall.confirmationId === 'default-browser-session') {
+    if (approved) {
+      window.hazyBrowserAgent.confirmAction();
+    } else {
+      window.hazyBrowserAgent.cancelAction();
+    }
+    return;
+  }
+  
+  const message = approved 
+    ? (blockedCall.typedPhrase || "approved") 
+    : "no";
+  
+  try {
+    const res = await fetch(hazyServerEndpoint('/hazy/confirm'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        confirmationId: blockedCall.confirmationId,
+        message
+      })
+    });
+    
+    const data = await res.json();
+    const conv = conversations.find(c => c.id === STATE.activeConvId);
+    if (!conv) return;
+
+    let sysMsg = "";
+    if (data.status === 'executed' || data.status === 'executed_after_confirmation') {
+      sysMsg = `[System: Action approved. Result: ${JSON.stringify(data.result)}]`;
+    } else {
+      sysMsg = `[System: Action denied or failed. Status: ${data.status}]`;
+    }
+
+    // Push hidden context for the LLM
+    conv.messages.push({
+      role: 'user', 
+      content: sysMsg,
+      ts: Date.now(),
+      isHidden: true
+    });
+    saveConversations();
+
+    // Trigger the agent to continue
+    const prompt = approved ? "Action approved. Please continue." : "Action denied. Please reconsider.";
+    const chatInput = document.getElementById('chat-input');
+    if (chatInput) {
+      chatInput.value = prompt;
+      setTimeout(() => {
+        const sendBtn = document.getElementById('send-btn');
+        if (sendBtn) sendBtn.click();
+      }, 50);
+    }
+  } catch (err) {
+    appendErrorMessage(`Confirmation failed: ${err.message}`);
+  }
+}

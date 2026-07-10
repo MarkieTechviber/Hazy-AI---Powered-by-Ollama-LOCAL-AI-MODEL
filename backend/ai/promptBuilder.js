@@ -3,7 +3,7 @@
 const { buildTaskReasoningGuidance } = require('./reasoning/reasoningPrompt');
 const { analyzeColorIntent, formatPaletteForPrompt, isUIRequest } = require('./colorPaletteEngine');
 
-const { WEBSITE_SYSTEM_PROMPT, CODE_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT } = require('./system_prompt/prompts');
+const { getPrompts } = require('./system_prompt/prompts');
 
 const CODE_LANGUAGES = {
   python: { label: 'Python', ext: 'py' },
@@ -475,6 +475,8 @@ function buildDesignBlock(codeAnalysis, currentProject, hazyTheme = null, messag
 }
 
 function buildSystemPrompt(context) {
+  const prompts = getPrompts();
+  const { DEFAULT_SYSTEM_PROMPT, WEBSITE_SYSTEM_PROMPT, CODE_SYSTEM_PROMPT } = prompts;
   const {
     messageType,
     emotion,
@@ -928,4 +930,4 @@ function buildPersonaPrompt(p = {}) {
   return prompt;
 }
 
-module.exports = { buildSystemPrompt, DEFAULT_SYSTEM_PROMPT, buildPersonaPrompt };
+module.exports = { buildSystemPrompt, getPrompts, buildPersonaPrompt };

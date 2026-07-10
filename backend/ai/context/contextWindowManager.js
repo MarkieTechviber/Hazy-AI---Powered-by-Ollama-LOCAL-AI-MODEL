@@ -166,12 +166,49 @@ function truncateToTokens(text, tokenLimit, marker = '… [truncated]', model) {
   return `${value.slice(0, maxChars - markerLength)}${marker}`;
 }
 
+function compressToolContent(toolName, content, tokenLimit = 1200, model) {
+  const value = String(content || '').trim();
+  const limit = Math.max(32, Math.floor(Number(tokenLimit) || 1200));
+  const originalTokens = estimateTokens(value, model);
+  if (originalTokens <= limit) {
+    return { content: value, compressed: false, tokens: originalTokens };
+  }
+
+  const lines = value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const priorityLine = /^(?:status|title|url|source|error|warning|query|search|result|id)\s*:/i;
+  const important = lines.filter(line => priorityLine.test(line));
+  const remaining = lines.filter(line => !priorityLine.test(line));
+  const marker = `[${String(toolName || 'tool')} output truncated]`;
+  const contentLimit = Math.max(16, limit - estimateTokens(marker, model));
+  const selected = [];
+
+  for (const line of [...important, ...remaining]) {
+    const candidate = selected.length ? `${selected.join('\n')}\n${line}` : line;
+    if (estimateTokens(candidate, model) > contentLimit) continue;
+    selected.push(line);
+  }
+
+  let compressedContent = selected.join('\n');
+  if (!compressedContent) {
+    compressedContent = truncateToTokens(value, contentLimit, '', model).trim();
+  }
+  compressedContent = `${compressedContent}\n${marker}`.trim();
+  if (estimateTokens(compressedContent, model) > limit) {
+    compressedContent = truncateToTokens(compressedContent, limit, '', model).trim();
+  }
+
+  return {
+    content: compressedContent,
+    compressed: true,
+    tokens: estimateTokens(compressedContent, model)
+  };
+}
+
 /** Extract important lines from a long text for summarisation */
 function summarizeMessages(messages = [], maxTokens = 800, model) {
   if (!messages.length || maxTokens <= 0) return '';
-  const maxChars = maxTokens * 4.5;
-  const lines = ['[Earlier Conversation Summary]'];
-  let used = 0;
+  const tokenLimit = Math.max(16, Math.floor(maxTokens));
+  const lines = ['[Conversation Summary - Earlier Context]'];
 
   for (const msg of messages) {
     const role = msg.role === 'assistant' ? 'Hazy' : 'User';
@@ -179,12 +216,14 @@ function summarizeMessages(messages = [], maxTokens = 800, model) {
     // take first 200 chars + ellipsis if longer
     const preview = content.length > 200 ? content.slice(0, 197) + '…' : content;
     const line = `- ${role}: ${preview}`;
-    if (used + line.length > maxChars) break;
+    if (estimateTokens([...lines, line].join('\n'), model) > tokenLimit) break;
     lines.push(line);
-    used += line.length;
   }
   if (lines.length === 1) {
-    lines.push(`- (${messages.length} earlier messages omitted)`);
+    const fallback = `- (${messages.length} earlier messages omitted)`;
+    if (estimateTokens(`${lines[0]}\n${fallback}`, model) <= tokenLimit) {
+      lines.push(fallback);
+    }
   }
   return lines.join('\n');
 }
@@ -591,7 +630,7 @@ function buildContextPack(body = {}, packing = {}) {
   if (summaryContent) {
     messages.push({
       role: 'system',
-      content: `[Conversation Summary]\n${summaryContent}`,
+      content: `[Conversation Summary - Earlier Context]\n${summaryContent}`,
       contextSlot: 'summary'
     });
   }
@@ -664,7 +703,8 @@ function buildContextPack(body = {}, packing = {}) {
       ...budget,
       beforeTokens: lockedTokens + slotBudgets.remaining, // rough estimate
       afterTokens: totalTokens,
-      trimmedMessageCount: trimLog.filter(t => t.action === 'DROP_OLD_MESSAGE').length,
+      trimmedMessageCount: Math.max(0, older.length - importantOlder.length)
+        + trimLog.filter(t => t.action === 'DROP_OLD_MESSAGE').length,
       summaryAdded: Boolean(summaryContent),
       overBudget: totalTokens > budget.safeInputLimit,
       overflowDetected: trimLog.length > 0,
@@ -726,9 +766,11 @@ module.exports = {
   isImportantMessage,
   summarizeMessages,
   truncateToTokens,
+  compressToolContent,
 
   // Packing
   buildContextPack,
+  buildManagedContext: buildContextPack,
   applyContextWindow,
 
   // Helpers (exposed for testing)
