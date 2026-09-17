@@ -1,6 +1,6 @@
 # Hazy
 
-Hazy is a local-first AI companion and agent that uses Ollama for private chat, memory, retrieval, tools, browser tasks, code assistance, and optional speech.
+Hazy is an open-source, local-first AI companion designed to feel warm, personal, and human-like in conversation while remaining clearly an AI system. It uses Ollama for private chat, memory, retrieval, tools, browser tasks, code assistance, and optional speech.
 
 Hazy keeps its normal conversation, retrieval, artifact, and provider-secret state on the machine running it. Cloud model providers and public web search are optional. They are used only when configured or requested, and data sent to them is then subject to those services' policies.
 
@@ -29,6 +29,10 @@ Screenshots have not yet been prepared for the repository. Suggested release scr
 - Local diagnostics and an optional benchmark; no application telemetry is sent by default.
 
 ## Why Hazy exists
+
+Hazy exists for people who want an AI companion that feels more natural, attentive, and personal than a robotic question-and-answer tool. Its purpose is to help with everyday conversation, reflection, learning, planning, creative work, research, and computer tasks while building a familiar sense of continuity through optional memory.
+
+Hazy is meant to provide a human-feeling interaction style without pretending to be a real human. It remains an AI assistant whose responses can be imperfect, whose actions require boundaries, and whose owner stays in control of its memory, tools, and data.
 
 Many assistants make remote accounts, hosted storage, and cloud inference the default. Hazy starts from a different assumption: a useful companion should run on a personal computer, keep durable state there, and let the owner decide when a cloud service or public website is involved. Local-first does not mean risk-free; agent tools still need boundaries and users still need to review confirmations.
 
