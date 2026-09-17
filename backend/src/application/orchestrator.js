@@ -23,6 +23,7 @@ const { buildRuntimeContextBlock } = require("../../agent/promptPolicy");
 const { defaultAgentRuntime, createToolContext } = require("../../agent/agentRuntime");
 
 const { DATA_DIR: dataDir, CONFIG_DIR } = require('../../config/runtimePaths');
+const MEMORY_ENABLED = process.env.HAZY_MEMORY_ENABLED !== '0';
 const database = new HazyDatabase(path.join(dataDir, "hazy.db"));
 const memoryManager = new MemoryManager(path.join(dataDir, "memory"), { database });
 const vectorSearch = new VectorSearch(path.join(dataDir, "rag"), { embeddingService: new OllamaEmbeddingService({ baseUrl: require('../../config/runtimeConfig').loadConfig().providers.ollama.baseUrl }) });
@@ -93,8 +94,10 @@ async function analyzeMessage({ body, conversationId = "default", userId = "defa
   });
   const toneProfile = getToneProfile(strategy.mode);
   let memory = [];
-  try { memory = memoryManager.getRelevantMemory({ conversationId, userId, projectId, query: latestMessage }); }
-  catch { console.warn('[Hazy] Memory retrieval unavailable.'); }
+  if (MEMORY_ENABLED) {
+    try { memory = memoryManager.getRelevantMemory({ conversationId, userId, projectId, query: latestMessage }); }
+    catch { console.warn('[Hazy] Memory retrieval unavailable.'); }
+  }
   
   let ragContext = [];
   if (body.hazy?.ragEnabled !== false) {
@@ -316,7 +319,7 @@ async function finalizeResponse({ conversationId, userId, userMessage, responseT
     }
   }
 
-  memoryManager.recordTurn({
+  if (MEMORY_ENABLED) memoryManager.recordTurn({
     conversationId,
     userId,
     projectId: analysis.projectId || "",

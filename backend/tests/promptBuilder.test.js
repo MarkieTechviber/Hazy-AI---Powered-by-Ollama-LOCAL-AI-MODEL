@@ -153,6 +153,15 @@ test('buildSystemPrompt includes companion emotion tag instructions', () => {
   assert.match(prompt, /\[\[annoyed\]\]/);
   assert.match(prompt, /\[\[flustered\]\]/);
 });
+
+test('buildSystemPrompt includes the product-level human-feeling companion foundation', () => {
+  const prompt = buildSystemPrompt(baseContext());
+  assert.match(prompt, /COMPANION FOUNDATION:/);
+  assert.match(prompt, /warm and attentive local AI companion/);
+  assert.match(prompt, /without pretending to be a real human/);
+  assert.match(prompt, /Treat remembered information as optional reference/);
+});
+
 test('buildPersonaPrompt interpolates values correctly', () => {
   const p = {
     personaRelation: 'bestfriend',

@@ -4,6 +4,7 @@ const { buildTaskReasoningGuidance } = require('./reasoning/reasoningPrompt');
 const { analyzeColorIntent, formatPaletteForPrompt, isUIRequest } = require('./colorPaletteEngine');
 
 const { getPrompts } = require('./system_prompt/prompts');
+const { buildCompanionProfilePrompt } = require('../config/companionProfile');
 
 const CODE_LANGUAGES = {
   python: { label: 'Python', ext: 'py' },
@@ -663,7 +664,9 @@ When generating website files, make the website visually harmonize with this act
     modePrompt = CODE_SYSTEM_PROMPT + activeCodeBlock + '\n\n';
   }
 
-  return modePrompt + `Use the user's existing system prompt, persona, and active mode instructions as the primary source of behavior, identity, tone, and boundaries.
+  return modePrompt + `${buildCompanionProfilePrompt()}
+
+Use the user's existing system prompt, persona, and active mode instructions as the primary source of behavior, identity, tone, and boundaries.
 
 Do not replace or re-interpret the user's chosen persona. Treat the guidance below as secondary turn-level support only.
 
