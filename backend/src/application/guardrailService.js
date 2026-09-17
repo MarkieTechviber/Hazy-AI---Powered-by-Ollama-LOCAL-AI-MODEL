@@ -10,6 +10,9 @@ function hasPromptInjection(text) {
 
 function validateRequest(body = {}) {
   const messages = body.messages || [];
+  if (!Array.isArray(messages) || messages.length > 500 || messages.some(message => !message || !['system', 'user', 'assistant', 'tool'].includes(message.role) || typeof message.content !== 'string')) {
+    return { allowed: false, status: 400, reason: 'messages must contain at most 500 messages with a valid role and text content.' };
+  }
 
   // 1. Check for prompt injection in the last user message
   const lastUserMsg = [...messages].reverse().find(m => m && m.role === 'user')?.content || '';

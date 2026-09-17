@@ -22,24 +22,18 @@ const { classifyAgentMode } = require("../../agent/agentTypes");
 const { buildRuntimeContextBlock } = require("../../agent/promptPolicy");
 const { defaultAgentRuntime, createToolContext } = require("../../agent/agentRuntime");
 
-const dataDir = path.join(__dirname, "..", "..", "..", "cache", "hazy-engine");
+const { DATA_DIR: dataDir, CONFIG_DIR } = require('../../config/runtimePaths');
 const database = new HazyDatabase(path.join(dataDir, "hazy.db"));
 const memoryManager = new MemoryManager(path.join(dataDir, "memory"), { database });
-const vectorSearch = new VectorSearch(path.join(dataDir, "rag"), { embeddingService: new OllamaEmbeddingService() });
+const vectorSearch = new VectorSearch(path.join(dataDir, "rag"), { embeddingService: new OllamaEmbeddingService({ baseUrl: require('../../config/runtimeConfig').loadConfig().providers.ollama.baseUrl }) });
 
 const fs = require('fs');
 
-function loadConfig() {
-  try {
-    const configPath = path.join(__dirname, '..', '..', '..', 'config', 'hazy-config.json');
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch (e) {
-    return { providers: { ollama: { enabled: true, baseUrl: 'http://localhost:11434' } }, defaults: {} };
-  }
-}
+const { loadConfig } = require('../../config/runtimeConfig');
 
 async function searchIfNeeded(latestMessage, body, { force = false } = {}) {
-  if (body.hazy?.toolResults?.length) {
+  if (process.env.HAZY_OFFLINE === '1') return [];
+  if (Array.isArray(body.hazy?.toolResults)) {
     return body.hazy.toolResults;
   }
 
@@ -98,27 +92,31 @@ async function analyzeMessage({ body, conversationId = "default", userId = "defa
     safety
   });
   const toneProfile = getToneProfile(strategy.mode);
-  const memory = memoryManager.getRelevantMemory({ conversationId, userId, projectId, query: latestMessage });
+  let memory = [];
+  try { memory = memoryManager.getRelevantMemory({ conversationId, userId, projectId, query: latestMessage }); }
+  catch { console.warn('[Hazy] Memory retrieval unavailable.'); }
   
   let ragContext = [];
   if (body.hazy?.ragEnabled !== false) {
     try {
       ragContext = await vectorSearch.searchAsync(latestMessage, {
         userId,
+        projectId,
         fileIds: body.hazy?.selectedFileIds || body.fileIds,
         limit: body.hazy?.ragMaxChunks || 8,
         candidateLimit: body.hazy?.ragCandidateLimit || 30,
         minimumScore: body.hazy?.ragMinimumScore ?? 0.12
       });
     } catch (err) {
-      console.warn('[Hazy] Semantic search failed, falling back to lexical search:', err.message);
-      ragContext = vectorSearch.search(latestMessage, {
+      console.warn('[Hazy] Retrieval unavailable; trying lexical fallback.');
+      try { ragContext = vectorSearch.search(latestMessage, {
         userId,
+        projectId,
         fileIds: body.hazy?.selectedFileIds || body.fileIds,
         limit: body.hazy?.ragMaxChunks || 8,
         candidateLimit: body.hazy?.ragCandidateLimit || 30,
         minimumScore: body.hazy?.ragMinimumScore ?? 0.12
-      });
+      }); } catch { ragContext = []; }
     }
   }
 
@@ -127,7 +125,7 @@ async function analyzeMessage({ body, conversationId = "default", userId = "defa
     || String(body.hazy?.surface || body.hazy?.page || '').toLowerCase() === 'agent'
     || String(body.hazy?.surface || body.hazy?.page || '').toLowerCase() === 'agentic';
 
-  const toolResults = await searchIfNeeded(latestMessage, body, { force: agentEnabled });
+  const toolResults = await searchIfNeeded(latestMessage, body, { force: body.hazy?.forceWebSearch === true });
   const toolContext = createToolContext(body);
   const pendingConfirmation = defaultAgentRuntime.confirmations.findPending(toolContext);
   const currentPlan = defaultAgentRuntime.planStore
@@ -189,6 +187,7 @@ async function analyzeMessage({ body, conversationId = "default", userId = "defa
     responsePlan,
     memory: memory,
     ragContext: ragContext,
+    deferRetrievalToPacker: true,
     questionLimit: strategy.questionLimit,
     safety,
     reasoning,
@@ -237,8 +236,10 @@ async function analyzeMessage({ body, conversationId = "default", userId = "defa
 async function prepareChatRequest(body = {}) {
   const conversationId = body.conversationId || "default";
   const userId = body.userId || "default";
+  body = { ...body, options: { num_ctx: Number(process.env.HAZY_CONTEXT_SIZE) || 4096, ...body.options }, hazy: { ragMaxChunks: Number(process.env.HAZY_RAG_CHUNKS) || 8, ...body.hazy } };
   const analysis = await analyzeMessage({ body, conversationId, userId });
-  const conversation = memoryManager.getConversation(conversationId);
+  let conversation = { summaries: [] };
+  try { conversation = memoryManager.getConversation(conversationId, userId, analysis.projectId); } catch { /* Chat can proceed without optional history. */ }
   const providerBody = prepareProviderPayload({
     ...body,
     hazy: {
@@ -302,6 +303,8 @@ async function finalizeResponse({ conversationId, userId, userMessage, responseT
 
       const filePath = await agentFileManager.writeOrUpdate({
         conversationId,
+        userId,
+        projectId: analysis.projectId || '',
         taskContext,
         code: codeToSave,
         language

@@ -23,7 +23,7 @@ const BROWSER_TOOL_NAMES = Object.freeze([
   'browser.ask_user'
 ]);
 
-function createBrowserSystem({ baseDir = path.join(__dirname, '..', '..', 'cache', 'hazy-engine', 'browser') } = {}) {
+function createBrowserSystem({ baseDir = path.join(require('../config/runtimePaths').DATA_DIR, 'browser') } = {}) {
   const store = new BrowserRunStore(baseDir);
   const streamer = new BrowserEventStreamer();
   const sessionManager = new BrowserSessionManager({ store, streamer });
@@ -39,7 +39,7 @@ function browserToolSchema(toolName) {
   const baseProperties = {
     sessionId: { type: 'string', maxLength: 120 },
     screenshot: { type: 'boolean' },
-    confirmed: { type: 'boolean' }
+    // Confirmation is carried in trusted gatekeeper context, never model args.
   };
   const urlProperties = {
     ...baseProperties,
@@ -143,7 +143,7 @@ function registerBrowserTools(registry, browserSystem = defaultBrowserSystem) {
       description: `Browser automation tool for ${action}. Browser automation interacts with webpages; web search is for reading information.`,
       risk: ['click', 'type', 'select', 'close'].includes(action) ? 'low_write' : 'read',
       toolset: 'browser',
-      requiresConfirmation: false,
+      requiresConfirmation: ['click', 'type', 'select'].includes(action),
       allowedRoles: ['admin', 'cashier', 'user'],
       schema: browserToolSchema(name),
       execute: (args, ctx) => browserSystem.actions.execute(name, args, ctx)

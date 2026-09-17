@@ -465,7 +465,7 @@
                 <button class="viewport-btn" data-width="390px" type="button">Mobile</button>
               </div>
             </div>
-            <div class="preview-wrapper" id="previewWrapper"><iframe id="previewFrame" title="Project preview"></iframe>
+            <div class="preview-wrapper" id="previewWrapper"><iframe id="previewFrame" title="Project preview" sandbox="allow-scripts allow-forms"></iframe>
             </div>
           </div>
         </div>
@@ -1173,6 +1173,7 @@
     window.PiperTTS = null;
     window.dispatchEvent(new Event('piper-ready'));
   </script>
+  <script src="runtime-status.js"></script>
 </body>
 
 </html>

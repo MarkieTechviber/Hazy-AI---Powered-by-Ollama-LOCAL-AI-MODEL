@@ -144,7 +144,7 @@ class ToolGatekeeper {
         }
       } catch (e) {
         // non-fatal; fall through to normal execute
-        console.warn('[ToolGatekeeper] guardrail threw (non-fatal):', e?.message || e);
+        return this.blocked(ctx, toolCall, 'GUARDRAIL_FAILED', 'Tool safety validation failed.');
       }
     }
 
@@ -165,7 +165,8 @@ class ToolGatekeeper {
 
     const started = Date.now();
     try {
-      const rawResult = await this.executor.execute(tool.name, parsed.data, ctx);
+      const executionContext = confirmed ? { ...ctx, confirmationApproved: true } : ctx;
+      const rawResult = await this.executor.execute(tool.name, parsed.data, executionContext);
       const result = normalizeToolResult(rawResult, Date.now() - started);
       this.audit.log({
         requestId: ctx.requestId, userId: ctx.userId, chatId: ctx.chatId,

@@ -23,6 +23,11 @@ class UsageStatsStore {
       createdAt: new Date().toISOString(),
       ...entry
     };
+    if (fs.existsSync(this.filePath) && fs.statSync(this.filePath).size > 5 * 1024 * 1024) {
+      const previous = `${this.filePath}.previous`;
+      fs.rmSync(previous, { force: true });
+      fs.renameSync(this.filePath, previous);
+    }
     fs.appendFileSync(this.filePath, `${JSON.stringify(record)}\n`, 'utf8');
     return record;
   }
@@ -68,12 +73,16 @@ function createResponseTelemetry(params) {
       retrievedChunks: allowedChunkIds.length,
       averageChunkScore: params.averageChunkScore || 0,
       invalidCitations: citationCheck.invalid.length,
-      citationCheck,
+      memoryCount: params.memoryCount || 0,
+      ragMode: params.ragMode || 'lexical',
       contextUtilizationRate: contextStats.utilization || 0,
       compressionRatio: contextStats.beforeTokens
         ? (contextStats.afterTokens || 0) / contextStats.beforeTokens
         : 1,
-      ...extra
+      toolCalls: Math.max(0, Number(extra.toolCalls) || 0),
+      blockedToolCalls: Math.max(0, Number(extra.blockedToolCalls) || 0),
+      agentIterations: Math.max(0, Number(extra.agentIterations) || 0),
+      limitReached: extra.limitReached === true
     });
   }
 

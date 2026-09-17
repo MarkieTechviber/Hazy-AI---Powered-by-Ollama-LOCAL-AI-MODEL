@@ -9,7 +9,7 @@ const { InMemoryRateLimiter } = require('../security/rateLimiter');
 const { PendingConfirmationStore } = require('./confirmationStore');
 const { AgentAuditStore } = require('./auditStore');
 const { ToolGatekeeper } = require('./toolGatekeeper');
-const { PlanStore, formatPlanForModel } = require('./planStore');
+const { PlanStore, formatPlanForModel, planScopeKey } = require('./planStore');
 const { defaultMemoryOrchestrator } = require('../memory/memoryOrchestrator');
 const { makeKey } = require('../memory/memoryExtractor');
 
@@ -18,6 +18,7 @@ function createToolContext(body = {}, overrides = {}) {
   return {
     userId: String(overrides.userId || body.userId || 'local-user'),
     chatId: String(overrides.chatId || body.conversationId || 'default'),
+    projectId: String(overrides.projectId || body.projectId || body.hazy?.projectId || ''),
     role: DEFAULT_ROLES.includes(requestedRole) ? requestedRole : 'user',
     tenantId: overrides.tenantId || body.tenantId || null,
     requestId: overrides.requestId || crypto.randomUUID(),
@@ -48,17 +49,17 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
   const confirmations = new PendingConfirmationStore({
     filePath: confirmationPath === false
       ? null
-      : (confirmationPath || path.join(__dirname, '..', '..', 'cache', 'hazy-engine', 'confirmations', 'pending.json'))
+      : (confirmationPath || path.join(require('../config/runtimePaths').DATA_DIR, 'confirmations', 'pending.json'))
   });
   const audit = new AgentAuditStore(
     auditPath === false
       ? null
-      : (auditPath || path.join(__dirname, '..', '..', 'cache', 'hazy-engine', 'audit', 'tool-events.jsonl'))
+      : (auditPath || path.join(require('../config/runtimePaths').DATA_DIR, 'audit', 'tool-events.jsonl'))
   );
   const planStore = new PlanStore({
     filePath: planPath === false
       ? null
-      : (planPath || path.join(__dirname, '..', '..', 'cache', 'hazy-engine', 'plans', 'agent-plans.json'))
+      : (planPath || path.join(require('../config/runtimePaths').DATA_DIR, 'plans', 'agent-plans.json'))
   });
   const rateLimiter = new InMemoryRateLimiter();
   const executor = new ToolExecutor(registry, { timeoutMs: 15_000, retries: 0 });
@@ -88,7 +89,7 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
       if (!store) {
         return { ok: false, error: { code: 'PLAN_STORE_UNAVAILABLE', message: 'Plan store is not available in this context.' } };
       }
-      const chatId = ctx.chatId || 'default';
+      const chatId = planScopeKey(ctx);
       try {
         let resultPlan;
         if (action === 'list' || !action) {
@@ -147,8 +148,8 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
       try {
         const rec = orch && (orch.remember || orch.upsertMemory)
           ? (orch.remember
-            ? orch.remember({ type: type || 'explicit_fact', key, value, confidence: confidence || 0.7, userId: ctx.userId, conversationId: ctx.chatId || 'default' })
-            : orch.upsertMemory({ type: type || 'explicit_fact', key, value, confidence: confidence || 0.7, userId: ctx.userId, conversationId: ctx.chatId || 'default' }))
+            ? orch.remember({ type: type || 'explicit_fact', key, value, confidence: confidence || 0.7, userId: ctx.userId, conversationId: ctx.chatId || 'default', projectId: ctx.projectId || '' })
+            : orch.upsertMemory({ type: type || 'explicit_fact', key, value, confidence: confidence || 0.7, userId: ctx.userId, conversationId: ctx.chatId || 'default', projectId: ctx.projectId || '' }))
           : null;
         if (rec && rec.error) {
           return { ok: false, error: { code: 'MEMORY_REMEMBER_FAILED', message: rec.error } };
@@ -191,8 +192,8 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
       const orch = getOrch(ctx);
       try {
         let results = [];
-        if (orch && orch.searchMemories) results = orch.searchMemories({ query, limit: limit || 5, types, userId: ctx.userId, conversationId: ctx.chatId || 'default' });
-        else if (orch && orch.getRelevantMemory) results = orch.getRelevantMemory({ query, limit: limit || 5 });
+        if (orch && orch.searchMemories) results = orch.searchMemories({ query, limit: limit || 5, types, userId: ctx.userId, conversationId: ctx.chatId || 'default', projectId: ctx.projectId || '' });
+        else if (orch && orch.getRelevantMemory) results = orch.getRelevantMemory({ query, limit: limit || 5, userId: ctx.userId, conversationId: ctx.chatId, projectId: ctx.projectId || '' });
         return { ok: true, data: { results, count: results.length, note: 'Use memory.remember to add more. Results are durable across turns.' } };
       } catch (err) {
         return { ok: false, error: { code: 'MEMORY_SEARCH_FAILED', message: err.message || String(err) } };
@@ -221,7 +222,7 @@ function createAgentRuntime({ auditPath = null, confirmationPath = null, planPat
       const orch = getOrch(ctx);
       try {
         let changes = 0;
-        if (orch && orch.forgetMemories) changes = orch.forgetMemories({ userId: ctx.userId, projectId: '', target });
+        if (orch && orch.forgetMemories) changes = orch.forgetMemories({ userId: ctx.userId, projectId: ctx.projectId || '', target });
         else if (orch && orch.deleteMemory && id) changes = orch.deleteMemory(id, ctx.userId) ? 1 : 0;
         if (changes && changes.error) {
           return { ok: false, error: { code: 'MEMORY_FORGET_FAILED', message: changes.error } };

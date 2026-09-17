@@ -97,6 +97,7 @@ function normalizeEntry(chunk, id) {
     ...chunk,
     id,
     userId: chunk.userId || 'default',
+    projectId: chunk.projectId || '',
     tokenCount: chunk.tokenCount || estimateTokens(text),
     tokenSet,
     tokenFrequency: tokenFrequency(text),
@@ -178,44 +179,50 @@ class VectorSearch {
   addDocuments(chunks = [], options = {}) {
     const replaceFile = options.replaceFile !== false;
     const current = this.readIndex();
-    const incomingFileIds = new Set(chunks.map((chunk) => chunk?.fileId).filter(Boolean).map(String));
+    const scopeKey = entry => JSON.stringify([entry.userId || 'default', entry.projectId || '', String(entry.fileId)]);
+    const incomingFileIds = new Set(chunks.filter(chunk => chunk?.fileId).map(scopeKey));
     const byId = new Map(
       current
-        .filter((entry) => !replaceFile || !incomingFileIds.has(String(entry.fileId)))
-        .map((entry) => [entry.id, entry])
+        .filter((entry) => !replaceFile || !incomingFileIds.has(scopeKey(entry)))
+        .map((entry) => [JSON.stringify([scopeKey(entry), entry.id]), entry])
     );
 
     for (const chunk of chunks) {
       if (!chunk?.text) continue;
       const id = chunk.id || chunk.chunkId || `chunk_${chunk.fileId || 'document'}_${chunk.chunkIndex ?? byId.size}`;
-      byId.set(id, normalizeEntry(chunk, id));
+      byId.set(JSON.stringify([scopeKey(chunk), id]), normalizeEntry(chunk, id));
     }
     this.writeIndex([...byId.values()]);
   }
 
   async addDocumentsAsync(chunks = [], options = {}) {
     const embeddingService = options.embeddingService || this.embeddingService;
-    const withEmbeddings = [...chunks];
+    const withEmbeddings = chunks.map(chunk => ({ ...chunk }));
     if (embeddingService && typeof embeddingService.embedMany === 'function') {
       const missing = withEmbeddings.filter((chunk) => chunk?.text && !Array.isArray(chunk.embedding));
-      const embeddings = await embeddingService.embedMany(missing.map((chunk) => chunk.text));
-      missing.forEach((chunk, index) => { chunk.embedding = embeddings[index]; });
+      if (missing.length) {
+        try {
+          const embeddings = await embeddingService.embedMany(missing.map(chunk => chunk.text));
+          missing.forEach((chunk, index) => { chunk.embedding = embeddings[index]; chunk.embeddingModel = embeddingService.model; });
+        } catch { /* Lexical indexing remains available without an embedding model. */ }
+      }
     }
     this.addDocuments(withEmbeddings, options);
   }
 
-  deleteFile(fileId, userId = null) {
+  deleteFile(fileId, userId = null, projectId) {
     const before = this.readIndex();
     const after = before.filter((entry) => {
       if (String(entry.fileId) !== String(fileId)) return true;
       if (userId && String(entry.userId || 'default') !== String(userId)) return true;
+      if (projectId !== undefined && (entry.projectId || '') !== projectId) return true;
       return false;
     });
     if (after.length !== before.length) this.writeIndex(after);
     return before.length - after.length;
   }
 
-  scoreEntry(entry, query, queryTokens, querySet, queryLexicalVector, queryEmbedding = null) {
+  scoreEntry(entry, query, queryTokens, querySet, queryLexicalVector, queryEmbedding = null, queryEmbeddingModel = '') {
     const entryTokens = Array.isArray(entry.tokenSet) ? entry.tokenSet : tokenize(entry.text);
     const entrySet = new Set(entryTokens);
     const lexicalVector = entry.lexicalVector || buildLexicalVector(entry.text);
@@ -224,7 +231,8 @@ class VectorSearch {
     const lexicalScore = clamp01((0.65 * lexicalCosine) + (0.35 * lexicalJaccard));
     const exactKeywordScore = keywordScore(queryTokens, tokenize(entry.text));
     const exactPhraseScore = phraseScore(query, entry.text);
-    const semanticScore = queryEmbedding && Array.isArray(entry.embedding)
+    const modelCompatible = !entry.embeddingModel || !queryEmbeddingModel || entry.embeddingModel === queryEmbeddingModel;
+    const semanticScore = modelCompatible && queryEmbedding && Array.isArray(entry.embedding)
       ? denseCosineSimilarity(queryEmbedding, entry.embedding)
       : 0;
 
@@ -268,8 +276,9 @@ class VectorSearch {
 
     return this.readIndex()
       .filter((entry) => !settings.userId || String(entry.userId || 'default') === String(settings.userId))
+      .filter((entry) => settings.projectId === undefined || String(entry.projectId || '') === String(settings.projectId || ''))
       .filter((entry) => !selectedFileIds.size || selectedFileIds.has(String(entry.fileId)))
-      .map((entry) => this.scoreEntry(entry, query, queryTokens, querySet, queryLexicalVector, queryEmbedding))
+      .map((entry) => this.scoreEntry(entry, query, queryTokens, querySet, queryLexicalVector, queryEmbedding, settings.queryEmbeddingModel))
       .filter((entry) => settings.allowEmptyQuery || entry.relevanceScore >= minimumRelevance)
       .filter((entry) => entry.finalScore >= minimumScore)
       .sort((a, b) => b.finalScore - a.finalScore);
@@ -280,6 +289,7 @@ class VectorSearch {
     return {
       id: entry.id,
       userId: entry.userId || 'default',
+      projectId: entry.projectId || '',
       fileId: entry.fileId,
       filename,
       source: entry.source,
@@ -307,8 +317,8 @@ class VectorSearch {
 
   search(query = '', options = {}) {
     const settings = typeof options === 'number' ? { limit: options } : options;
-    const limit = Math.max(1, Number(settings.limit || settings.topK || 8));
-    const candidateLimit = Math.max(limit, Number(settings.candidateLimit || 30));
+    const limit = Math.max(1, Math.min(20, Math.floor(Number(settings.limit || settings.topK) || 8)));
+    const candidateLimit = Math.max(limit, Math.min(100, Math.floor(Number(settings.candidateLimit) || 30)));
     const candidates = this.getCandidates(query, settings).slice(0, candidateLimit);
     const diversified = settings.diversify === false ? candidates.slice(0, limit) : mmrDiversify(candidates, limit, Number(settings.mmrLambda || 0.82));
     return diversified.map((entry) => this.formatResult(entry));
@@ -316,12 +326,21 @@ class VectorSearch {
 
   async searchAsync(query = '', options = {}) {
     const embeddingService = options.embeddingService || this.embeddingService;
-    if (embeddingService && typeof embeddingService.embed === 'function' && !Array.isArray(options.queryEmbedding)) {
-      const queryEmbedding = await embeddingService.embed(query);
-      return this.search(query, { ...options, queryEmbedding });
+    const eligible = this.readIndex().some(entry => (!options.userId || (entry.userId || 'default') === options.userId)
+      && (options.projectId === undefined || (entry.projectId || '') === options.projectId)
+      && (!options.fileIds?.length || options.fileIds.includes(entry.fileId))
+      && entry.embedding?.length && (!entry.embeddingModel || entry.embeddingModel === embeddingService?.model));
+    let queryEmbedding = options.queryEmbedding;
+    let mode = 'lexical';
+    if (eligible && embeddingService && !Array.isArray(queryEmbedding)) {
+      try { queryEmbedding = await embeddingService.embed(query); mode = 'hybrid'; }
+      catch { mode = 'lexical-fallback'; }
     }
-    return this.search(query, options);
+    const results = this.search(query, { ...options, queryEmbedding, queryEmbeddingModel: embeddingService?.model || options.queryEmbeddingModel || '' });
+    Object.defineProperty(results, 'retrievalMode', { value: mode });
+    return results;
   }
+
 }
 
 module.exports = {

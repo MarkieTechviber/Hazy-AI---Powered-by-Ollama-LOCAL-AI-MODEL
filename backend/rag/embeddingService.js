@@ -75,7 +75,7 @@ function sparseCosineSimilarity(left = {}, right = {}) {
 }
 
 function normalizeDenseVector(vector = []) {
-  const values = Array.isArray(vector) ? vector.map(Number).filter(Number.isFinite) : [];
+  const values = Array.isArray(vector) && vector.every(v => typeof v === 'number' && Number.isFinite(v)) ? vector : [];
   const magnitude = Math.sqrt(values.reduce((sum, value) => sum + value ** 2, 0));
   if (!values.length || !magnitude) return [];
   return values.map((value) => value / magnitude);
@@ -116,7 +116,11 @@ function requestJson(target, { method = 'POST', headers = {}, body, timeoutMs = 
       }
     }, (response) => {
       let raw = '';
-      response.on('data', (chunk) => { raw += chunk.toString('utf8'); });
+      response.on('error', reject);
+      response.on('data', (chunk) => {
+        if (Buffer.byteLength(raw) + chunk.length > 8 * 1024 * 1024) { response.destroy(new Error('Embedding response too large.')); return; }
+        raw += chunk.toString('utf8');
+      });
       response.on('end', () => {
         let data;
         try {
@@ -143,31 +147,39 @@ function requestJson(target, { method = 'POST', headers = {}, body, timeoutMs = 
 
 class OllamaEmbeddingService {
   constructor(options = {}) {
-    this.baseUrl = String(options.baseUrl || process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/+$/, '');
+    this.baseUrl = String(options.baseUrl || process.env.OLLAMA_URL || process.env.OLLAMA_HOST || 'http://localhost:11434').replace(/\/+$/, '');
     this.model = options.model || process.env.HAZY_EMBEDDING_MODEL || 'embeddinggemma';
-    this.timeoutMs = Number(options.timeoutMs || 30_000);
+    this.timeoutMs = Math.max(100, Math.min(30000, Number(options.timeoutMs || process.env.HAZY_EMBEDDING_TIMEOUT_MS) || 5000));
+    this.cache = new Map();
+    this.pending = new Map();
+    this.retryAfter = 0;
   }
-
   async embed(input) {
     const text = String(input || '').trim();
     if (!text) return [];
-    const data = await requestJson(`${this.baseUrl}/api/embed`, {
-      body: { model: this.model, input: text },
-      timeoutMs: this.timeoutMs
-    });
-    const vector = data?.embeddings?.[0] || data?.embedding || [];
-    return normalizeDenseVector(vector);
+    const key = require('node:crypto').createHash('sha256').update(`${this.baseUrl}:${this.model}:${text}`).digest('hex');
+    if (this.cache.has(key)) return [...this.cache.get(key)];
+    if (this.pending.has(key)) return [...await this.pending.get(key)];
+    if (Date.now() < this.retryAfter) throw new Error('Embedding provider temporarily unavailable; using lexical retrieval.');
+    const operation = (async () => {
+      try {
+        const data = await requestJson(`${this.baseUrl}/api/embed`, { body: { model: this.model, input: text }, timeoutMs: this.timeoutMs });
+        const vector = normalizeDenseVector(data?.embeddings?.[0] || data?.embedding || []);
+        if (!vector.length) throw new Error('Invalid embedding response.');
+        if (this.cache.size >= 128) this.cache.delete(this.cache.keys().next().value);
+        this.cache.set(key, vector);
+        return vector;
+      } catch (error) { this.retryAfter = Date.now() + 30000; throw error; }
+    })();
+    this.pending.set(key, operation);
+    try { return [...await operation]; } finally { this.pending.delete(key); }
   }
-
   async embedMany(inputs = []) {
-    const texts = inputs.map((item) => String(item || '').trim()).filter(Boolean);
-    if (!texts.length) return [];
-    const data = await requestJson(`${this.baseUrl}/api/embed`, {
-      body: { model: this.model, input: texts },
-      timeoutMs: this.timeoutMs
-    });
-    const vectors = Array.isArray(data?.embeddings) ? data.embeddings : [];
-    return vectors.map(normalizeDenseVector);
+    // Sequential bounded requests reuse the same cache and circuit breaker.
+    // Preserve input alignment, including empty chunks.
+    const results = [];
+    for (const input of inputs) results.push(await this.embed(input));
+    return results;
   }
 }
 

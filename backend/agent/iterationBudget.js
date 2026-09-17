@@ -8,7 +8,7 @@
 class IterationBudget {
   constructor(maxSteps = 6, { grace = 1 } = {}) {
     this.max = Math.max(1, Math.min(12, Number(maxSteps) || 6));
-    this.grace = Math.max(0, Number(grace) || 1);
+    this.grace = Number.isFinite(Number(grace)) ? Math.max(0, Math.min(2, Math.floor(Number(grace)))) : 1;
     this.used = 0;
     this.graceUsed = 0; // FIX: track partial grace usage, not just a boolean
     this.history = [];   // FIX: audit trail of every consume/refund for debugging

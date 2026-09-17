@@ -4,7 +4,9 @@ const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
 
-function requestJson(target, { method = 'POST', headers = {}, body, timeoutMs = 60_000 } = {}) {
+function requestJson(target, {
+  method = 'POST', headers = {}, body, timeoutMs = 60_000, signal, maxResponseBytes = 8 * 1024 * 1024
+} = {}) {
   return new Promise((resolve, reject) => {
     const parsed = target instanceof URL ? target : new URL(target);
     const transport = parsed.protocol === 'https:' ? https : http;
@@ -16,9 +18,18 @@ function requestJson(target, { method = 'POST', headers = {}, body, timeoutMs = 
       method,
       headers: { 'Content-Type': 'application/json', ...headers }
     }, (response) => {
-      let raw = '';
-      response.on('data', (chunk) => { raw += chunk.toString(); });
+      const chunks = [];
+      let received = 0;
+      response.on('data', (chunk) => {
+        received += chunk.length;
+        if (received > maxResponseBytes) {
+          request.destroy(Object.assign(new Error('Provider response exceeded the size limit.'), { code: 'PROVIDER_RESPONSE_TOO_LARGE' }));
+          return;
+        }
+        chunks.push(chunk);
+      });
       response.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8');
         let data;
         try {
           data = JSON.parse(raw || '{}');
@@ -29,7 +40,6 @@ function requestJson(target, { method = 'POST', headers = {}, body, timeoutMs = 
           const message = data?.error?.message || data?.message || `Provider request failed (${response.statusCode}).`;
           const error = new Error(message);
           error.statusCode = response.statusCode;
-          error.providerBody = data;
           reject(error);
           return;
         }
@@ -38,6 +48,15 @@ function requestJson(target, { method = 'POST', headers = {}, body, timeoutMs = 
     });
     request.setTimeout(timeoutMs, () => request.destroy(new Error('Provider request timed out.')));
     request.on('error', reject);
+    if (signal) {
+      if (signal.aborted) {
+        request.destroy(Object.assign(new Error('Provider request aborted.'), { code: 'ABORT_ERR' }));
+        return;
+      }
+      signal.addEventListener('abort', () => {
+        request.destroy(Object.assign(new Error('Provider request aborted.'), { code: 'ABORT_ERR' }));
+      }, { once: true });
+    }
     request.write(JSON.stringify(body || {}));
     request.end();
   });
@@ -298,7 +317,7 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
   const modelId = providerBody.model || cfg.defaults?.textModel || 'ollama/llama3.2';
   const provider = modelId.split('/')[0];
 
-  return async ({ input, tools, temperature }) => {
+  return async ({ input, tools, temperature, signal, timeoutMs }) => {
     if (provider === 'ollama') {
       const baseUrl = new URL(cfg.providers?.ollama?.baseUrl || 'http://localhost:11434');
       const reasoningMode = providerBody.hazyReasoning?.reasoningMode;
@@ -309,11 +328,17 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
       // Ollama doesn't have a native budget param so this is the closest
       // lever we have. Only apply for models that support thinking.
       const budgetTokens = providerBody.hazyReasoning?.budgetTokens || 0;
-      const numCtx = useThink && budgetTokens > 0
+      const inferredNumCtx = useThink && budgetTokens > 0
         ? Math.min(32768, 4096 + budgetTokens * 2)
         : undefined;
+      const configuredNumCtx = Number(providerBody.options?.num_ctx);
+      const numCtx = Number.isFinite(configuredNumCtx) && configuredNumCtx > 0
+        ? Math.floor(configuredNumCtx)
+        : inferredNumCtx;
 
       const data = await requestJson(new URL('/api/chat', baseUrl), {
+        signal,
+        timeoutMs,
         body: {
           model: modelId.replace(/^ollama\//, ''),
           messages: toOllamaMessages(input),
@@ -349,6 +374,8 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
       const effectiveTemperature = useExtendedThinking ? 1 : temperature;
 
       const data = await requestJson('https://api.anthropic.com/v1/messages', {
+        signal,
+        timeoutMs,
         headers: {
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01'
@@ -392,7 +419,7 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
         body.tools = toGeminiTools(tools);
         body.toolConfig = { functionCallingConfig: { mode: 'AUTO' } };
       }
-      const data = await requestJson(url, { headers: { 'x-goog-api-key': apiKey }, body });
+      const data = await requestJson(url, { headers: { 'x-goog-api-key': apiKey }, body, signal, timeoutMs });
       return normalizeGeminiResponse(data);
     }
 
@@ -436,6 +463,8 @@ function createProviderAgentCaller({ providerBody, cfg, getApiKey }) {
     }
 
     const data = await requestJson(compatible.url, {
+      signal,
+      timeoutMs,
       headers: { Authorization: `Bearer ${apiKey}` },
       body: {
         model: compatible.model,

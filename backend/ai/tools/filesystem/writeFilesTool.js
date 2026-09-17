@@ -2,8 +2,8 @@
 
 const path = require('path');
 const fs = require('fs').promises;
-const ToolInterface = require('./toolInterface');
-const { PermanentError } = require('../errors');
+const ToolInterface = require('../toolInterface');
+const { PermanentError } = require('../../errors');
 
 class WriteFilesTool extends ToolInterface {
   get name() {
@@ -34,6 +34,8 @@ class WriteFilesTool extends ToolInterface {
     };
   }
 
+  getSchema() { return this.schema; }
+
   get requiredPermissions() {
     return ['write_files'];
   }
@@ -58,8 +60,8 @@ class WriteFilesTool extends ToolInterface {
     // Basic implementation for the tool execution.
     // In the future, this would do actual file writing.
     // Right now it just signals success as the AI Runtime hands off to the backend API anyway.
-    return { success: true, count: args.files.length };
+    return { success: true, count: args.files.length, proposedOnly: true, files: args.files };
   }
 }
 
-module.exports = new WriteFilesTool();
+module.exports = WriteFilesTool;

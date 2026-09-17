@@ -21,6 +21,7 @@ class SecretVault {
   loadOrCreateKey() {
     const configured = decodeConfiguredKey(process.env.HAZY_MASTER_KEY);
     if (configured) return configured;
+    if (process.env.HAZY_MASTER_KEY) throw new Error("HAZY_MASTER_KEY must encode exactly 32 bytes.");
 
     if (fs.existsSync(this.keyPath)) {
       const stored = decodeConfiguredKey(fs.readFileSync(this.keyPath, "utf8"));
@@ -30,7 +31,14 @@ class SecretVault {
 
     fs.mkdirSync(path.dirname(this.keyPath), { recursive: true });
     const key = crypto.randomBytes(32);
-    fs.writeFileSync(this.keyPath, key.toString("base64"), { mode: 0o600 });
+    try {
+      fs.writeFileSync(this.keyPath, key.toString("base64"), { mode: 0o600, flag: 'wx' });
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      const existing = decodeConfiguredKey(fs.readFileSync(this.keyPath, 'utf8'));
+      if (!existing) throw new Error('Invalid existing vault key.');
+      return existing;
+    }
     try {
       fs.chmodSync(this.keyPath, 0o600);
     } catch {

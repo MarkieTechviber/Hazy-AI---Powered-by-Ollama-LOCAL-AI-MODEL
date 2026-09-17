@@ -1,34 +1,49 @@
 import os
 import io
-import torch
-import soundfile as sf
+import sys
+import importlib.util
+import threading
 from fastapi import FastAPI, Response
-from kokoro import KPipeline
+from pydantic import BaseModel, Field
+from backend.python_boundary import LocalBoundary
 import uvicorn
 import json
 
 app = FastAPI()
+app.add_middleware(LocalBoundary, port=int(os.getenv('KOKORO_PORT', '8880')), max_bytes=65536)
+SPEECH_LOCK = threading.Lock()
+
+class SpeechRequest(BaseModel):
+    input: str = Field(min_length=1, max_length=10000)
+    voice: str = Field(default='af_heart', pattern=r'^[abefhipjz][fm]_[a-z0-9_]{1,40}$')
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, allow_inf_nan=False)
+
 
 # Global pipeline cache
 PIPELINES = {}
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+DEVICE = os.getenv('KOKORO_DEVICE', 'cpu')
 
 def get_pipeline(lang_code: str):
+    from kokoro import KPipeline
     if lang_code not in PIPELINES:
         print(f"[Kokoro] Loading pipeline for '{lang_code}' on {DEVICE}...")
-        PIPELINES[lang_code] = KPipeline(lang_code=lang_code)
+        PIPELINES[lang_code] = KPipeline(lang_code=lang_code, device=DEVICE)
     return PIPELINES[lang_code]
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "device": DEVICE}
+    available = all(importlib.util.find_spec(name) is not None for name in ("kokoro", "torch", "soundfile"))
+    return {"status": "ok" if available else "unavailable", "device": DEVICE, "modelLoaded": bool(PIPELINES)}
 
 @app.post("/v1/audio/speech")
-def speech(body: dict):
+def speech(body: SpeechRequest):
+    if not SPEECH_LOCK.acquire(blocking=False):
+        return Response(content=json.dumps({"error": "TTS is busy; retry shortly."}), status_code=429, media_type="application/json")
     try:
-        text = body.get("input", "")
-        voice = body.get("voice", "af_heart")
-        speed = body.get("speed", 1.0)
+        import soundfile as sf
+        text = body.input
+        voice = body.voice
+        speed = body.speed
         
         if not text:
             return Response(content=json.dumps({"error": "No text provided"}), status_code=400)
@@ -59,9 +74,13 @@ def speech(body: dict):
         return Response(content=out.read(), media_type="audio/wav")
 
     except Exception as e:
-        print(f"[Kokoro] Error: {e}")
-        return Response(content=json.dumps({"error": str(e)}), status_code=500)
+        print("[Kokoro] Speech generation unavailable. Check installed dependencies and model files.")
+        return Response(content=json.dumps({"error": "TTS unavailable. Text chat remains available."}), status_code=503, media_type="application/json")
+    finally:
+        SPEECH_LOCK.release()
 
 if __name__ == "__main__":
     print(f"--- Kokoro TTS Server starting on port 8880 ({DEVICE}) ---")
-    uvicorn.run(app, host="0.0.0.0", port=8880)
+    if not (3, 10) <= sys.version_info[:2] <= (3, 12):
+        raise SystemExit("This launcher supports Python 3.10–3.12 for Kokoro. Use Python 3.11 or 3.12; core Node chat does not need Python.")
+    uvicorn.run(app, host=os.getenv("KOKORO_HOST", "127.0.0.1"), port=int(os.getenv("KOKORO_PORT", "8880")))

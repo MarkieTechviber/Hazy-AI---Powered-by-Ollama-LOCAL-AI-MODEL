@@ -51,7 +51,7 @@ test('artifact.write tool verification and traversal guard', async () => {
   assert.equal(traversalRes.error.code, 'PATH_TRAVERSAL');
 
   // Cleanup
-  const artifactsRoot = path.resolve(__dirname, '..', '..', 'cache', 'hazy-engine', 'artifacts');
+  const artifactsRoot = require('../config/runtimePaths').ARTIFACTS_DIR;
   const base = path.resolve(artifactsRoot, ctx.chatId);
   try {
     await fsp.rm(base, { recursive: true, force: true });

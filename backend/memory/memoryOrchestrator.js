@@ -77,9 +77,10 @@ class BuiltInMemoryProvider {
         FROM memories
         WHERE user_id = ? AND status = 'active'
           AND (project_id = '' OR project_id = ?)
+          AND conversation_id = ?
           AND type IN (${AGENT_MEMORY_TYPES.map(() => '?').join(',')})
         ORDER BY updated_at DESC, confidence DESC LIMIT 6
-      `).all(userId, projectId || '', ...AGENT_MEMORY_TYPES) : [];
+      `).all(userId, projectId || '', conversationId, ...AGENT_MEMORY_TYPES) : [];
       const items = [
         ...relevant,
         ...agentRows.map(r => ({ type: r.type, key: r.key, value: r.value, confidence: r.confidence, summary: `${r.key}: ${r.value}` }))
@@ -188,7 +189,7 @@ class MemoryOrchestrator {
 }
 
 // Default wiring (reuses Hazy DB + MemoryManager exactly as built-in provider; no external by default)
-const dataDir = path.join(__dirname, '..', '..', 'cache', 'hazy-engine');
+const { DATA_DIR: dataDir } = require('../config/runtimePaths');
 let defaultMemoryOrchestrator;
 let defaultMMForFallback;
 try {

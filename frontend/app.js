@@ -3334,6 +3334,8 @@ function refreshPreview() {
 
   const blob = new Blob([htmlContent], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
+  if (el.previewFrame.dataset.objectUrl) URL.revokeObjectURL(el.previewFrame.dataset.objectUrl);
+  el.previewFrame.dataset.objectUrl = url;
   el.previewFrame.src = url;
   el.builderStatus.textContent = 'Preview updated';
 }
@@ -3859,11 +3861,14 @@ async function sendMessage(userText) {
       body: JSON.stringify(chatBody),
     });
 
+    window.hazyDiagnostics?.updateFromResponse(response);
     if (!response.ok) {
       const errText = await response.text().catch(() => response.statusText);
       let errMsg = errText;
       try { errMsg = JSON.parse(errText).error || errText; } catch { }
 
+      // Server security/configuration errors must not bypass the Hazy pipeline.
+      if (window.location.protocol !== 'file:') throw new Error(errMsg);
       // If it's a cloud provider, never fall back to Ollama - show the real error
       if (isCloud) {
         throw new Error(errMsg);
@@ -4433,9 +4438,20 @@ async function sendMessage(userText) {
     }
 
     // ====== Phase 0: Computer-Use Agent - Check for confirmation gate ======
-    if (STATE.activePage === 'agent' && agentRunInfo?.confirmationRequired && agentRunInfo.blockedToolCalls?.length > 0) {
-      window._currentBlockedCall = agentRunInfo.blockedToolCalls[0];
-      showConfirmationModal(window._currentBlockedCall);
+    if (STATE.activePage === 'agent' && agentRunInfo?.confirmationRequired && agentRunInfo.confirmation) {
+      const confirmation = agentRunInfo.confirmation;
+      const confirmationPromise = window.hazyConfirm?.(confirmation);
+      confirmationPromise?.then(result => {
+        if (['executed', 'executed_after_confirmation'].includes(result.status) && STATE.activeConvId === confirmation.chatId) {
+          const conv = STATE.conversations[STATE.activeConvId];
+          if (!conv) return;
+          let serialized = '';
+          try { serialized = JSON.stringify(result.result).slice(0, 12000); } catch { serialized = '[Result could not be serialized]'; }
+          conv.messages.push({ role: 'user', content: `[Confirmed tool result]\n${serialized}`, ts: Date.now(), isHidden: true });
+          saveConversations();
+          sendMessage('The approved action finished. Continue the task from that result.');
+        }
+      });
     }
 
     // -- Async fetch: SOURCES_PENDING → SOURCES_LOADED or ERROR -------------------------
@@ -6699,9 +6715,8 @@ function showConfirmationModal(blockedCall) {
 }
 
 async function resolveConfirmation(blockedCall, approved, modal) {
-  modal.style.display = 'none';
-  
   if (blockedCall.confirmationId === 'default-browser-session') {
+    modal.style.display = 'none';
     if (approved) {
       window.hazyBrowserAgent.confirmAction();
     } else {
@@ -6709,23 +6724,27 @@ async function resolveConfirmation(blockedCall, approved, modal) {
     }
     return;
   }
-  
-  const message = approved 
-    ? (blockedCall.typedPhrase || "approved") 
-    : "no";
-  
+
+  // Server-backed confirmations must use the accessible dialog, which requires
+  // the person to type high-risk phrases instead of filling them automatically.
+  modal.style.display = 'none';
+  if (!window.hazyConfirm) {
+    appendErrorMessage('Confirmation dialog is unavailable. Reload Hazy and try again.');
+    return;
+  }
+
   try {
-    const res = await fetch(hazyServerEndpoint('/hazy/confirm'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        confirmationId: blockedCall.confirmationId,
-        message
-      })
+    const data = await window.hazyConfirm({
+      id: blockedCall.confirmationId,
+      userId: 'local-user',
+      chatId: STATE.activeConvId || 'default',
+      toolName: blockedCall.name,
+      summary: blockedCall.summary,
+      args: blockedCall.arguments,
+      typedPhrase: approved ? blockedCall.typedPhrase : null
     });
-    
-    const data = await res.json();
-    const conv = conversations.find(c => c.id === STATE.activeConvId);
+
+    const conv = STATE.conversations[STATE.activeConvId];
     if (!conv) return;
 
     let sysMsg = "";

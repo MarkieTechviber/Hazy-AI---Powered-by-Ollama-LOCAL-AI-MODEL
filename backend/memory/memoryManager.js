@@ -180,12 +180,16 @@ class MemoryManager {
   }
 
   ensureConversation(conversationId, userId = "default", projectId = "") {
+    const existing = this.db.prepare("SELECT user_id AS userId, project_id AS projectId FROM conversations WHERE id = ?").get(conversationId);
+    if (existing && existing.userId !== userId) {
+      throw new Error("Conversation belongs to a different user.");
+    }
+    if (existing && (existing.projectId || '') !== (projectId || '')) throw new Error("Conversation belongs to a different project.");
     const timestamp = now();
     this.db.prepare(`
       INSERT INTO conversations(id, user_id, project_id, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
-        user_id = excluded.user_id,
         project_id = CASE
           WHEN excluded.project_id != '' THEN excluded.project_id
           ELSE conversations.project_id
@@ -195,6 +199,8 @@ class MemoryManager {
   }
 
   insertMessage({ conversationId, userId, role, content, analysis, createdAt = now() }) {
+    const owner = this.db.prepare("SELECT user_id AS userId, project_id AS projectId FROM conversations WHERE id = ?").get(conversationId);
+    if (!owner || owner.userId !== userId) throw new Error("Conversation ownership check failed.");
     const id = crypto.randomUUID();
     const safeRole = ["user", "assistant", "system", "tool"].includes(role) ? role : "user";
     this.db.prepare(`
@@ -247,7 +253,11 @@ class MemoryManager {
     return id;
   }
 
-  getConversation(conversationId = "default", userId = null) {
+  getConversation(conversationId = "default", userId = null, projectId = undefined) {
+    const owner = this.db.prepare("SELECT user_id AS userId, project_id AS projectId FROM conversations WHERE id = ?").get(conversationId);
+    if (owner && (!userId || owner.userId === userId) && projectId !== undefined && (owner.projectId || "") !== (projectId || "")) {
+      throw new Error("Conversation belongs to a different project.");
+    }
     const userClause = userId ? " AND user_id = ?" : "";
     const params = userId ? [conversationId, userId] : [conversationId];
 
@@ -263,15 +273,16 @@ class MemoryManager {
       ...(row.analysis_json ? { analysis: parseJson(row.analysis_json, {}) } : {})
     }));
     const summaries = this.db.prepare(`
-      SELECT summary FROM conversation_summaries
-      WHERE conversation_id = ?
-      ORDER BY created_at ASC, rowid ASC
-    `).all(conversationId).map((row) => row.summary);
+      SELECT s.summary FROM conversation_summaries s
+      JOIN conversations c ON c.id = s.conversation_id
+      WHERE s.conversation_id = ?${userId ? " AND c.user_id = ?" : ""}
+      ORDER BY s.created_at ASC, s.rowid ASC
+    `).all(...params).map((row) => row.summary);
     const projectFacts = this.db.prepare(`
       SELECT value FROM memories
-      WHERE conversation_id = ? AND type = 'project_fact' AND status = 'active'
+      WHERE conversation_id = ?${userId ? " AND user_id = ?" : ""} AND type = 'project_fact' AND status = 'active'
       ORDER BY updated_at ASC
-    `).all(conversationId).map((row) => row.value);
+    `).all(...params).map((row) => row.value);
     return { turns, summaries, projectFacts };
   }
 
@@ -301,9 +312,9 @@ class MemoryManager {
           INSERT INTO conversations(id, user_id, project_id, title, created_at, updated_at)
           VALUES (?, ?, '', ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
-            user_id = excluded.user_id,
             title = excluded.title,
             updated_at = excluded.updated_at
+          WHERE conversations.user_id = excluded.user_id
         `).run(
           conversationId,
           userId,
@@ -317,9 +328,9 @@ class MemoryManager {
           )
           VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(conversation_id) DO UPDATE SET
-            user_id = excluded.user_id,
             state_json = excluded.state_json,
             updated_at = excluded.updated_at
+          WHERE conversation_states.user_id = excluded.user_id
         `).run(
           conversationId,
           userId,
@@ -523,7 +534,7 @@ class MemoryManager {
     query = "",
     limit = 12
   } = {}) {
-    const conversation = this.getConversation(conversationId, userId);
+    const conversation = this.getConversation(conversationId, userId, projectId);
     const timestamp = now();
     const queryTokens = tokenizeForSearch(query || conversation.turns.at?.(-1)?.content || "");
     const memoryLimit = Math.max(1, Math.min(Number(limit) || 12, 24));

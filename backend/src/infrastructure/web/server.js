@@ -17,17 +17,16 @@
  * API keys are read from: ../config/hazy-config.json
  * Keys NEVER reach the browser — all cloud calls go through this server.
  *
- * Requirements: Node 18+
+ * Requirements: Node 22.13+
  */
 
 const http   = require('http');
 const https  = require('https');
 const fs     = require('fs');
 const path   = require('path');
-const url    = require('url');
 const { prepareChatRequest, analyzeMessage, finalizeResponse, database, memoryManager, vectorSearch } = require('../../application/orchestrator');
 const { OllamaEmbeddingService } = require('../../../rag/embeddingService');
-const { ingestDocumentAsync } = require('../../../rag/documentIngestion');
+const { ingestDocumentAsync, ingestDocument } = require('../../../rag/documentIngestion');
 const { buildTitlePrompt } = require('../../../ai/system_prompt/prompts');
 const { createStreamResponseCollector } = require('../../../ai/streamResponseCollector');
 const { runDeterministicTools } = require('../../../tools/toolRouter');
@@ -63,17 +62,20 @@ const aiRuntime = new AIRuntime({
 // ─────────────────────────────────────────────────────
 // Paths
 // ─────────────────────────────────────────────────────
+const { DATA_DIR, CONFIG_DIR, ARTIFACTS_DIR } = require('../../../config/runtimePaths');
+const { requestAllowed, readJsonBody } = require('../../../security/httpBoundary');
+const { assertSafePath, safeSegment } = require('../../../security/safePath');
 const PORT         = process.env.PORT || 8080;
 const HOST         = process.env.HOST || 'localhost';
 // Support both localhost and 127.0.0.1 (Windows launcher + controller use localhost; avoids CORS mismatch on Origin vs ACAO).
-const LOCAL_LOOPBACK_ORIGINS = ['http://localhost:8080', 'http://127.0.0.1:8080', 'http://[::1]:8080'];
+const LOCAL_LOOPBACK_ORIGINS = [`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`, `http://[::1]:${PORT}`];
 const CORS_ORIGIN  = process.env.HAZY_ALLOWED_ORIGIN || `http://${HOST}:${PORT}`;
 const FRONTEND_DIR = path.join(__dirname, '..', '..', '..', '..', 'frontend');
 const KOKORO_DIR   = path.join(__dirname, '..', '..', '..', '..', 'kokoro');
-const CONFIG_PATH  = path.join(__dirname, '..', '..', '..', '..', 'config', 'hazy-config.json');
-const REGISTRY_PATH= path.join(__dirname, '..', '..', '..', '..', 'config', 'models-registry.json');
+const CONFIG_PATH  = path.join(CONFIG_DIR, 'hazy-config.json');
+const REGISTRY_PATH= path.join(CONFIG_DIR, 'models-registry.json');
 const CACHE_DIR    = path.join(__dirname, '..', '..', '..', '..', 'cache');
-const usageStatsStore = new UsageStatsStore(path.join(CACHE_DIR, 'hazy-engine', 'stats'));
+const usageStatsStore = new UsageStatsStore(path.join(DATA_DIR, 'stats'));
 const secretVault = new SecretVault(database);
 
 const KOKORO_URL = process.env.KOKORO_URL || 'http://127.0.0.1:8880/v1/audio/speech';
@@ -95,15 +97,7 @@ function getKokoroHealthUrl() {
 // ─────────────────────────────────────────────────────
 // Load config
 // ─────────────────────────────────────────────────────
-function loadConfig() {
-  try {
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch (e) {
-    console.warn('⚠  Could not load hazy-config.json:', e.message);
-    return { providers: { ollama: { enabled: true, baseUrl: 'http://localhost:11434' } }, defaults: {} };
-  }
-}
+const { loadConfig } = require('../../../config/runtimeConfig');
 
 function writeConfig(cfg) {
   fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
@@ -187,6 +181,10 @@ function setCORS(res, req) {
   res.setHeader('Access-Control-Allow-Origin', allowed);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), payment=(), usb=()');
     res.setHeader('Access-Control-Expose-Headers', [
       'X-Hazy-Emotion',
       'X-Hazy-Intent',
@@ -354,18 +352,17 @@ async function resolveAvailableOllamaModel(modelId, ollamaUrl, headers = {}) {
   }
 }
 
-function safeArtifactChatId(chatId) {
-  return String(chatId || 'default').replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 64);
-}
+function safeArtifactChatId(chatId) { return safeSegment(chatId); }
 
 async function collectArtifactProject(chatId, { maxFiles = 20, maxBytes = 200000 } = {}) {
   const safeChat = safeArtifactChatId(chatId);
-  const base = path.resolve(CACHE_DIR, 'hazy-engine', 'artifacts', safeChat);
-  const artifactsRoot = path.resolve(CACHE_DIR, 'hazy-engine', 'artifacts');
+  const base = path.resolve(ARTIFACTS_DIR, safeChat);
+  const artifactsRoot = ARTIFACTS_DIR;
   const rootBase = artifactsRoot.endsWith(path.sep) ? artifactsRoot : artifactsRoot + path.sep;
   if (!base.startsWith(rootBase)) return null;
   
   try {
+    await assertSafePath(ARTIFACTS_DIR, base);
     await fs.promises.access(base);
   } catch {
     return null;
@@ -377,6 +374,7 @@ async function collectArtifactProject(chatId, { maxFiles = 20, maxBytes = 200000
     try {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
+        if (entry.isSymbolicLink()) continue;
         if (files.length >= maxFiles) return;
         const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
         const full = path.join(dir, entry.name);
@@ -384,6 +382,7 @@ async function collectArtifactProject(chatId, { maxFiles = 20, maxBytes = 200000
           await walk(full, rel);
           continue;
         }
+        await assertSafePath(ARTIFACTS_DIR, full);
         const stat = await fs.promises.stat(full);
         if (!stat.isFile() || stat.size > maxBytes) continue;
         const content = await fs.promises.readFile(full, 'utf8');
@@ -418,24 +417,7 @@ async function collectArtifactProject(chatId, { maxFiles = 20, maxBytes = 200000
 // ─────────────────────────────────────────────────────
 // Read request body
 // ─────────────────────────────────────────────────────
-function readBody(req) {
-  return new Promise((res, rej) => {
-    let data = '';
-    const MAX = 50 * 1024 * 1024; // 50MB cap — prevents memory exhaustion
-    req.on('data', chunk => {
-      data += chunk;
-      if (data.length > MAX) {
-        rej(new Error('Request body too large'));
-        req.destroy();
-      }
-    });
-    req.on('end', () => {
-      try { res(JSON.parse(data || '{}')); }
-      catch { res({}); }
-    });
-    req.on('error', rej);
-  });
-}
+const readBody = readJsonBody;
 
 // ─────────────────────────────────────────────────────
 // Generic HTTPS request
@@ -751,7 +733,8 @@ async function handleHazyChat(req, res, routeOptions = {}) {
   }
   const cfg  = loadConfig();
   const chatContext = createToolContext(originalBody);
-  const requestedModel = originalBody.model || cfg.defaults?.textModel || 'ollama/llama3.2';
+  const requestedModel = originalBody.model || process.env.HAZY_MODEL || cfg.defaults?.textModel || 'ollama/llama3.2';
+  if (!originalBody.model) originalBody.model = requestedModel;
   const requestedProvider = requestedModel.split('/')[0];
   const requestedSurface = String(originalBody.hazy?.surface || originalBody.hazy?.page || '').toLowerCase();
   const agentRequested = originalBody.hazy?.agentEnabled === true
@@ -790,6 +773,8 @@ async function handleHazyChat(req, res, routeOptions = {}) {
     chatId: prepared.conversationId,
     model: modelId,
     contextStats: providerBody.hazyContext,
+    memoryCount: analysis.memory.length,
+    ragMode: analysis.ragContext.retrievalMode || 'lexical',
     allowedChunkIds: providerBody.hazyContext?.allowedChunkIds || [],
     averageChunkScore: providerBody.hazyContext?.averageChunkScore || 0
   });
@@ -797,13 +782,13 @@ async function handleHazyChat(req, res, routeOptions = {}) {
   const responseCollector = createStreamResponseCollector((responseText) => {
     if (!shouldRecordConversation) return;
     try {
-      finalizeResponse({
+      void finalizeResponse({
         conversationId: prepared.conversationId,
         userId: prepared.userId,
         userMessage: analysis.latestMessage,
         responseText,
         analysis
-      });
+      }).catch(() => console.warn('[Hazy] Memory persistence failed.'));
     } catch (error) {
       console.warn('[Hazy] Could not finalize companion memory:', error.message);
     }
@@ -862,6 +847,10 @@ async function handleHazyChat(req, res, routeOptions = {}) {
 
 
   setCORS(res, req);
+  res.setHeader('X-Hazy-Memory-Count', String(analysis.memory.length));
+  res.setHeader('X-Hazy-RAG-Count', String(analysis.ragContext.length));
+  res.setHeader('X-Hazy-RAG-Mode', analysis.ragContext.retrievalMode || 'lexical');
+  res.setHeader('X-Hazy-Context-Tokens', String(providerBody.hazyContext?.afterTokens || 0));
   res.setHeader('X-Hazy-Emotion', analysis.emotionData.emotion);
   res.setHeader('X-Hazy-Intent', analysis.intentData.primaryIntent);
   res.setHeader('X-Hazy-Mode', analysis.strategy.mode);
@@ -908,7 +897,7 @@ async function handleHazyChat(req, res, routeOptions = {}) {
         }
       });
       const maxSteps = Math.max(2, Math.min(
-        Number(originalBody.hazy?.agentMaxIterations || 5),
+        Number(originalBody.hazy?.agentMaxIterations || process.env.HAZY_AGENT_MAX_STEPS || 5),
         8
       ));
       const result = await runAgentTurn({
@@ -924,6 +913,7 @@ async function handleHazyChat(req, res, routeOptions = {}) {
         maxSteps,
         reasoningProfile: prepared.analysis?.reasoning || null
       });
+      res.setHeader('X-Hazy-Agent-Iterations', String(result.budgetSummary?.used || 0));
       res.setHeader('X-Hazy-Agent-Steps', String(result.toolCalls));
       res.setHeader('X-Hazy-Agent-Limit-Reached', String(result.limitReached));
       res.setHeader('X-Hazy-Confirmation-Required', String(result.confirmationRequired));
@@ -951,6 +941,7 @@ async function handleHazyChat(req, res, routeOptions = {}) {
             toolCalls: result.toolCalls,
             blockedToolCalls: result.blockedToolCalls,
             confirmationRequired: result.confirmationRequired,
+            confirmation: result.confirmation || null,
             limitReached: result.limitReached,
             usage: result.usage,
             performedToolCalls: result.performedToolCalls || [],
@@ -981,6 +972,7 @@ async function handleHazyChat(req, res, routeOptions = {}) {
           toolCalls: result.toolCalls,
           blockedToolCalls: result.blockedToolCalls,
           confirmationRequired: result.confirmationRequired,
+            confirmation: result.confirmation || null,
           limitReached: result.limitReached,
           performedToolCalls: result.performedToolCalls || [],
           artifactProject
@@ -1338,8 +1330,9 @@ async function handleWriteWorkspaceFiles(req, res) {
       return;
     }
 
-    const workspaceRoot = path.resolve(__dirname, '..', '..', '..');
-    const outputsDir = path.join(workspaceRoot, 'hazy_outputs');
+    const outputsDir = path.join(DATA_DIR, 'outputs');
+    if (files.length > 100) throw Object.assign(new Error('At most 100 files per request.'), { statusCode: 400 });
+    await assertSafePath(DATA_DIR, outputsDir);
     await fs.promises.mkdir(outputsDir, { recursive: true });
 
     const results = [];
@@ -1360,6 +1353,7 @@ async function handleWriteWorkspaceFiles(req, res) {
         continue; // Traversal attempt blocked
       }
 
+      await assertSafePath(DATA_DIR, targetPath);
       await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
       await fs.promises.writeFile(targetPath, file.content, 'utf8');
       results.push(safeSegments.join('/'));
@@ -1704,6 +1698,12 @@ async function handleBrowserAction(req, res) {
   });
   const statusCode = result.status === 'blocked' ? 400 : 200;
   res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
+  res.end(JSON.stringify({
+    ...result,
+    confirmationMessage: result.status === 'confirmation_required'
+      ? buildConfirmationMessage(result.confirmation)
+      : undefined
+  }));
 }
 
 async function handleBrowserControl(req, res, parsed) {
@@ -2030,7 +2030,7 @@ async function handleHazyTTS(req, res) {
     console.error('[TTS Proxy]', err.message);
     if (!res.headersSent) {
       res.writeHead(503, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
-      res.end(JSON.stringify({ error: 'Kokoro TTS unavailable', detail: err.message }));
+      res.end(JSON.stringify({ error: 'Kokoro TTS unavailable. Text chat remains available.' }));
     } else {
       // Headers already sent (audio started): end cleanly without appending JSON to WAV stream
       try { if (!res.destroyed) res.end(); } catch (_) {}
@@ -2292,7 +2292,7 @@ async function handleHazyMonitorStats(req, res) {
     res.end(JSON.stringify(metrics, null, 2));
   } catch (error) {
     res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
-    res.end(JSON.stringify({ error: 'Failed to gather metrics', detail: error.message }));
+    res.end(JSON.stringify({ error: 'Failed to gather local metrics.' }));
   }
 }
 
@@ -2344,7 +2344,8 @@ async function handleHazyMonitorStream(req, res) {
 async function handleRagDocuments(req, res) {
   setCORS(res);
   try {
-    const chunks = vectorSearch.readIndex() || [];
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    const chunks = (vectorSearch.readIndex() || []).filter(chunk => (chunk.userId || 'default') === (params.get('userId') || 'local-user') && (chunk.projectId || '') === (params.get('projectId') || ''));
     const docsMap = new Map();
     for (const chunk of chunks) {
       const fileId = chunk.fileId || 'unknown';
@@ -2367,7 +2368,7 @@ async function handleRagDocuments(req, res) {
     res.end(JSON.stringify(Array.from(docsMap.values())));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': getAllowedOrigin(req) });
-    res.end(JSON.stringify({ error: 'Failed to list RAG documents', detail: err.message }));
+    res.end(JSON.stringify({ error: 'Failed to list RAG documents.' }));
   }
 }
 
@@ -2387,32 +2388,22 @@ async function handleRagUpload(req, res) {
       return;
     }
     
-    // Attempt semantic embedding, fallback to lexical-only if embedding service throws
-    let result;
-    try {
-      result = await ingestDocumentAsync(filename, {
-        userId: 'local-user',
-        text: content,
-        sourceType: type === 'application/pdf' ? 'pdf' : (filename.endsWith('.md') ? 'md' : 'txt'),
-        filename,
-        embeddingService: new OllamaEmbeddingService()
-      });
-    } catch (e) {
-      console.warn('[Server RAG] Embedding failed during ingestion, falling back to lexical-only:', e.message);
-      result = await ingestDocumentAsync(filename, {
-        userId: 'local-user',
-        text: content,
-        sourceType: type === 'application/pdf' ? 'pdf' : (filename.endsWith('.md') ? 'md' : 'txt'),
-        filename
-      });
+    const extension = path.extname(String(filename)).slice(1).toLowerCase();
+    const supported = new Set(['txt', 'md', 'html', 'csv', 'json', 'pdf', 'docx']);
+    if (typeof content !== 'string' || Buffer.byteLength(content) > 2 * 1024 * 1024 || !supported.has(extension)) {
+      throw Object.assign(new Error('Upload extracted text up to 2 MiB using txt, md, html, csv, json, pdf or docx.'), { statusCode: 400 });
     }
-
+    const safeFilename = path.basename(String(filename).replace(/\\/g, '/'));
+    const result = ingestDocument(safeFilename, {
+      userId: body.userId || 'local-user', projectId: body.projectId || '',
+      text: content, sourceType: extension, filename: safeFilename
+    });
     await vectorSearch.addDocumentsAsync(result.chunks);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': getAllowedOrigin(req) });
     res.end(JSON.stringify({ success: true, docId: result.fileId, chunkCount: result.totalChunks }));
   } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': getAllowedOrigin(req) });
-    res.end(JSON.stringify({ error: 'Failed to upload document', detail: err.message }));
+    res.writeHead(err.statusCode || 500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': getAllowedOrigin(req) });
+    res.end(JSON.stringify({ error: err.statusCode ? err.message : 'Failed to upload document.' }));
   }
 }
 
@@ -2431,12 +2422,12 @@ async function handleRagDelete(req, res) {
       res.end(JSON.stringify({ error: 'fileId required' }));
       return;
     }
-    const count = vectorSearch.deleteFile(fileId, 'local-user');
+    const count = vectorSearch.deleteFile(fileId, body.userId || 'local-user', body.projectId || '');
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': getAllowedOrigin(req) });
     res.end(JSON.stringify({ success: true, deletedChunks: count }));
   } catch (err) {
     res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': getAllowedOrigin(req) });
-    res.end(JSON.stringify({ error: 'Failed to delete document', detail: err.message }));
+    res.end(JSON.stringify({ error: 'Failed to delete document.' }));
   }
 }
 
@@ -2468,8 +2459,31 @@ function serveStatic(res, filePath) {
 // ─────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   try {
-  const parsed   = url.parse(req.url);
-  const pathname = parsed.pathname;
+  if (!requestAllowed(req, { host: HOST, port: PORT, allowedOrigin: process.env.HAZY_ALLOWED_ORIGIN })) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Host or Origin is not allowed.' }));
+    return;
+  }
+  setCORS(res, req);
+  const limit = defaultAgentRuntime.rateLimiter.consume(`http:${req.socket.remoteAddress}`, { limit: 240, windowMs: 60000 });
+  if (!limit.allowed) { res.writeHead(429, { 'Retry-After': '60' }); res.end('Too many requests'); return; }
+  let parsed;
+  try {
+    const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+    parsed = { pathname: requestUrl.pathname, search: requestUrl.search, query: requestUrl.search.slice(1) };
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Malformed request URL.' }));
+    return;
+  }
+  let pathname;
+  try {
+    pathname = decodeURIComponent(parsed.pathname);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Malformed request path.' }));
+    return;
+  }
 
   if (req.method === 'OPTIONS') {
     const allowed = getAllowedOrigin(req);
@@ -2508,6 +2522,10 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/hazy/save-key')     { await handleSaveKey(req, res); return; }
   if (pathname === '/hazy/image')        { await handleImage(req, res); return; }
   // ── Readiness probe — used by hazy_controller.py to confirm the server started ──
+  if (pathname === '/hazy/health') {
+    const health = await require('../../../diagnostics').diagnostics();
+    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(health)); return;
+  }
   if (pathname === '/health') {
     setCORS(res);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN });
@@ -2569,7 +2587,7 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: 'Cannot connect to Ollama: ' + err2.message }));
     });
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-      req.pipe(proxyReq2);
+      try { proxyReq2.end(JSON.stringify(await readBody(req))); } catch (error) { proxyReq2.destroy(); throw error; }
     } else {
       proxyReq2.end();
     }
@@ -2583,6 +2601,7 @@ const server = http.createServer(async (req, res) => {
     if (!kokoroPath.startsWith(resolvedKokoroDir + path.sep) && kokoroPath !== resolvedKokoroDir) {
       res.writeHead(403); res.end('Forbidden'); return;
     }
+    await assertSafePath(KOKORO_DIR, kokoroPath);
     serveStatic(res, kokoroPath);
     return;
   }
@@ -2594,18 +2613,23 @@ const server = http.createServer(async (req, res) => {
   if (!resolvedFilePath.startsWith(resolvedFrontendDir + path.sep) && resolvedFilePath !== resolvedFrontendDir) {
     res.writeHead(403); res.end('Forbidden'); return;
   }
+  await assertSafePath(FRONTEND_DIR, resolvedFilePath);
   serveStatic(res, resolvedFilePath);
   } catch (err) {
     console.error('[Server] Unhandled error:', err.message);
     if (!res.headersSent) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Internal server error: ' + err.message }));
+      const statusCode = Number(err.statusCode) || 500;
+      res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: statusCode < 500 ? err.message : 'Internal server error' }));
     }
   }
 });
 
 // Attach error listener unconditionally (even on require for tests + manual .listen later).
 // Only the .listen() + startup banner stay inside the FORCE/require.main guard (per testability fix).
+server.requestTimeout = 30000;
+server.headersTimeout = 10000;
+server.maxHeadersCount = 100;
 server.on('error', (err) => {
   console.error('[Server] HTTP server error:', err.message);
   if (err.code === 'EADDRINUSE') {
@@ -2657,4 +2681,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports.getGpuStats = getGpuStats;
   module.exports.getOllamaStats = getOllamaStats;
   module.exports.gatherAllMetrics = gatherAllMetrics;
+  module.exports.readBody = readBody;
+  module.exports.server = server;
 }

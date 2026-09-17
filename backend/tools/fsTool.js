@@ -1,91 +1,54 @@
 'use strict';
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { ROOT_DIR, ARTIFACTS_DIR } = require('../config/runtimePaths');
+const { assertSafePath, contained, artifactScopeSegment } = require('../security/safePath');
 
-const fs = require('fs');
-const fsp = fs.promises;
-const path = require('path');
-
+function sensitive(relative) {
+  const parts = relative.replace(/\\/g, '/').toLowerCase().split('/');
+  return parts.some(part => ['.git', 'node_modules', 'config', 'cache', 'backup', 'prompt dump', 'docx'].includes(part)
+    || /^\.env(?:\.|$)/.test(part) || part === '.hazy-master-key'
+    || /\.(?:key|pem|p12|pfx|db|sqlite|sqlite3|jsonl|wal|shm)(?:-|$)/.test(part));
+}
 function register(registry) {
   registry.register({
     name: 'fs.read_file',
-    description: 'Read a file from the local workspace (scoped to project dir with lexical+realpath+win-norm+relative+denylist guards; cache/artifacts allowed for handoff, secrets/audit/other-cache denied; special-case for artifact rels). Use for inspecting code, docs, or prior artifacts. Always bounded read to maxBytes (or 64k) + truncated flag; hard-fail only >10MB extreme. Allows source paths with keywords (e.g. backend/tools/).',
-    risk: 'read',
-    toolset: 'safe_default',
-    requiresConfirmation: false,
+    description: 'Read bounded source/document text from the workspace or this chat artifacts. Secrets, configuration, runtime state and symbolic links are blocked.',
+    risk: 'read', toolset: 'safe_default', requiresConfirmation: false,
     allowedRoles: ['admin', 'cashier', 'user'],
-    schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', minLength: 1, description: 'Relative path from workspace root' },
-        maxBytes: { type: 'integer', minimum: 1, maximum: 1048576 }
-      },
-      required: ['path'],
-      additionalProperties: false
-    },
-    execute: async ({ path: userPath, maxBytes }, ctx) => {
+    schema: { type: 'object', properties: {
+      path: { type: 'string', minLength: 1, maxLength: 2000 },
+      maxBytes: { type: 'integer', minimum: 1, maximum: 1048576 }
+    }, required: ['path'], additionalProperties: false },
+    execute: async ({ path: userPath, maxBytes = 65536 }, ctx = {}) => {
+      let handle;
       try {
-        const rawBase = (ctx && ctx.services && ctx.services.workspaceDir) ?? process.cwd() ?? path.join(__dirname, '..', '..');
-        let base = path.resolve(rawBase);
-        let userP = String(userPath || '');
-        const toPosix = (p) => String(p).replace(/\\/g, '/');
-        const normUser = toPosix(userP);
-        // special-case well-known artifact subtree for robust handoff even with custom workspaceDir (resolve from engine root)
-        if (normUser.startsWith('cache/hazy-engine/artifacts/')) {
-          base = path.resolve(__dirname, '..', '..');
+        const input = String(userPath || '').replace(/\\/g, '/');
+        let base = path.resolve(ctx.services?.workspaceDir || ROOT_DIR);
+        let relative = input;
+        const prefix = 'cache/hazy-engine/artifacts/';
+        if (input.startsWith(prefix)) {
+          const scopedPrefix = `${prefix}${artifactScopeSegment(ctx)}/`;
+          if (!input.startsWith(scopedPrefix)) return { ok: false, error: { code: 'SENSITIVE_PATH_DENIED', message: 'Artifact belongs to another chat.' } };
+          base = path.join(ARTIFACTS_DIR, artifactScopeSegment(ctx));
+          relative = input.slice(scopedPrefix.length);
+        } else if (sensitive(path.relative(base, path.resolve(base, input)))) {
+          return { ok: false, error: { code: 'SENSITIVE_PATH_DENIED', message: 'Sensitive local files cannot be read by tools.' } };
         }
-        const resolved = path.resolve(base, userP);
-        const safeBase = base.endsWith(path.sep) ? base : base + path.sep;
-        // cross-platform + traversal guard (lexical + relative + win case norm)
-        const relCheck = path.relative(base, resolved);
-        const normBase = toPosix(safeBase).toLowerCase();
-        const normRes = toPosix(resolved).toLowerCase();
-        if ((relCheck.startsWith('..') || normRes.startsWith('..')) || (!normRes.startsWith(normBase) && normRes !== toPosix(base).toLowerCase())) {
-          return { ok: false, error: { code: 'PATH_TRAVERSAL', message: 'Path escapes workspace (traversal blocked).' } };
-        }
-        // denylist tightened to precise internals (exact cache non-artifacts, secret exts, git/node, specific audit/memory/rag paths); allows source like backend/tools/, docs/, paths containing keywords for "inspect code"
-        const rel = toPosix(relCheck);
-        const lrel = rel.toLowerCase();
-        if ((lrel.startsWith('cache/hazy-engine/') && !lrel.startsWith('cache/hazy-engine/artifacts/')) ||
-            /\.(key|env|db|jsonl|wal|shm)$/i.test(rel) ||
-            /\/(?:\.git|node_modules)\//i.test(rel) ||
-            /\/(?:audit|memory-conversation|user-profiles|rag-index)/i.test(lrel)) {
-          return { ok: false, error: { code: 'SENSITIVE_PATH_DENIED', message: 'Access to internal/sensitive files (secrets, dbs, audit, non-artifact cache) denied via fs.read_file. Use rag.search for project knowledge or target source/docs/artifacts explicitly.' } };
-        }
-        const stat = await fsp.stat(resolved);
-        if (stat.isDirectory()) {
-          return { ok: false, error: { code: 'IS_DIRECTORY', message: 'Path is a directory.' } };
-        }
-        const max = maxBytes || (64 * 1024);
-        // bounded read + truncate semantics preserved for normal oversized (original contract); extreme >10MB hard-fail only as DoS defense (preserves security)
-        if (stat.size > 10 * 1024 * 1024) {
-          return { ok: false, error: { code: 'FILE_TOO_LARGE', message: `File size ${stat.size} exceeds extreme limit.` } };
-        }
-        // realpath re-guard (symlink escape protection) + byte-accurate read (always truncate to cap, set flag)
-        let toRead = resolved;
-        try {
-          const real = await fsp.realpath(resolved);
-          const normReal = toPosix(real).toLowerCase();
-          if (!normReal.startsWith(normBase) && normReal !== toPosix(base).toLowerCase()) {
-            return { ok: false, error: { code: 'PATH_TRAVERSAL', message: 'Symlink target escapes workspace.' } };
-          }
-          toRead = real;
-        } catch {}
-        const buf = await fsp.readFile(toRead);
-        const byteLen = buf.length;
-        const content = buf.slice(0, max).toString('utf8');
-        return {
-          ok: true,
-          data: {
-            path: toPosix(path.relative(base, toRead)),
-            content,
-            bytes: byteLen,
-            truncated: byteLen > max
-          }
-        };
-      } catch (e) {
-        return { ok: false, error: { code: 'FS_READ_FAILED', message: String(e) } };
-      }
+        const target = path.resolve(base, relative);
+        if (!contained(base, target)) return { ok: false, error: { code: 'PATH_TRAVERSAL', message: 'Path escapes workspace.' } };
+        await assertSafePath(base, target);
+        handle = await fs.open(target, 'r');
+        const stat = await handle.stat();
+        if (!stat.isFile()) throw new Error('Path is not a regular file.');
+        if (stat.size > 10 * 1024 * 1024) throw new Error('File exceeds 10 MiB read limit.');
+        const buffer = Buffer.alloc(Math.min(maxBytes, stat.size));
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        return { ok: true, data: { path: input, content: buffer.subarray(0, bytesRead).toString('utf8'), bytes: stat.size, truncated: stat.size > bytesRead } };
+      } catch {
+        return { ok: false, error: { code: 'FS_READ_FAILED', message: 'File is unavailable or outside the permitted workspace.' } };
+      } finally { await handle?.close(); }
     }
   });
 }
-
-module.exports = { register };
+module.exports = { register, sensitive };

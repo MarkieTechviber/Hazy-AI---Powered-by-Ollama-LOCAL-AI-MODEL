@@ -1,6 +1,7 @@
 'use strict';
 
 const net = require('net');
+const { isPrivateIp } = require('../security/publicNetwork');
 
 const SENSITIVE_VALUE = '[REDACTED]';
 const PRIVATE_HOSTS = new Set(['localhost', 'ip6-localhost', 'ip6-loopback']);
@@ -46,6 +47,7 @@ function classifyUrl(rawUrl, options = {}) {
     return { allowed: false, code: 'INVALID_URL', message: 'The URL is not valid.' };
   }
 
+  if (parsed.username || parsed.password) return { allowed: false, code: 'URL_CREDENTIALS_BLOCKED', message: 'URL credentials are blocked.' };
   const protocol = parsed.protocol.toLowerCase();
   const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (protocol === 'file:') {
@@ -60,8 +62,7 @@ function classifyUrl(rawUrl, options = {}) {
   const ipVersion = net.isIP(hostname);
   const isLocal = isLocalHostname(hostname) || (ipVersion === 4 && hostname.startsWith('127.')) || (ipVersion === 6 && hostname === '::1');
   const isPrivate = isLocal
-    || (ipVersion === 4 && isIPv4Private(hostname))
-    || (ipVersion === 6 && isIPv6Private(hostname));
+    || (ipVersion && isPrivateIp(hostname));
 
   if (isLocal && !allowLocalhost) {
     return { allowed: false, code: 'LOCALHOST_BLOCKED', message: 'Localhost browser targets are blocked unless explicitly enabled.' };

@@ -53,6 +53,6 @@ test('browser tools are registered for the agent gatekeeper', () => {
   assert.ok(names.includes('browser.open'));
   assert.ok(names.includes('browser.observe'));
   assert.ok(names.includes('browser.ask_user'));
-  assert.equal(tools.find((tool) => tool.name === 'browser.click').requiresConfirmation, false);
-  assert.equal(tools.find((tool) => tool.name === 'browser.type').requiresConfirmation, false);
+  assert.equal(tools.find((tool) => tool.name === 'browser.click').requiresConfirmation, true);
+  assert.equal(tools.find((tool) => tool.name === 'browser.type').requiresConfirmation, true);
 });

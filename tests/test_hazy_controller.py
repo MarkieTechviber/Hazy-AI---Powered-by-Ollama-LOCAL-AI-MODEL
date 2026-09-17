@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from hazy_controller import (
     ControllerError,
     HazyProcessManager,
+    HAZY_HEALTH_URL,
+    OLLAMA_HEALTH_URL,
     ServiceStatus,
     StackStatus,
 )
@@ -181,7 +184,6 @@ class HazyControllerTests(unittest.TestCase):
         calls = []
         manager.start_ollama = Mock(side_effect=lambda: calls.append("start_ollama"))
         manager.start_hazy = Mock(side_effect=lambda: calls.append("start_hazy"))
-        manager.start_kokoro = Mock(side_effect=lambda: calls.append("start_kokoro"))
         manager._wait_for_url = Mock(side_effect=lambda url, timeout: calls.append(url) or True)
         expected = StackStatus(
             hazy=ServiceStatus("hazy", True, verified=True),
@@ -197,8 +199,22 @@ class HazyControllerTests(unittest.TestCase):
         self.assertIn("11434", calls[1])
         self.assertEqual(calls[2], "start_hazy")
         self.assertIn("8080", calls[3])
-        self.assertEqual(calls[4], "start_kokoro")
-        self.assertIn("8880", calls[5])
+        self.assertEqual(calls, ["start_ollama", OLLAMA_HEALTH_URL, "start_hazy", HAZY_HEALTH_URL])
+
+    def test_optional_tts_failure_does_not_block_core_chat(self):
+        manager = self.make_manager()
+        manager.start_ollama = Mock()
+        manager.start_hazy = Mock()
+        manager.start_kokoro = Mock(side_effect=ControllerError("tts unavailable"))
+        manager._wait_for_url = Mock(return_value=True)
+        expected = StackStatus(
+            hazy=ServiceStatus("hazy", True, verified=True),
+            ollama=ServiceStatus("ollama", True, verified=True),
+            kokoro=ServiceStatus("kokoro", False),
+        )
+        manager.status = Mock(return_value=expected)
+        with patch.dict(os.environ, {"HAZY_TTS": "1"}):
+            self.assertEqual(manager.ensure_all_ready(), expected)
 
     def test_health_check_retries_until_service_is_ready(self):
         urlopen = Mock(

@@ -7,33 +7,9 @@ const MAX_HTML_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_MAX_REDIRECTS = 4;
 
-function isPrivateIp(address) {
-  if (!net.isIP(address)) return true;
-  const normalized = String(address).toLowerCase();
-  if (normalized === '127.0.0.1' || normalized === '::1' || normalized === '0.0.0.0') return true;
-  if (normalized.startsWith('10.') || normalized.startsWith('192.168.') || normalized.startsWith('169.254.')) return true;
-  const match = normalized.match(/^172\.(\d+)\./);
-  if (match && Number(match[1]) >= 16 && Number(match[1]) <= 31) return true;
-  return normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:');
-}
-
+const { isPrivateIp, resolvePublicUrl, publicFetch } = require('../security/publicNetwork');
 async function assertPublicUrl(rawUrl, lookup = dns.lookup, options = {}) {
-  const parsed = new URL(rawUrl);
-  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only HTTP(S) pages may be fetched.');
-  if (parsed.username || parsed.password) throw new Error('Credential-bearing URLs are not allowed.');
-  const host = parsed.hostname.toLowerCase();
-  if (!options.allowLocalhost && (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local'))) {
-    throw new Error('Local network URLs are blocked.');
-  }
-  if (net.isIP(host)) {
-    if (!options.allowLocalhost && isPrivateIp(host)) throw new Error('Private network URLs are blocked.');
-    return parsed;
-  }
-  const addresses = await lookup(host, { all: true });
-  if (!addresses.length || (!options.allowLocalhost && addresses.some((entry) => isPrivateIp(entry.address)))) {
-    throw new Error('Private or unresolved network target.');
-  }
-  return parsed;
+  return (await resolvePublicUrl(rawUrl, lookup, options)).url;
 }
 
 async function readLimitedText(response, maxBytes) {
@@ -65,7 +41,7 @@ function resolveRedirectUrl(baseUrl, location) {
 }
 
 async function fetchWithRedirects(rawUrl, options = {}) {
-  const fetchImpl = options.fetchImpl || fetch;
+  const fetchImpl = options.fetchImpl || ((target, init) => publicFetch(target, { ...options, ...init }));
   let currentUrl = rawUrl;
   const redirects = [];
   for (let count = 0; count <= (options.maxRedirects ?? DEFAULT_MAX_REDIRECTS); count += 1) {
@@ -82,6 +58,7 @@ async function fetchWithRedirects(rawUrl, options = {}) {
       const finalUrl = await assertPublicUrl(response.url || safeUrl.toString(), options.lookup, options);
       return { response, finalUrl: finalUrl.toString(), redirects };
     }
+    await response.body?.cancel();
     const location = response.headers.get('location');
     const nextUrl = resolveRedirectUrl(safeUrl.toString(), location);
     if (!nextUrl) throw new Error('Redirect response did not include a Location header.');

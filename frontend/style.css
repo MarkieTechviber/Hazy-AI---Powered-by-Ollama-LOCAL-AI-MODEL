@@ -1385,3 +1385,13 @@ body.builder-open .input-area{
   flex: 1;
   min-width: 0;
 }
+
+/* Runtime diagnostics use the existing theme and do not change companion layout. */
+.runtime-status { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .5rem 1rem; font-size: .75rem; color: var(--text-muted); }
+.runtime-status button, .runtime-confirm button { font: inherit; padding: .35rem .65rem; cursor: pointer; }
+.runtime-confirm { max-width: min(36rem, 92vw); max-height: 85vh; overflow: auto; padding: 1.5rem; border: 1px solid var(--border); border-radius: 12px; background: var(--bg, #fff); color: var(--text, #222); }
+.runtime-confirm::backdrop { background: #0008; }
+.runtime-confirm pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 14rem; overflow: auto; }
+.runtime-confirm input { display: block; width: 100%; margin: .5rem 0; }
+.runtime-confirm button { margin-right: .75rem; }
+:focus-visible { outline: 2px solid var(--accent, #8b6a39); outline-offset: 3px; }

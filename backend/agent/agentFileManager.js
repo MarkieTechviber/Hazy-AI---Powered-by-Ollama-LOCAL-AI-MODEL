@@ -3,6 +3,8 @@
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
+const { assertSafePath, artifactScopeSegment } = require('../security/safePath');
+const { ARTIFACTS_DIR } = require('../config/runtimePaths');
 
 // Session-scoped map: { sanitizedConversationId -> Map(taskKey -> filename) }
 const sessionMap = new Map();
@@ -29,15 +31,11 @@ function toKebabCase(str) {
 
 function getExtension(lang) {
   const l = String(lang || 'javascript').toLowerCase();
-  return EXTENSIONS[l] || l || 'txt';
+  return EXTENSIONS[l] || (/^[a-z0-9]{1,12}$/.test(l) ? l : 'txt');
 }
 
 // Single, consistent sanitizer used everywhere
-function sanitizeConversationId(conversationId) {
-  return String(conversationId || 'default')
-    .replace(/[^a-zA-Z0-9_.-]/g, '_')
-    .slice(0, 64);
-}
+const sanitizeConversationId = (conversationId, userId, projectId) => artifactScopeSegment({ conversationId, userId, projectId });
 
 function getSessionMap(sanitizedId) {
   if (!sessionMap.has(sanitizedId)) {
@@ -54,25 +52,27 @@ function assertInsideDir(baseDir, filePath) {
   }
 }
 
+const assertNoSymlinkEscape = (_base, target) => assertSafePath(ARTIFACTS_DIR, target);
+
 // In-flight promise map prevents race conditions on the same key
 const inFlight = new Map();
 
-async function writeOrUpdate({ conversationId, taskContext, code, language }) {
-  const safeChat = sanitizeConversationId(conversationId);
+async function writeOrUpdate({ conversationId, userId, projectId, taskContext, code, language }) {
+  const safeChat = sanitizeConversationId(conversationId, userId, projectId);
   const key = String(taskContext || 'default-task').toLowerCase().trim();
 
   // Deduplicate concurrent writes to the same (safeChat, key) pair
   const lockKey = `${safeChat}::${key}`;
-  const existing = inFlight.get(lockKey);
-  if (existing) await existing;
+  while (inFlight.has(lockKey)) await inFlight.get(lockKey);
 
   let resolve;
   const lock = new Promise(r => { resolve = r; });
   inFlight.set(lockKey, lock);
 
   try {
-    const artifactsRoot = path.resolve(__dirname, '..', 'cache', 'hazy-engine', 'artifacts');
+    const artifactsRoot = require('../config/runtimePaths').ARTIFACTS_DIR;
     const baseDir = path.resolve(artifactsRoot, safeChat);
+    await assertSafePath(ARTIFACTS_DIR, baseDir);
     await fsp.mkdir(baseDir, { recursive: true });
 
     const filesMap = getSessionMap(safeChat);
@@ -87,6 +87,7 @@ async function writeOrUpdate({ conversationId, taskContext, code, language }) {
 
     const targetPath = path.resolve(baseDir, filename);
     assertInsideDir(baseDir, targetPath);
+    await assertNoSymlinkEscape(baseDir, targetPath);
 
     await fsp.writeFile(targetPath, String(code || ''), 'utf8');
 

@@ -6,20 +6,28 @@ const fsp = fs.promises;
 const path = require('path');
 
 const SECRET_KEY_PATTERN = /(api[-_]?key|authorization|password|secret|token|cookie)/i;
+const PRIVATE_PAYLOAD_KEY_PATTERN = /^(content|code|input|message|prompt|query|text|value)$/i;
 const MAX_IN_MEMORY = 1000;
 const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB before rotation
 
 // FIX: circular-reference-safe redact (original could throw on circular objects)
 function redact(value, _seen = new WeakSet()) {
-  if (Array.isArray(value)) return value.map((v) => redact(v, _seen));
+  if (Array.isArray(value)) {
+    if (_seen.has(value)) return '[Circular]';
+    _seen.add(value);
+    return value.map(v => redact(v, _seen));
+  }
   if (value && typeof value === 'object') {
     if (_seen.has(value)) return '[Circular]';
     _seen.add(value);
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        SECRET_KEY_PATTERN.test(key) ? '[REDACTED]' : redact(item, _seen)
-      ])
+      Object.entries(value).map(([key, item]) => {
+        if (SECRET_KEY_PATTERN.test(key)) return [key, '[REDACTED]'];
+        if (PRIVATE_PAYLOAD_KEY_PATTERN.test(key) && typeof item === 'string') {
+          return [key, `[REDACTED:${Buffer.byteLength(item, 'utf8')} bytes]`];
+        }
+        return [key, redact(item, _seen)];
+      })
     );
   }
   return value;
@@ -41,7 +49,7 @@ class AgentAuditStore {
     const record = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
-      ...redact(entry)
+      ...Object.fromEntries(['requestId', 'toolName', 'risk', 'status', 'errorCode', 'latencyMs', 'confirmationId'].filter(key => entry[key] != null).map(key => [key, entry[key]]))
     };
 
     // Cap in-memory ring buffer
@@ -65,7 +73,8 @@ class AgentAuditStore {
     try {
       const stat = await fsp.stat(this.filePath);
       if (stat.size >= this.maxFileSizeBytes) {
-        const rotated = `${this.filePath}.${Date.now()}.bak`;
+        const rotated = `${this.filePath}.previous`;
+        await fsp.rm(rotated, { force: true });
         await fsp.rename(this.filePath, rotated);
       }
     } catch {

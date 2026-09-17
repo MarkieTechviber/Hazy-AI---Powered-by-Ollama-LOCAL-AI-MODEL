@@ -61,7 +61,9 @@ test('gatekeeper blocks unknown tools, unauthorized roles, and invalid arguments
     ctx: context(),
     toolCall: { id: '1', name: 'missing', arguments: {} }
   });
-  assert.equal(unknown.error.code, 'UNKNOWN_TOOL');
+  // Unknown and disabled tools intentionally share one response to prevent
+  // callers from enumerating installed capabilities.
+  assert.equal(unknown.error.code, 'TOOL_UNAVAILABLE');
 
   const roleBlocked = await harness.gatekeeper.validateAndMaybeRun({
     ctx: context('user'),
@@ -291,4 +293,21 @@ test('plan.manage tool is registered and can create / list / update tasks (in-me
   });
   assert.equal(res.status, 'executed');
   assert.equal(res.result.data.plan.tasks.length, 0);
+});
+
+test('plans are isolated by user, project and conversation', async () => {
+  const runtime = createAgentRuntime({ auditPath: false, confirmationPath: false, planPath: false });
+  const services = { planStore: runtime.planStore };
+  const alice = createToolContext({ conversationId: 'shared', userId: 'alice', projectId: 'one' }, { services });
+  const bob = createToolContext({ conversationId: 'shared', userId: 'bob', projectId: 'one' }, { services });
+  await runtime.gatekeeper.validateAndMaybeRun({
+    ctx: alice,
+    toolCall: { id: 'scope-add', name: 'plan.manage', arguments: { action: 'add', description: 'Alice private task' } }
+  });
+  const result = await runtime.gatekeeper.validateAndMaybeRun({
+    ctx: bob,
+    toolCall: { id: 'scope-list', name: 'plan.manage', arguments: { action: 'list' } }
+  });
+  assert.equal(result.result.data.plan.tasks.length, 0);
+  runtime.confirmations.destroy();
 });

@@ -1195,7 +1195,7 @@ function generateSmartCodePrompt({ langResult, codeType, complexity, userHint })
  * @param {string} [userHint] - Optional: language hint from frontend override (e.g., 'python')
  * @returns {Object} Analysis result
  */
-function analyzeCodeRequest(message, conversationHistory = [], userHint = null, projectContext = null) {
+function analyzeCodeRequest(message, conversationHistory = [], userHint = null, projectContext = null, currentProject = null) {
   const isCode = isCodingRequest(message);
 
   if (!isCode) {
@@ -1244,6 +1244,8 @@ function analyzeCodeRequest(message, conversationHistory = [], userHint = null, 
     languageSignals: langResult.languageSignals || [],
     codeType,
     complexity,
+    currentProject,
+    isEditIteration: Boolean(currentProject && /\b(?:fix|edit|update|change|adjust|modify|refactor|remove|rename)\b/i.test(message)),
     systemPrompt,
   };
 }

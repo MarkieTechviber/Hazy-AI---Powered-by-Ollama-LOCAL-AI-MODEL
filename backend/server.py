@@ -29,6 +29,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -53,7 +54,7 @@ OLLAMA_BASE  = os.getenv("OLLAMA_URL", "http://localhost:11434")
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 KOKORO_DIR = Path(__file__).parent.parent / "kokoro"
 PORT         = int(os.getenv("PORT", 8080))
-HOST         = os.getenv("HOST", "0.0.0.0")
+HOST         = os.getenv("HOST", "127.0.0.1")
 NVIDIA_BASE  = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-super-120b-a12b")
 KOKORO_URL   = os.getenv("KOKORO_URL", "http://127.0.0.1:8880/v1/audio/speech")
@@ -92,18 +93,23 @@ def parse_nvidia_smi(smi_raw):
 # ─────────────────────────────────────────────────────────────────────────────
 # App
 # ─────────────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Hazy", version="1.0.0")
+app = FastAPI(title="Hazy compatibility proxy", version="1.0.0")
+try:
+    from .python_boundary import LocalBoundary
+except ImportError:
+    from python_boundary import LocalBoundary
+app.add_middleware(LocalBoundary, port=PORT)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "runtime": "python-compatibility", "fullAgentPipeline": False}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Ollama proxy helpers
@@ -220,8 +226,8 @@ async def status():
             data = r.json()
             models = [m["name"] for m in data.get("models", [])]
             return {"status": "ok", "ollama": "connected", "models": models, "url": OLLAMA_BASE}
-    except Exception as e:
-        return {"status": "error", "ollama": "unreachable", "error": str(e), "url": OLLAMA_BASE}
+    except Exception:
+        return {"status": "error", "ollama": "unreachable"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -237,6 +243,14 @@ async def hazy_tts(request: Request):
 
     if not text or not str(text).strip():
         return Response(content=json.dumps({"error": "No text provided"}), media_type="application/json", status_code=400)
+    if len(str(text)) > 10000 or not re.fullmatch(r"[abefhipjz][fm]_[a-z0-9_]{1,40}", str(voice)):
+        return Response(content=json.dumps({"error": "Invalid speech request"}), media_type="application/json", status_code=400)
+    try:
+        speed = float(speed)
+        if not 0.5 <= speed <= 2.0:
+            raise ValueError()
+    except (TypeError, ValueError):
+        return Response(content=json.dumps({"error": "Invalid speech speed"}), media_type="application/json", status_code=400)
 
     try:
         async with httpx.AsyncClient(timeout=None) as client:
@@ -274,7 +288,7 @@ async def hazy_tts(request: Request):
     except Exception as e:
         print("[TTS Proxy]", str(e))
         return Response(
-            content=json.dumps({"error": "Kokoro TTS unavailable", "detail": str(e)}),
+            content=json.dumps({"error": "Kokoro TTS unavailable. Text chat remains available."}),
             media_type="application/json",
             status_code=503
         )
@@ -456,9 +470,9 @@ async def hazy_persona_prompt(request: Request):
         body = await request.json()
         prompt = build_persona_prompt(body)
         return {"prompt": prompt}
-    except Exception as e:
+    except Exception:
         return Response(
-            content=json.dumps({"error": str(e)}),
+            content=json.dumps({"error": "Invalid persona request"}),
             media_type="application/json",
             status_code=400
         )
@@ -478,7 +492,11 @@ async def hazy_write_workspace_files(request: Request):
 
         workspace_root = FRONTEND_DIR.parent
         outputs_dir = workspace_root / "hazy_outputs"
+        if outputs_dir.is_symlink():
+            raise ValueError("Output directory cannot be a symlink.")
         outputs_dir.mkdir(parents=True, exist_ok=True)
+        if len(files) > 100:
+            raise ValueError("At most 100 files per request.")
 
         results = []
         for file_info in files:
@@ -499,7 +517,13 @@ async def hazy_write_workspace_files(request: Request):
             if not safe_segs:
                 continue
 
-            target_path = outputs_dir.joinpath(*safe_segs).resolve()
+            candidate = outputs_dir.joinpath(*safe_segs)
+            for component in [candidate, *candidate.parents]:
+                if component.is_symlink():
+                    raise ValueError("Symbolic links are blocked.")
+                if component == outputs_dir:
+                    break
+            target_path = candidate.resolve()
             try:
                 target_path.relative_to(outputs_dir)
             except ValueError:
@@ -510,9 +534,9 @@ async def hazy_write_workspace_files(request: Request):
             results.append("/".join(safe_segs))
 
         return {"ok": True, "savedFiles": results}
-    except Exception as e:
+    except Exception:
         return Response(
-            content=json.dumps({"ok": False, "error": str(e)}),
+            content=json.dumps({"ok": False, "error": "Failed to write workspace files"}),
             media_type="application/json",
             status_code=500
         )
@@ -564,9 +588,9 @@ Title:"""
                 title = title[0].upper() + title[1:]
 
             return {"title": title}
-    except Exception as e:
+    except Exception:
         return Response(
-            content=json.dumps({"error": str(e)}),
+            content=json.dumps({"error": "Failed to generate title"}),
             media_type="application/json",
             status_code=500
         )

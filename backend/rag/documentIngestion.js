@@ -99,7 +99,8 @@ function detectSections(text) {
 function ingestDocument(filePath, options = {}) {
   const absolutePath = path.resolve(filePath);
   const sourceType = options.sourceType || sourceTypeFromPath(filePath);
-  const fileBuffer = fs.existsSync(absolutePath) ? fs.readFileSync(absolutePath) : Buffer.from(String(options.text || options.extractedText || ''));
+  const inlineText = typeof options.text === 'string' ? options.text : options.extractedText;
+  const fileBuffer = typeof inlineText === 'string' ? Buffer.from(inlineText) : fs.readFileSync(absolutePath);
   const fileHash = hashBuffer(fileBuffer);
   const fileId = options.fileId || fileHash.slice(0, 16);
   const rawText = readDocumentText(absolutePath, { ...options, sourceType });
@@ -112,6 +113,7 @@ function ingestDocument(filePath, options = {}) {
 
   const chunkInputs = chunkSections({
     userId: options.userId || 'default',
+    projectId: options.projectId || '',
     fileId,
     sourceType,
     sections
@@ -119,6 +121,7 @@ function ingestDocument(filePath, options = {}) {
 
   const chunks = chunkInputs.map((chunk) => ({
     ...chunk,
+    projectId: options.projectId || chunk.projectId || '',
     id: chunk.id || `chunk_${fileId}_${chunk.chunkIndex}`,
     filename: options.filename || path.basename(filePath),
     source: absolutePath,

@@ -1,7 +1,7 @@
 'use strict';
 
-const ToolInterface = require('./toolInterface');
-const { PermanentError } = require('../errors');
+const ToolInterface = require('../toolInterface');
+const { PermanentError } = require('../../errors');
 
 class RunTerminalTool extends ToolInterface {
   get name() {
@@ -22,6 +22,8 @@ class RunTerminalTool extends ToolInterface {
     };
   }
 
+  getSchema() { return this.schema; }
+
   get requiredPermissions() {
     return ['run_terminal'];
   }
@@ -34,8 +36,8 @@ class RunTerminalTool extends ToolInterface {
 
   async execute(args) {
     // Placeholder execution implementation
-    return { success: true };
+    throw new PermanentError('Terminal execution is unavailable; no command was executed.');
   }
 }
 
-module.exports = new RunTerminalTool();
+module.exports = RunTerminalTool;

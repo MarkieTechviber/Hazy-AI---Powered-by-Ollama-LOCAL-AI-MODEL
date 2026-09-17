@@ -1,1 +1,0 @@
-git commit --amend -m "The new and correct commit message"

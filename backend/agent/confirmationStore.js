@@ -41,7 +41,7 @@ class PendingConfirmationStore {
 
   // ── Index helpers ────────────────────────────────────────────────────────────
   _indexKey(userId, chatId) {
-    return `${String(userId)}::${String(chatId)}`;
+    return JSON.stringify([String(userId), String(chatId)]);
   }
 
   _indexAdd(record) {
@@ -98,20 +98,22 @@ class PendingConfirmationStore {
   }
 
   // FIX: async persist — original persist() used writeFileSync which blocked the event loop.
-  _persistAsync() {
+  _persistAsync() { this._persistNow(); }
+
+  _persistNow() {
     if (!this.filePath) return;
     const payload = JSON.stringify(Array.from(this.records.values()), null, 2);
     const dir = path.dirname(this.filePath);
-    const tmp = `${this.filePath}.tmp`;
-    fsp.mkdir(dir, { recursive: true })
-      .then(() => fsp.writeFile(tmp, payload, 'utf8'))
-      .then(() => fsp.rename(tmp, this.filePath))
-      .catch((e) => console.warn('[ConfirmationStore] persist failed (non-fatal):', e?.message || e));
+    const tmp = `${this.filePath}.${process.pid}.tmp`;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(tmp, payload, { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, this.filePath);
   }
 
   // ── Public API ───────────────────────────────────────────────────────────────
   create({ ctx, tool, args, summary, now = Date.now() }) {
     // FIX: per-user pending cap — original would let a user accumulate unlimited pending confirmations.
+    this._cleanup(now);
     const k = this._indexKey(ctx.userId, ctx.chatId);
     const existing = this._pendingIndex.get(k);
     if (existing && existing.size >= MAX_PENDING_PER_USER) {
@@ -125,7 +127,7 @@ class PendingConfirmationStore {
       userId: ctx.userId,
       chatId: ctx.chatId,
       toolName: tool.name,
-      args,
+      args: structuredClone(args),
       risk: tool.risk,
       summary: summary || `Run ${tool.name}`,
       typedPhrase,
@@ -135,8 +137,11 @@ class PendingConfirmationStore {
     };
     this.records.set(confirmation.id, confirmation);
     this._indexAdd(confirmation);
-    this._persistAsync();
-    return { ...confirmation };
+    // A confirmation must survive a process restart before it is returned to
+    // the caller. Async persistence created a window where approval state was
+    // lost or a second process could not see the pending action.
+    this._persistNow();
+    return structuredClone(confirmation);
   }
 
   get(id, now = Date.now()) {
@@ -145,9 +150,9 @@ class PendingConfirmationStore {
     if (record.status === 'pending' && Date.parse(record.expiresAt) <= now) {
       this._indexRemove(record);
       record.status = 'expired';
-      this._persistAsync();
+      this._persistNow();
     }
-    return { ...record };
+    return structuredClone(record);
   }
 
   // FIX: O(1) — original was O(n) map over all records + find
@@ -166,7 +171,7 @@ class PendingConfirmationStore {
     const record = this.get(id, now);
     if (!record) return { status: 'not_found' };
     if (record.userId !== ctx.userId || record.chatId !== ctx.chatId) return { status: 'forbidden' };
-    if (record.status !== 'pending') return { status: record.status, confirmation: record };
+    if (record.status !== 'pending') return { status: record.status === 'approved' ? 'already_resolved' : record.status, confirmation: record };
 
     const normalized = normalizeText(message);
     const stored = this.records.get(id);
@@ -174,7 +179,7 @@ class PendingConfirmationStore {
     if (['cancel', 'no', 'reject', 'rejected'].includes(normalized)) {
       stored.status = 'rejected';
       this._indexRemove(stored);
-      this._persistAsync();
+      this._persistNow();
       return { status: 'rejected', confirmation: { ...stored } };
     }
 
@@ -186,7 +191,7 @@ class PendingConfirmationStore {
 
     stored.status = 'approved';
     this._indexRemove(stored);
-    this._persistAsync();
+    this._persistNow();
     return { status: 'approved', confirmation: { ...stored } };
   }
 

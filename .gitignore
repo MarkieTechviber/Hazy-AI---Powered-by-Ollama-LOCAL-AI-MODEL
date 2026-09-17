@@ -1,29 +1,75 @@
-# Legacy config may contain old plaintext API keys
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
 config/hazy-config.json
+*.pem
+*.key
+*.p12
 
-# Encrypted local state and its master key
-cache/hazy-engine/hazy.db
-cache/hazy-engine/hazy.db-*
-cache/hazy-engine/.hazy-master-key
-cache/hazy-engine/memory/hazy.db
-cache/hazy-engine/memory/hazy.db-*
-cache/hazy-engine/memory/.hazy-master-key
+# Hazy runtime state (conversations, RAG, browser data, audit logs, keys)
+cache/
+hazy_outputs/
+backend/cache/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 
-# OS files
-.DS_Store
-Thumbs.db
+# Generated artifacts and historical snapshots
+backup/
+prompt dump/
+frontend/index-backup.html
+backend/agent/agent.zip
+backend/webSearch/*.zip
+backend/empathy/*.zip
+Hazy-AI---Powered-by-Ollama-LOCAL-AI-MODEL.zip
+temp_report_generation/
+docx/
+kokoro/
+.verify-structured-cards-ok
+*.bak
+*.backup
+*.tmp
+*.temp
+*.log
+
+# Model and speech caches
+models/
+.cache/
+.ollama/
 
 # Node
 node_modules/
-npm-debug.log
+coverage/
+.nyc_output/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Python
 __pycache__/
-*.pyc
-.env
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+.venv-*/
+venv/
+env/
 
-# Hazy desktop controller runtime state
-cache/hazy-control/
-cache/hazy-engine/audit/
-cache/hazy-engine/confirmations/
-cache/hazy-engine/web-search/
+# Test and browser outputs
+test-results/
+playwright-report/
+blob-report/
+screenshots/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const { publicFetch } = require('../security/publicNetwork');
 
 class BrowserSessionManager {
   constructor({ store, streamer, staleMs = 15 * 60_000 } = {}) {
@@ -22,7 +23,8 @@ class BrowserSessionManager {
   }
 
   async startSession(ctx = {}, options = {}) {
-    this.closeStaleSessions();
+    await this.closeStaleSessions();
+    if (this.sessions.size >= 4) throw new Error('Browser session limit reached; close an existing session.');
     const reusable = this.getReusableSession(ctx);
     if (reusable) {
       reusable.updatedAt = new Date().toISOString();
@@ -37,8 +39,27 @@ class BrowserSessionManager {
     });
     const context = await browser.newContext({
       viewport: options.viewport || { width: 1365, height: 768 },
-      userAgent: 'HazyBrowserAutomation/1.0'
+      userAgent: 'HazyBrowserAutomation/1.0',
+      serviceWorkers: 'block',
+      acceptDownloads: false
     });
+    await context.route('**/*', async route => {
+      try {
+        const request = route.request();
+        const headers = { ...request.headers(), 'accept-encoding': 'identity' };
+        delete headers.host;
+        const response = await publicFetch(request.url(), {
+          method: request.method(), headers, body: request.postDataBuffer() || undefined,
+          maxBytes: 8 * 1024 * 1024,
+          signal: AbortSignal.timeout(10000),
+          allowLocalhost: process.env.HAZY_BROWSER_ALLOW_PRIVATE_NETWORK === '1'
+        });
+        const responseHeaders = Object.fromEntries(response.headers);
+        delete responseHeaders['transfer-encoding'];
+        await route.fulfill({ status: response.status, headers: responseHeaders, body: Buffer.from(await response.arrayBuffer()) });
+      } catch { await route.abort('blockedbyclient').catch(() => {}); }
+    });
+    if (context.routeWebSocket) await context.routeWebSocket('**/*', socket => socket.close());
     const page = await context.newPage();
     const session = {
       id: this.store?.makeId?.('browser-session') || `browser-session-${Date.now()}`,
@@ -78,9 +99,10 @@ class BrowserSessionManager {
   }
 
   getSession(sessionId, ctx = {}) {
-    const session = this.sessions.get(sessionId) || this.getReusableSession(ctx);
+    const session = sessionId ? this.sessions.get(sessionId) : this.getReusableSession(ctx);
     if (!session) return null;
     if (ctx.userId && session.userId !== ctx.userId) return null;
+    if (ctx.chatId && session.chatId !== ctx.chatId) return null;
     return session;
   }
 
@@ -143,12 +165,12 @@ class BrowserSessionManager {
     return session;
   }
 
-  closeStaleSessions() {
+  async closeStaleSessions() {
     const now = Date.now();
     for (const session of Array.from(this.sessions.values())) {
       const age = now - new Date(session.updatedAt || session.createdAt).getTime();
       if (age > this.staleMs) {
-        this.close(session.id, { userId: session.userId }).catch(() => {});
+        await this.close(session.id, { userId: session.userId }).catch(() => {});
       }
     }
   }

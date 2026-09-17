@@ -1,0 +1,6 @@
+# Optional speech service. Python 3.10-3.12 is supported.
+fastapi>=0.110.0
+uvicorn>=0.29.0
+kokoro>=0.9.4
+soundfile>=0.12.1
+numpy>=1.26.0

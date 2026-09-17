@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test"
+    "test": "node --require ./tests/testSetup.cjs --test --test-timeout=30000 tests/*.test.js",
+    "test:integration:ollama": "node --test --test-timeout=180000 integration/ollama.integration.test.js"
   },
   "keywords": [
     "companion",
@@ -16,7 +17,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "playwright": "^1.61.1"

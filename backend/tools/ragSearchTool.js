@@ -32,18 +32,18 @@ function register(registry) {
 
         const vs = (ctx && ctx.services && ctx.services.vectorSearch) || 
           (mod.VectorSearch ? new mod.VectorSearch(
-            path.resolve((ctx && ctx.services && ctx.services.ragBaseDir) || path.join(__dirname, '..', '..', 'cache', 'hazy-engine', 'rag')),
+            path.resolve((ctx && ctx.services && ctx.services.ragBaseDir) || path.join(require('../config/runtimePaths').DATA_DIR, 'rag')),
             { embeddingService }
           ) : null);
 
         if (vs) {
           if (typeof vs.searchAsync === 'function') {
-            results = await vs.searchAsync(query, { limit: limit || 8 }) || [];
+            results = await vs.searchAsync(query, { limit: limit || 8, userId: ctx.userId || 'local-user', projectId: ctx.projectId || '' }) || [];
           } else if (typeof vs.search === 'function') {
-            results = vs.search(query, { limit: limit || 8 }) || [];
+            results = vs.search(query, { limit: limit || 8, userId: ctx.userId || 'local-user', projectId: ctx.projectId || '' }) || [];
           }
         } else if (typeof mod.search === 'function') {
-          results = mod.search(query, { limit: limit || 8 }) || [];
+          results = mod.search(query, { limit: limit || 8, userId: ctx.userId || 'local-user', projectId: ctx.projectId || '' }) || [];
         }
         return { ok: true, data: { results: results || [], source: 'local_rag' } };
       } catch (e) {

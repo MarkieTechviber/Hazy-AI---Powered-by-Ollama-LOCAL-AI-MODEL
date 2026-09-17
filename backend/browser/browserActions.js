@@ -74,7 +74,7 @@ class BrowserActions {
         selector: normalizeSelector(args),
         text: args.text || args.value || args.url || ''
       }, pageState);
-      if (confirmation.required && args.confirmed !== true) {
+      if (confirmation.required && ctx.confirmationApproved !== true) {
         const result = {
           ok: false,
           status: 'confirmation_required',

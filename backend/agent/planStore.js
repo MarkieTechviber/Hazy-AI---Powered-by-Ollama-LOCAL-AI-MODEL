@@ -30,6 +30,14 @@ function createTask(description) {
   };
 }
 
+function planScopeKey(ctx = {}) {
+  return JSON.stringify([
+    String(ctx.userId || 'local-user'),
+    String(ctx.projectId || ''),
+    String(ctx.chatId || 'default')
+  ]);
+}
+
 class PlanStore {
   constructor({ filePath = null } = {}) {
     this.filePath = filePath;
@@ -189,4 +197,4 @@ function formatPlanForModel(plan) {
   ].join('\n');
 }
 
-module.exports = { PlanStore, formatPlanForModel };
+module.exports = { PlanStore, formatPlanForModel, planScopeKey };

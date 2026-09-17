@@ -21,7 +21,7 @@ class WebSearchService {
     this.fetchImpl = options.fetchImpl;
     this.lookup = options.lookup;
     this.store = options.store || new SearchRunStore(
-      path.join(__dirname, '..', '..', 'cache', 'hazy-engine', 'web-search')
+      path.join(require('../config/runtimePaths').DATA_DIR, 'web-search')
     );
   }
 

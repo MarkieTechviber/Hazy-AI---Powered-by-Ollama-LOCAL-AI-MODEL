@@ -5,7 +5,7 @@ const { buildConfirmationMessage } = require('./confirmationStore');
 const { IterationBudget } = require('./iterationBudget');
 const { getLoopReviewers } = require('../ai/reasoning/reasoningController');
 const { defaultMemoryOrchestrator, stripAgentMemoryFences, extractPayloadForInjection } = require('../memory/memoryOrchestrator');
-const { formatPlanForModel } = require('./planStore');
+const { formatPlanForModel, planScopeKey } = require('./planStore');
 
 const DEFAULT_TURN_TIMEOUT_MS = 5 * 60 * 1000; // FIX: 5-min overall turn cap — original had per-tool timeouts but no total cap
 
@@ -26,6 +26,7 @@ async function _syncMemory(memoryOrch, ctx, conversation, assistantText) {
     await Promise.resolve(mo.syncAll(lastUserMsg ? lastUserMsg.content : '', assistantText, {
       conversationId: (ctx && ctx.chatId) || 'default',
       userId: (ctx && ctx.userId) || 'default',
+      projectId: ctx?.projectId || '',
       messages: conversation
     }));
   } catch {
@@ -60,8 +61,10 @@ async function runAgentTurn({
 }) {
   if (typeof callModel !== 'function') throw new Error('runAgentTurn requires callModel.');
 
-  // FIX: overall turn deadline — prevents runaway agent loops from hanging the server indefinitely.
-  const turnDeadline = Date.now() + turnTimeoutMs;
+  // The provider call and the loop share one deadline. A loop-only check is not
+  // enough because a stalled provider request can otherwise occupy the turn forever.
+  const effectiveTurnTimeoutMs = Math.max(1, Math.min(Number(turnTimeoutMs) || DEFAULT_TURN_TIMEOUT_MS, DEFAULT_TURN_TIMEOUT_MS));
+  const turnDeadline = Date.now() + effectiveTurnTimeoutMs;
   const isTurnExpired = () => Date.now() > turnDeadline;
 
   const conversation = Array.isArray(input) ? [...input] : [];
@@ -92,13 +95,13 @@ async function runAgentTurn({
       const firstUser = conversation.find?.((m) => m.role === 'user') || input?.[0] || {};
       const firstContent = firstUser && typeof firstUser === 'object' ? firstUser.content : firstUser;
       const cleanGoal = String(firstContent || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 380);
-      const priorPlan = ctx?.services?.planStore ? ctx.services.planStore.getPlan(ctx.chatId || 'default') : null;
+      const priorPlan = ctx?.services?.planStore ? ctx.services.planStore.getPlan(planScopeKey(ctx)) : null;
       const planText = priorPlan && Array.isArray(priorPlan.tasks) ? formatPlanForModel(priorPlan) : '';
 
       const prefetched = await Promise.resolve(memoryOrch.prefetchAll(cleanGoal, {
         conversationId: (ctx && ctx.chatId) || 'default',
         userId: (ctx && ctx.userId) || 'default',
-        projectId: '',
+        projectId: ctx?.projectId || '',
         goal: cleanGoal,
         planText
       }));
@@ -129,12 +132,32 @@ async function runAgentTurn({
       break;
     }
 
-    const response = await callModel({
-      input: conversation,
-      tools: allowedTools,
-      toolChoice: 'auto',
-      temperature: 0.2
+    const remainingMs = Math.max(1, turnDeadline - Date.now());
+    const abortController = new AbortController();
+    let deadlineTimer;
+    const deadlinePromise = new Promise((_, reject) => {
+      deadlineTimer = setTimeout(() => {
+        reject(Object.assign(new Error('Agent turn timed out.'), { code: 'AGENT_TURN_TIMEOUT' }));
+        abortController.abort();
+      }, remainingMs);
     });
+
+    let response;
+    try {
+      response = await Promise.race([
+        Promise.resolve(callModel({
+          input: conversation,
+          tools: allowedTools,
+          toolChoice: 'auto',
+          temperature: 0.2,
+          signal: abortController.signal,
+          timeoutMs: remainingMs
+        })),
+        deadlinePromise
+      ]);
+    } finally {
+      clearTimeout(deadlineTimer);
+    }
 
     const modelTextForReview = String(response.text || '');
     inputTokens += Number(response.usage?.inputTokens || 0);
@@ -168,7 +191,6 @@ async function runAgentTurn({
     // FIX: deduplicate tool calls before execution — model can hallucinate duplicate calls in one batch
     const uniqueToolCalls = deduplicateToolCalls(response.toolCalls);
 
-    let cheapOpsOnly = true;
     for (const call of uniqueToolCalls) {
       toolCalls += 1;
 
@@ -204,10 +226,6 @@ async function runAgentTurn({
         continue;
       }
 
-      const toolName = call.name || '';
-      const isCheap = (n) => n === 'calculator.evaluate' || n === 'plan.manage' || n.startsWith('memory.');
-      if (!isCheap(toolName)) cheapOpsOnly = false;
-
       conversation.push({
         role: 'tool',
         callId: call.id,
@@ -238,7 +256,8 @@ async function runAgentTurn({
       }
     }
 
-    if (cheapOpsOnly && uniqueToolCalls.length > 0) budget.refund(1, 'cheap_ops');
+    // Every model turn consumes budget. Tool cost does not change how many times
+    // untrusted model output is allowed to drive the loop.
     if (budget.isExhausted()) break;
   }
 

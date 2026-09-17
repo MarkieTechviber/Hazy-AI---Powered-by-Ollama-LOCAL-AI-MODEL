@@ -4,6 +4,10 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 
+const { assertSafePath, safeSegment, artifactScopeSegment } = require('../security/safePath');
+const { ARTIFACTS_DIR } = require('../config/runtimePaths');
+const assertSafeTarget = (_base, target) => assertSafePath(ARTIFACTS_DIR, target);
+
 function register(registry) {
   registry.register({
     name: 'artifact.write',
@@ -23,15 +27,15 @@ function register(registry) {
     },
     execute: async ({ filename, content, action = 'write' }, ctx) => {
       try {
-        const rawChat = (ctx && ctx.chatId) || 'default';
-        const safeChat = String(rawChat).replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 64);
-        const artifactsRoot = path.resolve(__dirname, '..', '..', 'cache', 'hazy-engine', 'artifacts');
+        const safeChat = artifactScopeSegment(ctx);
+        const artifactsRoot = require('../config/runtimePaths').ARTIFACTS_DIR;
         const base = path.resolve(artifactsRoot, safeChat);
         const rootBase = artifactsRoot.endsWith(path.sep) ? artifactsRoot : artifactsRoot + path.sep;
         const relUp = path.relative(artifactsRoot, base);
         if (relUp.startsWith('..') || (!base.startsWith(rootBase) && base !== artifactsRoot)) {
           return { ok: false, error: { code: 'INVALID_CHATID', message: 'Chat ID escapes artifacts root (traversal blocked).' } };
         }
+        await assertSafeTarget(artifactsRoot, base);
         await fsp.mkdir(base, { recursive: true });
         // dir-aware support for sub-paths (e.g. assets/foo.js, src/bar.ts from buildData filenames).
         // Sanitize each path segment to prevent traversal/bad chars, mkdir intermediates, preserve logical structure.
@@ -64,6 +68,7 @@ function register(registry) {
             try {
               const entries = await fsp.readdir(dir, { withFileTypes: true });
               for (const e of entries) {
+                if (e.isSymbolicLink() || files.length >= 200) continue;
                 const rel = prefix ? `${prefix}/${e.name}` : e.name;
                 if (e.isDirectory()) {
                   await walk(path.join(dir, e.name), rel);
@@ -76,8 +81,10 @@ function register(registry) {
           await walk(base);
           return { ok: true, data: { chat: safeChat, files, count: files.length, note: 'List from chat-scoped artifacts dir (recursive for subdirs).' } };
         }
-        if (action === 'read' || (filename && !content)) {
+        if (action === 'read') {
           try {
+            await assertSafeTarget(base, target);
+            if ((await fsp.stat(target)).size > 1024 * 1024) throw new Error('Artifact too large to read.');
             const data = await fsp.readFile(target, 'utf8');
             return { ok: true, data: { filename: filename, content: data, note: 'Read from artifacts (subdir-aware).' } };
           } catch (re) {
@@ -88,8 +95,11 @@ function register(registry) {
         // content must be a JSON array of {search: string, replace: string} patch objects.
         // Falls back to full write if the file doesn't exist yet or JSON parse fails.
         if (action === 'patch' && filename) {
+          await assertSafeTarget(base, target);
           await fsp.mkdir(targetDir, { recursive: true });
           const patchTarget = target;
+          await assertSafeTarget(base, patchTarget);
+          if (await fsp.stat(patchTarget).then(s => s.size > 1024 * 1024).catch(() => false)) throw new Error('Artifact too large to patch.');
           let existing = '';
           try { existing = await fsp.readFile(patchTarget, 'utf8'); } catch { /* file may not exist yet */ }
           let patched = existing;
@@ -130,7 +140,9 @@ function register(registry) {
         const activeFilename = filename || 'artifact.txt';
         const activeTarget = target || path.resolve(base, 'artifact.txt');
         const activeTargetDir = targetDir;
+        await assertSafeTarget(base, activeTarget);
         await fsp.mkdir(activeTargetDir, { recursive: true });
+        await assertSafeTarget(base, activeTarget);
         await fsp.writeFile(activeTarget, String(content || ''), 'utf8');
         let verified = false;
         let size = 0;

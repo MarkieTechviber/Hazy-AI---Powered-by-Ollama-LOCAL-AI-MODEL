@@ -11,8 +11,8 @@ const AGENT_MODES = Object.freeze([
 
 // FIX 1: original "create" regex matched words like "recreation" or "created" — now using word-boundary anchors.
 // FIX 2: added 'memory_query' intent detection so the model gets a cleaner signal.
-// FIX 3: original returned only a string — now returns { mode, confidence } for callers that need it.
-//         Backward-compatible: callers using the string can destructure or call .mode.
+// Keep the public return value a primitive string. Boxed String values break
+// strict equality and JSON serialization in existing integrations.
 
 const TOOL_INTENT_RE = /\b(search|browse|look\s*up|current|latest|send|delete|create|update|save|inventory|stock|fetch|run|execute|book|schedule|cancel|pay|order)\b/i;
 const RAG_INTENT_RE = /\b(uploaded?|attached?|document|pdf|file|spreadsheet|image)\b/i;
@@ -57,13 +57,7 @@ function classifyAgentMode({
 const _origClassify = classifyAgentMode;
 function classifyAgentModeCompat(opts) {
   const result = _origClassify(opts);
-  // Make the result behave like a string primitive via valueOf/toString,
-  // AND expose .mode / .confidence for new callers.
-  const proxy = Object.assign(Object.create(String.prototype), result, {
-    toString() { return result.mode; },
-    valueOf() { return result.mode; }
-  });
-  return proxy;
+  return result.mode;
 }
 
 module.exports = { AGENT_MODES, classifyAgentMode: classifyAgentModeCompat };

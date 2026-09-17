@@ -68,6 +68,8 @@ function validateNode(schema = {}, value, path, errors) {
 
 function validateJsonSchema(schema, value) {
   const errors = [];
+  try { require('./httpBoundary').assertJsonObject(value); }
+  catch { return { success: false, data: value, errors: ['Unsafe or malformed arguments.'] }; }
   validateNode(schema || {}, value, 'arguments', errors);
   return {
     success: errors.length === 0,

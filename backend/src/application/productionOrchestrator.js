@@ -392,6 +392,8 @@ async function finalizeResponse({ conversationId, userId, userMessage, responseT
 
       const filePath = await agentFileManager.writeOrUpdate({
         conversationId,
+        userId,
+        projectId: analysis.projectId || '',
         taskContext,
         code: codeToSave,
         language

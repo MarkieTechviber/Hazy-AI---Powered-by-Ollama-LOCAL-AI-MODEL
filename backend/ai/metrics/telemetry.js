@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const METRICS_DIR = path.join(__dirname, '..', '..', '..', 'cache', 'metrics');
+const METRICS_DIR = path.join(require('../../config/runtimePaths').DATA_DIR, 'metrics');
 
 /**
  * Ensures the metrics directory exists.
@@ -32,7 +32,17 @@ function logMetric(params) {
   try {
     init();
     const logFile = path.join(METRICS_DIR, 'telemetry.jsonl');
-    const entry = JSON.stringify({ timestamp: new Date().toISOString(), ...params }) + '\n';
+    const entry = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      model: String(params?.model || '').slice(0, 160),
+      provider: String(params?.provider || '').slice(0, 64),
+      strategy: String(params?.strategy || '').slice(0, 64),
+      durationMs: Math.max(0, Number(params?.durationMs) || 0),
+      success: params?.success === true,
+      firstTokenLatency: Math.max(0, Number(params?.firstTokenLatency) || 0),
+      tokensPerSec: Math.max(0, Number(params?.tokensPerSec) || 0),
+      capabilityDetectionTime: Math.max(0, Number(params?.capabilityDetectionTime) || 0)
+    }) + '\n';
     fs.appendFileSync(logFile, entry, 'utf8');
   } catch (err) {
     console.error('[Telemetry] Failed to log metric:', err.message);

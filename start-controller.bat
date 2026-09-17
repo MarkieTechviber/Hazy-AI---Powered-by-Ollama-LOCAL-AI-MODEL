@@ -161,87 +161,47 @@ if errorlevel 1 (
 echo  ✓  Controller GUI ready
 
 REM ═══════════════════════════════════════════
-REM  Step 4: Backend dependencies (Node.js or Python)
+REM  Step 4: Canonical Node backend
 REM ═══════════════════════════════════════════
-echo [4/5] Checking backend dependencies...
-
-set "BACKEND_VENV=%~dp0.venv-backend"
-if not exist "%BACKEND_VENV%\Scripts\python.exe" (
-    echo  Creating backend virtual environment...
-    "%BASE_PY%" -m venv "%BACKEND_VENV%"
+echo [4/5] Checking Node backend...
+where node >nul 2>&1
+if errorlevel 1 (
+    echo  ❌  Node.js 22.13 or newer is required for the full Hazy backend.
+    echo     Install Node.js, then run this launcher again.
+    pause
+    exit /b 1
+)
+node -e "const [a,b]=process.versions.node.split('.').map(Number);process.exit(a>22||(a===22&&b>=13)?0:1)"
+if errorlevel 1 (
+    echo  ❌  Node.js 22.13 or newer is required. Current version:
+    node --version
+    pause
+    exit /b 1
+)
+if not exist "%~dp0backend\node_modules\playwright\package.json" (
+    echo  Installing the locked Node dependencies...
+    call npm ci --prefix "%~dp0backend"
     if errorlevel 1 (
-        echo  ❌  Could not create backend virtual environment.
+        echo  ❌  Could not install backend dependencies with npm ci.
         pause
         exit /b 1
     )
 )
-set "BACKEND_PY=%BACKEND_VENV%\Scripts\python.exe"
-"%BACKEND_PY%" -c "import fastapi, uvicorn, httpx, openai" >nul 2>&1
-if errorlevel 1 (
-    echo  Installing Python backend dependencies...
-    "%BACKEND_PY%" -m pip install --disable-pip-version-check -r backend\requirements.txt -q
-    if errorlevel 1 (
-        echo  ❌  Could not install Python backend dependencies.
-        pause
-        exit /b 1
-    )
-)
-echo  ✓  Python backend ready
+echo  ✓  Canonical Node backend ready
 
 REM ═══════════════════════════════════════════
-REM  Step 5: Kokoro TTS venv + dependencies
+REM  Step 5: Optional Kokoro TTS
 REM ═══════════════════════════════════════════
-echo [5/5] Setting up Kokoro TTS...
-
-if not defined KOKORO_PY (
-    echo  ⚠  No Python 3.10-3.12 found for Kokoro TTS. Skipping TTS setup.
-    echo     Install Python 3.11 or 3.12 from https://python.org to enable Kokoro TTS.
-    goto :launch
-)
-
-set "KOKORO_VENV=%~dp0.venv-kokoro"
-
-REM If the existing venv is Python 3.13+, delete and recreate with compatible Python
-if exist "%KOKORO_VENV%\Scripts\python.exe" (
-    "%KOKORO_VENV%\Scripts\python.exe" -c "import sys; exit(0 if sys.version_info < (3,13) else 1)" >nul 2>&1
-    if errorlevel 1 (
-        echo  ⚠  Existing Kokoro venv has incompatible Python version. Rebuilding...
-        rmdir /s /q "%KOKORO_VENV%"
-    )
-)
-
-if not exist "%KOKORO_VENV%\Scripts\python.exe" (
-    echo  Creating Kokoro virtual environment with %KOKORO_PY%...
-    "%KOKORO_PY%" -m venv "%KOKORO_VENV%"
-    if errorlevel 1 (
-        echo  ❌  Failed to create Kokoro virtual environment. Skipping TTS.
+echo [5/5] Checking optional Kokoro TTS...
+if exist "%~dp0.venv-kokoro\Scripts\python.exe" (
+    "%~dp0.venv-kokoro\Scripts\python.exe" -c "import fastapi, uvicorn, kokoro, soundfile" >nul 2>&1
+    if not errorlevel 1 (
+        echo  ✓  Existing Kokoro environment is ready. Set HAZY_TTS=1 to start it.
         goto :launch
     )
 )
-set "KPY=%KOKORO_VENV%\Scripts\python.exe"
-
-REM Bootstrap pip if missing
-"%KPY%" -m pip --version >nul 2>&1
-if errorlevel 1 (
-    echo  Bootstrapping pip in Kokoro venv...
-    "%KPY%" -m ensurepip --upgrade >nul 2>&1
-)
-"%KPY%" -m pip install --upgrade pip -q 2>nul
-
-REM Check if all Kokoro packages are installed
-"%KPY%" -c "import fastapi, uvicorn, kokoro, soundfile, torch" >nul 2>&1
-if errorlevel 1 (
-    echo  Installing Kokoro dependencies — this may take several minutes the first time...
-    echo  (Downloading PyTorch and Kokoro TTS packages)
-    "%KPY%" -m pip install --disable-pip-version-check fastapi uvicorn soundfile torch transformers numpy kokoro 2>&1
-    if errorlevel 1 (
-        echo.
-        echo  ❌  Failed to install Kokoro dependencies. TTS will not be available.
-        echo     You can try manually: %KPY% -m pip install kokoro torch soundfile
-        goto :launch
-    )
-)
-echo  ✓  Kokoro TTS ready
+echo  -  Kokoro is not configured. Text chat will work normally.
+echo     To enable speech later, see README.md and requirements-kokoro.txt.
 
 :launch
 REM ═══════════════════════════════════════════
@@ -250,8 +210,8 @@ REM ═════════════════════════�
 echo.
 echo  ════════════════════════════════════════
 echo   Launching Hazy Desktop Controller...
-echo   The controller will start all services
-echo   (Ollama, Hazy Server, Kokoro TTS)
+echo   The controller will start Ollama and Hazy.
+echo   Kokoro starts only when HAZY_TTS=1 and is configured.
 echo  ════════════════════════════════════════
 echo.
 

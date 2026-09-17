@@ -313,7 +313,12 @@ class HazyProcessManager:
         return self.status().ollama
 
     def _hazy_command(self) -> list[str]:
-        # Always run Python backend (server.py) instead of Node.js backend (server.js)
+        # The Node runtime owns memory, RAG and agents. Python remains an explicit compatibility option.
+        if os.getenv("HAZY_BACKEND", "node") != "python":
+            node = self.which("node")
+            if node:
+                return [node, "server.js"]
+            raise ControllerError("Node.js 22.13+ is required. Install it or explicitly set HAZY_BACKEND=python for the limited compatibility proxy.")
         # Check if project backend virtual environment exists first
         backend_venv_py = self.root_dir / ".venv-backend" / "Scripts" / "python.exe"
         if backend_venv_py.exists():
@@ -379,9 +384,13 @@ class HazyProcessManager:
         self.start_hazy()
         if not self._wait_for_url(HAZY_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
             raise ControllerError("Hazy is running but its website is not ready.")
-        self.start_kokoro()
-        if not self._wait_for_url(KOKORO_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS):
-            raise ControllerError("Kokoro TTS is running but its API is not ready.")
+        if os.getenv("HAZY_TTS", "0") == "1":
+            try:
+                self.start_kokoro()
+                self._wait_for_url(KOKORO_HEALTH_URL, timeout=STARTUP_TIMEOUT_SECONDS)
+            except ControllerError:
+                # Speech is optional. The GUI status explains that text chat remains ready.
+                pass
         return self.status()
 
     def restart_all(self, allow_adopted: bool = False) -> StackStatus:
